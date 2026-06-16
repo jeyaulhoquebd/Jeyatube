@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JTube - Premium Member Hub</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-zinc-900 text-white font-sans antialiased flex flex-col min-h-screen">
+
+    <!-- Header Navigation -->
+    <header class="bg-zinc-900 flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+        <a href="index.html" class="flex items-center space-x-1 text-xl font-bold tracking-tighter">
+            <span class="bg-red-600 text-white px-2 py-0.5 rounded font-black">J</span>
+            <span>Tube <span class="text-xs text-amber-400 font-bold ml-1"><i class="fas fa-crown"></i> Premium</span></span>
+        </a>
+        <a href="index.html" class="text-sm bg-zinc-800 hover:bg-zinc-700 px-4 py-2 rounded-full transition font-medium">Home</a>
+    </header>
+
+    <!-- Main Dynamic Interface Panel -->
+    <main class="flex-1 max-w-4xl mx-auto w-full p-4 md:p-8 flex flex-col justify-center items-center">
+        
+        <!-- STATE 1: JOIN PREMIUM LANDING (Shown if user is standard) -->
+        <div id="premium-promo-box" class="w-full max-w-xl bg-gradient-to-br from-zinc-800 via-zinc-900 to-amber-950/40 p-8 rounded-3xl border border-amber-500/30 text-center space-y-6 shadow-2xl hidden">
+            <div class="inline-flex bg-amber-500/10 text-amber-400 p-4 rounded-full text-3xl animate-bounce">
+                <i class="fas fa-crown"></i>
+            </div>
+            <div class="space-y-2">
+                <h1 class="text-3xl font-black tracking-tight bg-gradient-to-r from-amber-200 via-amber-400 to-amber-200 bg-clip-text text-transparent">Unlock Creator Privileges</h1>
+                <p class="text-zinc-400 text-sm max-w-md mx-auto">
+                    Upgrade to JTube Premium today. As a Premium member, you break past consumer limits and gain the structural access rights to upload your own videos directly to our global feeds.
+                </p>
+            </div>
+            <div class="bg-zinc-800/60 p-4 rounded-xl border border-zinc-700/50 text-left space-y-2 max-w-sm mx-auto text-xs text-zinc-300">
+                <p class="flex items-center gap-2"><i class="fas fa-check text-green-500"></i> Post videos under any platform category</p>
+                <p class="flex items-center gap-2"><i class="fas fa-check text-green-500"></i> Label content quality directly (Good or Bad)</p>
+                <p class="flex items-center gap-2"><i class="fas fa-check text-green-500"></i> Stand out on the home feed grid index</p>
+            </div>
+            <button id="activate-premium-btn" class="w-full max-w-sm bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black py-3.5 rounded-xl shadow-lg shadow-amber-600/20 transition transform active:scale-95 text-sm">
+                Get Premium Now (Free Demo Activation)
+            </button>
+        </div>
+
+        <!-- STATE 2: PREMIUM CREATOR HUB (Shown if user is premium) -->
+        <div id="premium-creator-dashboard" class="w-full grid grid-cols-1 md:grid-cols-3 gap-6 hidden">
+            
+            <!-- Dashboard Left Profile Sidebar -->
+            <div class="md:col-span-1 bg-zinc-800/40 p-6 rounded-2xl border border-zinc-800 text-center space-y-4 h-fit">
+                <div class="relative w-20 h-20 mx-auto">
+                    <div class="bg-amber-500 text-zinc-950 text-2xl font-black rounded-full w-full h-full flex items-center justify-center shadow-lg">P</div>
+                    <span class="absolute bottom-0 right-0 bg-zinc-900 border border-amber-400 text-amber-400 text-[10px] px-1.5 py-0.5 rounded-full font-bold"><i class="fas fa-crown text-[8px]"></i> PRO</span>
+                </div>
+                <div>
+                    <h2 class="font-bold text-lg">Premium Creator Account</h2>
+                    <p class="text-xs text-amber-400/80 font-medium mt-0.5">Status: Authorized to Upload</p>
+                </div>
+                <button id="cancel-premium-btn" class="text-xs text-zinc-500 hover:text-red-400 transition bg-transparent hover:bg-red-500/10 px-3 py-1.5 rounded-lg w-full">
+                    Cancel Premium Membership
+                </button>
+            </div>
+
+            <!-- Dashboard Right Upload Area -->
+            <div class="md:col-span-2 bg-zinc-800/40 p-6 rounded-2xl border border-zinc-800 space-y-4">
+                <div class="border-b border-zinc-800 pb-2">
+                    <h2 class="text-xl font-bold">Premium Upload Form</h2>
+                    <p class="text-xs text-zinc-400">Publish custom records. Specify your video content rating category.</p>
+                </div>
+
+                <form id="premium-upload-form" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-zinc-400 mb-1">Video Title</label>
+                        <input type="text" id="p-title" required placeholder="e.g., Unboxing the Newest Quantum AI Processors" class="w-full bg-zinc-900 border border-zinc-700 focus:border-amber-500 focus:outline-none rounded-xl p-3 text-sm text-white">
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-zinc-400 mb-1">Category Target</label>
+                            <select id="p-category" class="w-full bg-zinc-900 border border-zinc-700 focus:border-amber-500 focus:outline-none rounded-xl p-3 text-sm text-zinc-300">
+                                <option value="AI">AI</option>
+                                <option value="Machine Learning">Machine Learning</option>
+                                <option value="Science">Science</option>
+                                <option value="Islam">Islam</option>
+                                <option value="Entertainment">Entertainment</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-zinc-400 mb-1">Video Length (Duration)</label>
+                            <input type="text" id="p-duration" required placeholder="e.g., 08:45" class="w-full bg-zinc-900 border border-zinc-700 focus:border-amber-500 focus:outline-none rounded-xl p-3 text-sm text-white">
+                        </div>
+                        <div>
+                            <!-- THE GOOD VS BAD CONDITION SELECTION -->
+                            <label class="block text-xs font-semibold text-zinc-400 mb-1">Content Quality Type</label>
+                            <select id="p-quality" class="w-full bg-zinc-900 border border-amber-500/40 focus:border-amber-500 focus:outline-none rounded-xl p-3 text-sm font-semibold text-amber-400">
+                                <option value="Good Video" class="text-green-400 font-bold">Good Video (Educational)</option>
+                                <option value="Bad Video" class="text-red-400 font-bold">Bad Video (Just for fun)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-zinc-400 mb-1">Custom Channel Display Name</label>
+                        <input type="text" id="p-channel" required placeholder="e.g., PremiumVlogs" class="w-full bg-zinc-900 border border-zinc-700 focus:border-amber-500 focus:outline-none rounded-xl p-3 text-sm text-white">
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-zinc-400 mb-1">Thumbnail Cover Link</label>
+                            <input type="url" id="p-thumbnail" placeholder="Leave blank for random image placeholder" class="w-full bg-zinc-900 border border-zinc-700 focus:border-amber-500 focus:outline-none rounded-xl p-3 text-sm text-white">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-zinc-400 mb-1">Stream Source Video URL (.mp4)</label>
+                            <input type="url" id="p-url" placeholder="Leave blank for sample open-source stream" class="w-full bg-zinc-900 border border-zinc-700 focus:border-amber-500 focus:outline-none rounded-xl p-3 text-sm text-white">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold p-3 rounded-xl shadow-lg transition text-sm">
+                        Publish Premium Video Stream
+                    </button>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-zinc-950 text-center py-4 text-xs text-zinc-600 border-t border-zinc-800">
+        &copy; 2026 JTube Premium Module.
+    </footer>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="data.js"></script>
+    <script src="premium.js"></script>
+</body>
+</html>

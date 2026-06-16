@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JTube - Send Feedback</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-zinc-900 text-white font-sans antialiased flex flex-col min-h-screen">
+
+    <header class="sticky top-0 bg-zinc-900 z-50 flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+        <a href="index.html" class="flex items-center space-x-1 text-xl font-bold tracking-tighter">
+            <span class="bg-red-600 text-white px-2 py-0.5 rounded font-black">J</span>
+            <span>Tube</span>
+        </a>
+        <a href="index.html" class="text-sm bg-zinc-800 hover:bg-zinc-700 px-4 py-2 rounded-full transition font-medium">Home</a>
+    </header>
+
+    <main class="flex-1 max-w-lg mx-auto w-full p-6 flex flex-col justify-center">
+        <div class="bg-zinc-800/50 p-6 rounded-2xl border border-zinc-800 space-y-6 shadow-xl">
+            
+            <div>
+                <h1 class="text-2xl font-bold text-zinc-100 flex items-center gap-2">
+                    <i class="fas fa-paper-plane text-blue-500 text-xl"></i> Send Feedback
+                </h1>
+                <p class="text-xs text-zinc-400 mt-1">Your response will be structured and sent to tubejeya@gmail.com</p>
+            </div>
+
+            <form id="feedback-form" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-400 mb-1">Your Name</label>
+                    <input type="text" id="f-name" required placeholder="e.g., Abdullah" class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-3 text-sm">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-400 mb-1">Feedback Type</label>
+                    <select id="f-type" class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-3 text-sm text-zinc-300">
+                        <option value="Suggestion">General Suggestion</option>
+                        <option value="Bug Report">Report a Technical Bug</option>
+                        <option value="Topic Request">Request a Video Topic Channel</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-400 mb-1">Message Description</label>
+                    <textarea id="f-message" required rows="4" placeholder="Write your thoughts here..." class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-3 text-sm"></textarea>
+                </div>
+
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 font-semibold p-3 rounded-xl transition text-sm flex items-center justify-center gap-2">
+                    <i class="fas fa-envelope"></i> Open Mail App to Send
+                </button>
+            </form>
+        </div>
+    </main>
+
+    <footer class="bg-zinc-950 text-center py-4 text-xs text-zinc-600 border-t border-zinc-800">
+        &copy; 2026 JTube Platform.
+    </footer>
+
+    <script src="feedback.js"></script>
+</body>
+</html>

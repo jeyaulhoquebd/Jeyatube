@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JTube - Clean & Inspiring Content</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-zinc-900 text-white font-sans antialiased">
+
+    <header class="sticky top-0 bg-zinc-900 z-50 flex items-center justify-between px-4 py-3 border-b border-zinc-800">
+        <div class="flex items-center space-x-4">
+            <button id="menu-btn" class="text-xl p-2 hover:bg-zinc-800 rounded-full focus:outline-none">
+                <i class="fas fa-bars"></i>
+            </button>
+            <a href="index.html" class="flex items-center space-x-1 text-xl font-bold tracking-tighter">
+                <span class="bg-red-600 text-white px-2 py-0.5 rounded font-black">J</span>
+                <span>Tube</span>
+            </a>
+        </div>
+        
+        <div class="flex-1 max-w-xl mx-4 hidden sm:block">
+            <div class="flex bg-zinc-800 border border-zinc-700 rounded-full overflow-hidden">
+                <input type="text" placeholder="Search..." class="w-full bg-transparent px-4 py-2 focus:outline-none text-sm text-white">
+                <button class="bg-zinc-700 px-6 hover:bg-zinc-600 border-l border-zinc-700">
+                    <i class="fas fa-search text-zinc-400"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-3">
+            <button class="p-2 hover:bg-zinc-800 rounded-full sm:hidden"><i class="fas fa-search"></i></button>
+            <div class="bg-purple-600 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">U</div>
+        </div>
+    </header>
+
+    <div class="flex">
+        <aside id="sidebar" class="fixed md:sticky top-[61px] h-[calc(100vh-61px)] bg-zinc-900 w-64 border-r border-zinc-800 transition-transform -translate-x-full md:translate-x-0 z-40">
+            <nav class="p-4 space-y-1">
+                <a href="#" class="flex items-center space-x-4 p-3 bg-zinc-800 rounded-xl font-medium"><i class="fas fa-home text-lg w-6"></i> <span>Home</span></a>
+                <a href="#" class="flex items-center space-x-4 p-3 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-white transition"><i class="fas fa-layer-group text-lg w-6"></i> <span>Playlists</span></a>
+                <hr class="border-zinc-800 my-4">
+                <p class="text-xs text-zinc-500 font-bold px-3 uppercase tracking-wider">Subscribed</p>
+                <div id="sidebar-channels" class="mt-2 space-y-1">
+                    </div>
+                    
+                    <!-- Inside index.html inside the sidebar navigation block -->
+<a href="premium.html" class="flex items-center space-x-4 p-3 text-amber-400 hover:bg-zinc-800 rounded-xl font-bold transition">
+    <i class="fas fa-crown text-lg w-6 animate-pulse"></i> 
+    <span>JTube Premium</span>
+</a>
+<hr class="border-zinc-800 my-2">
+
+
+<hr class="border-zinc-800 my-4">
+<div class="px-3 py-2 space-y-3">
+    <a href="help.html" class="text-xs text-zinc-500 hover:text-zinc-300 transition flex items-center space-x-2">
+        <i class="fas fa-question-circle w-4"></i>
+        <span>Help</span>
+    </a>
+    <a href="feedback.html" class="text-xs text-zinc-500 hover:text-zinc-300 transition flex items-center space-x-2">
+        <i class="fas fa-comment-alt w-4"></i>
+        <span>Send feedback</span>
+    </a>
+    <a href="terms.html" class="text-xs text-zinc-500 hover:text-zinc-300 transition flex items-center space-x-2">
+        <i class="fas fa-file-contract w-4"></i>
+        <span>Terms</span>
+    </a>
+    <a href="privacy.html" class="text-xs text-zinc-500 hover:text-zinc-300 transition flex items-center space-x-2">
+        <i class="fas fa-shield-alt w-4"></i>
+        <span>Privacy Policy</span>
+    </a>
+</div>
+            </nav>
+        </aside>
+
+        <main class="flex-1 p-4 md:p-6 overflow-x-hidden">
+            <div class="flex items-center space-x-3 overflow-x-auto pb-4 mb-4 scrollbar-hide no-scrollbar" style="-ms-overflow-style: none; scrollbar-width: none;">
+                <button class="category-btn whitespace-nowrap bg-white text-black px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="all">All</button>
+                <button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="Islam">Islam</button>
+                <button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="Science">Science</button>
+                <button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="AI">AI</button>
+                <button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="Machine Learning">Machine Learning</button>
+                <button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="Entertainment">Entertainment</button>
+            </div>
+
+            <div id="video-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
+                </div>
+        </main>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="data.js"></script>
+    <script src="index.js"></script>
+</body>
+</html>
