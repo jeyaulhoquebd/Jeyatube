@@ -26,10 +26,10 @@
             <h1 id="video-title" class="text-xl font-bold line-clamp-2 md:text-2xl">Loading video title...</h1>
             
             <div class="flex flex-wrap items-center justify-between gap-4 py-2 border-b border-zinc-800 pb-4">
-                <div class="flex items-center space-x-3">
-                    <div id="channel-avatar" class="bg-zinc-700 w-10 h-10 rounded-full flex items-center justify-center font-bold">J</div>
+                <div class="flex items-center space-x-3 cursor-pointer group" onclick="location.href='channel.html?name=' + encodeURIComponent(document.getElementById('channel-name').textContent)">
+                    <div id="channel-avatar" class="bg-zinc-700 w-10 h-10 rounded-full flex items-center justify-center font-bold flex-shrink-0">J</div>
                     <div>
-                        <h4 id="channel-name" class="font-bold text-sm">Channel Name</h4>
+                        <h4 id="channel-name" class="font-bold text-sm group-hover:text-zinc-300 transition">Channel Name</h4>
                         <p id="channel-subs" class="text-xs text-zinc-400">0 subscribers</p>
                     </div>
                     <button id="subscribe-btn" class="ml-4 bg-white text-black px-4 py-2 rounded-full font-semibold text-xs md:text-sm hover:bg-zinc-200 transition">
@@ -52,7 +52,7 @@
             <div class="space-y-4">
                 <h3 class="text-lg font-bold"><span id="comment-count">0</span> Comments</h3>
                 <form id="comment-form" class="flex gap-3 items-start">
-                    <div class="bg-purple-600 w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0">U</div>
+                    <a href="profile.html" class="bg-purple-600 w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 text-white">U</a>
                     <div class="w-full space-y-2">
                         <input id="comment-input" type="text" placeholder="Add a public comment..." class="w-full bg-transparent border-b border-zinc-700 focus:border-white focus:outline-none py-1 text-sm text-white">
                         <div class="flex justify-end space-x-2">

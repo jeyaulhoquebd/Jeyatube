@@ -64,6 +64,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         const category = document.getElementById("v-category").value;
         const duration = document.getElementById("v-duration").value.trim();
         const channelName = document.getElementById("v-channel").value.trim();
+        const playlistName = document.getElementById("v-playlist").value.trim();
+        const cAvatar = document.getElementById("c-avatar").value.trim();
+        const cCover = document.getElementById("c-cover").value.trim();
         let thumbnail = document.getElementById("v-thumbnail").value.trim();
         let videoUrl = document.getElementById("v-url").value.trim();
         const description = document.getElementById("v-desc").value.trim();
@@ -89,7 +92,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             title: title,
             channel: channelName,
             category: category,
-            views: "0",
+            playlist: playlistName,
+            views: 0,
             time: "Just now",
             duration: duration,
             thumbnail: thumbnail,
@@ -107,7 +111,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Auto-provision channel profile parameters inside channel database map if not found
         let channels = await getChannels();
         if (!channels[channelName]) {
-            await saveChannel(channelName, { subscribers: 0, subscribed: false });
+            await saveChannel(channelName, { 
+                subscribers: 0, 
+                subscribed: false,
+                avatarUrl: cAvatar || "",
+                coverUrl: cCover || ""
+            });
         }
 
         // Reset inputs and repaint table metrics

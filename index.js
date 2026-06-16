@@ -101,10 +101,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         Object.keys(channels).forEach(channelName => {
             if (channels[channelName].subscribed) {
                 sidebarChannels.innerHTML += `
-                    <div class="flex items-center space-x-3 p-2 hover:bg-zinc-800 rounded-xl text-zinc-300">
+                    <a href="channel.html?name=${encodeURIComponent(channelName)}" class="flex items-center space-x-3 p-2 hover:bg-zinc-800 rounded-xl text-zinc-300 transition">
                         <div class="bg-zinc-700 w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs">${channelName[0]}</div>
                         <span class="text-sm truncate">${channelName}</span>
-                    </div>
+                    </a>
                 `;
             }
         });
@@ -162,7 +162,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         <div class="flex-1 min-w-0">
                             ${qualityBadgeHtml}
                             <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
-                            <p class="text-xs text-zinc-400 mt-1 hover:text-zinc-200 truncate">${video.channel}</p>
+                            <p class="text-xs text-zinc-400 mt-1 hover:text-zinc-200 truncate cursor-pointer" onclick="event.stopPropagation(); location.href='channel.html?name=${encodeURIComponent(video.channel)}'">${video.channel}</p>
                             <p class="text-xs text-zinc-400 mt-0.5">${video.views} views • ${video.time}</p>
                         </div>
                     </div>

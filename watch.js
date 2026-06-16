@@ -10,6 +10,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.body.innerHTML = `<div class="text-center py-20"><h1 class="text-2xl">Video not found.</h1><a href="index.html" class="text-blue-500 mt-4 block">Return Home</a></div>`;
         return;
     }
+    
+    // Increment real views asynchronously (Task 2)
+    incrementView(video.id);
 
     const videoPlayer = document.getElementById("video-player");
     const videoTitle = document.getElementById("video-title");

@@ -76,7 +76,40 @@ async function getChannels() {
 }
 
 async function saveChannel(channelName, channelData) {
-    await db.collection("channels").doc(channelName).set(channelData);
+    await db.collection("channels").doc(channelName).set(channelData, { merge: true });
+}
+
+async function getChannel(channelName) {
+    const doc = await db.collection("channels").doc(channelName).get();
+    return doc.exists ? doc.data() : null;
+}
+
+async function getVideosByChannel(channelName) {
+    const snapshot = await db.collection("videos").where("channel", "==", channelName).get();
+    let videos = [];
+    snapshot.forEach(doc => videos.push(doc.data()));
+    return videos.sort((a, b) => b.timestamp - a.timestamp);
+}
+
+async function incrementView(videoId) {
+    const videoRef = db.collection("videos").doc(videoId);
+    await videoRef.update({
+        views: firebase.firestore.FieldValue.increment(1)
+    });
+    // We update RTDB manually since FieldValue is firestore only
+    const doc = await videoRef.get();
+    if(doc.exists) {
+        await rtdb.ref("videos/" + videoId).update({ views: doc.data().views });
+    }
+}
+
+async function getUserProfile(uid) {
+    const doc = await db.collection("users").doc(uid).get();
+    return doc.exists ? doc.data() : null;
+}
+
+async function updateUserProfile(uid, data) {
+    await db.collection("users").doc(uid).set(data, { merge: true });
 }
 
 // User History functionality
@@ -99,8 +132,27 @@ async function getHistory() {
     if (!currentUser) return [];
     const snapshot = await db.collection("users").doc(currentUser.uid).collection("history").orderBy("timestamp", "desc").get();
     let history = [];
-    snapshot.forEach(doc => history.push(doc.data()));
+    snapshot.forEach(doc => {
+        let data = doc.data();
+        if(!data.views) data.views = 0; // Fix legacy string views in UI
+        history.push(data);
+    });
     return history;
+}
+
+async function getPlaylists() {
+    const snapshot = await db.collection("videos").where("playlist", "!=", "").get();
+    let playlistsMap = {};
+    snapshot.forEach(doc => {
+        const data = doc.data();
+        if (data.playlist) {
+            if (!playlistsMap[data.playlist]) {
+                playlistsMap[data.playlist] = { name: data.playlist, videos: [], thumbnail: data.thumbnail, channel: data.channel };
+            }
+            playlistsMap[data.playlist].videos.push(data);
+        }
+    });
+    return Object.values(playlistsMap);
 }
 
 // Extract YouTube ID
@@ -122,7 +174,8 @@ async function initializeDatabase() {
                     title: "The Future of Artificial Intelligence in 2026",
                     channel: "AI Frontier",
                     category: "AI",
-                    views: "125K",
+                    playlist: "AI Masterclass 2026",
+                    views: 125000,
                     time: "2 days ago",
                     duration: "10:15",
                     thumbnail: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=60",
@@ -140,7 +193,8 @@ async function initializeDatabase() {
                     title: "Understanding the Golden Age of Islamic Science",
                     channel: "Heritage & Science",
                     category: "Islam",
-                    views: "89K",
+                    playlist: "",
+                    views: 89000,
                     time: "1 week ago",
                     duration: "15:40",
                     thumbnail: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=500&auto=format&fit=crop&q=60",
@@ -156,7 +210,8 @@ async function initializeDatabase() {
                     title: "Introduction to Neural Networks from Scratch",
                     channel: "Tech Minds",
                     category: "Machine Learning",
-                    views: "45K",
+                    playlist: "Deep Learning Series",
+                    views: 45000,
                     time: "3 days ago",
                     duration: "12:20",
                     thumbnail: "https://images.unsplash.com/photo-1509228468518-180dd4864904?w=500&auto=format&fit=crop&q=60",
@@ -173,9 +228,9 @@ async function initializeDatabase() {
             }
             
             const initialChannels = {
-                "AI Frontier": { subscribers: 50000, subscribed: false },
-                "Heritage & Science": { subscribers: 34000, subscribed: false },
-                "Tech Minds": { subscribers: 12000, subscribed: false }
+                "AI Frontier": { subscribers: 50000, subscribed: false, coverUrl: "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=1200&h=300&fit=crop", avatarUrl: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop" },
+                "Heritage & Science": { subscribers: 34000, subscribed: false, coverUrl: "https://images.unsplash.com/photo-1519817650390-64a4560f3290?w=1200&h=300&fit=crop", avatarUrl: "https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=100&h=100&fit=crop" },
+                "Tech Minds": { subscribers: 12000, subscribed: false, coverUrl: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=1200&h=300&fit=crop", avatarUrl: "https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=100&h=100&fit=crop" }
             };
             for (let [name, data] of Object.entries(initialChannels)) {
                 await saveChannel(name, data);
