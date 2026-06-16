@@ -14,6 +14,37 @@ if (!firebase.apps.length) {
 }
 const db = firebase.firestore();
 const rtdb = firebase.database();
+const auth = firebase.auth();
+const googleProvider = new firebase.auth.GoogleAuthProvider();
+
+let currentUser = null;
+auth.onAuthStateChanged(user => {
+    currentUser = user;
+    document.dispatchEvent(new CustomEvent('authStateChanged', { detail: user }));
+});
+
+async function loginWithEmail(email, password) {
+    return await auth.signInWithEmailAndPassword(email, password);
+}
+
+async function registerWithEmail(email, password, name) {
+    const cred = await auth.createUserWithEmailAndPassword(email, password);
+    await cred.user.updateProfile({ displayName: name });
+    await db.collection("users").doc(cred.user.uid).set({
+        name: name,
+        email: email,
+        createdAt: Date.now()
+    });
+    return cred.user;
+}
+
+async function loginWithGoogle() {
+    return await auth.signInWithPopup(googleProvider);
+}
+
+async function logoutUser() {
+    return await auth.signOut();
+}
 
 async function getVideos() {
     const snapshot = await db.collection("videos").orderBy("timestamp", "desc").get();
@@ -46,6 +77,37 @@ async function getChannels() {
 
 async function saveChannel(channelName, channelData) {
     await db.collection("channels").doc(channelName).set(channelData);
+}
+
+// User History functionality
+async function addToHistory(video) {
+    if (!currentUser) return;
+    await db.collection("users").doc(currentUser.uid).collection("history").doc(video.id).set({
+        id: video.id,
+        title: video.title,
+        channel: video.channel,
+        thumbnail: video.thumbnail,
+        duration: video.duration || "",
+        views: video.views || "",
+        time: video.time || "",
+        videoUrl: video.videoUrl,
+        timestamp: Date.now()
+    });
+}
+
+async function getHistory() {
+    if (!currentUser) return [];
+    const snapshot = await db.collection("users").doc(currentUser.uid).collection("history").orderBy("timestamp", "desc").get();
+    let history = [];
+    snapshot.forEach(doc => history.push(doc.data()));
+    return history;
+}
+
+// Extract YouTube ID
+function getYoutubeId(url) {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
 }
 
 // Seed initial data if empty
@@ -118,12 +180,10 @@ async function initializeDatabase() {
             for (let [name, data] of Object.entries(initialChannels)) {
                 await saveChannel(name, data);
             }
-            console.log("Seeding complete.");
         }
     } catch (error) {
-        console.error("Database initialization failed. Check your Firebase Rules.", error);
+        console.error("Database initialization failed.", error);
     }
 }
 
-// Automatically check and initialize DB
 initializeDatabase();

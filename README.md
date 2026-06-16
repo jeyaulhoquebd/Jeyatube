@@ -42,7 +42,7 @@ jtube-project/
 │
 ├── firebase.json           # Firebase হোস্টিং কনফিগারেশন ফাইল
 └── README.md               # প্রজেক্টের বিস্তারিত ডকুমেন্টেশন
-
+মর
 git add .
 git commit -m "my code"
 git push

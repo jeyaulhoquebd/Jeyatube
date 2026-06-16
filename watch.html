@@ -72,7 +72,39 @@
             </aside>
     </main>
 
+    <!-- Auth Modal -->
+    <div id="auth-modal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 hidden backdrop-blur-sm">
+        <div class="bg-zinc-900 border border-zinc-700 p-8 rounded-2xl w-full max-w-md shadow-2xl">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold" id="auth-title">Login Required</h2>
+                <button id="close-auth" class="text-zinc-400 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <form id="auth-form" class="space-y-4">
+                <div id="name-group" class="hidden">
+                    <label class="block text-xs font-semibold text-zinc-400 mb-1">Full Name</label>
+                    <input type="text" id="auth-name" class="w-full bg-zinc-800 border border-zinc-700 focus:border-blue-500 rounded-xl p-3 text-sm text-white focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-400 mb-1">Email Address</label>
+                    <input type="email" id="auth-email" required class="w-full bg-zinc-800 border border-zinc-700 focus:border-blue-500 rounded-xl p-3 text-sm text-white focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-400 mb-1">Password</label>
+                    <input type="password" id="auth-password" required class="w-full bg-zinc-800 border border-zinc-700 focus:border-blue-500 rounded-xl p-3 text-sm text-white focus:outline-none">
+                </div>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 font-bold p-3 rounded-xl transition">
+                    <span id="auth-submit-text">Login</span>
+                </button>
+            </form>
+            <p class="text-center text-xs text-zinc-400 mt-6">
+                <span id="auth-switch-text">Don't have an account?</span> 
+                <button id="auth-switch-btn" class="text-blue-400 hover:text-blue-300 font-bold">Register</button>
+            </p>
+        </div>
+    </div>
+
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <script src="data.js"></script>

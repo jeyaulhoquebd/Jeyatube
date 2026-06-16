@@ -9,6 +9,22 @@
 </head>
 <body class="bg-zinc-900 text-white font-sans antialiased flex flex-col min-h-screen">
 
+    <!-- Premium Google Auth Overlay -->
+    <div id="premium-auth-overlay" class="fixed inset-0 z-[200] bg-zinc-900/95 backdrop-blur-sm flex items-center justify-center">
+        <div class="bg-zinc-800 p-8 rounded-3xl w-full max-w-sm shadow-2xl border border-amber-500/30 text-center">
+            <div class="inline-flex bg-amber-500/20 text-amber-400 p-4 rounded-full text-4xl mb-4">
+                <i class="fab fa-google"></i>
+            </div>
+            <h2 class="text-2xl font-black mb-2 text-white">Sign In Required</h2>
+            <p class="text-sm text-zinc-400 mb-6">You must log in with your Google account to access JTube Premium.</p>
+            <button id="premium-google-btn" class="w-full bg-white text-black hover:bg-zinc-200 font-bold p-3.5 rounded-xl transition flex items-center justify-center space-x-2">
+                <i class="fab fa-google text-red-500"></i>
+                <span>Continue with Google</span>
+            </button>
+            <a href="index.html" class="block mt-4 text-xs text-zinc-500 hover:text-white transition">Return Home</a>
+        </div>
+    </div>
+
     <!-- Header Navigation -->
     <header class="bg-zinc-900 flex items-center justify-between px-6 py-4 border-b border-zinc-800">
         <a href="index.html" class="flex items-center space-x-1 text-xl font-bold tracking-tighter">
@@ -127,6 +143,7 @@
     </footer>
 
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <script src="data.js"></script>

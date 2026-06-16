@@ -2,6 +2,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     const uploadForm = document.getElementById("upload-form");
     const tableBody = document.getElementById("admin-table-body");
     const videoCount = document.getElementById("video-count");
+    
+    const adminLoginOverlay = document.getElementById("admin-login-overlay");
+    const adminLoginForm = document.getElementById("admin-login-form");
+    const adminPassword = document.getElementById("admin-password");
+
+    adminLoginForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        if (adminPassword.value === "Jeyaul") {
+            adminLoginOverlay.classList.add("hidden");
+        } else {
+            alert("Incorrect password!");
+            adminPassword.value = "";
+        }
+    });
 
     // Load elements and paint structural data view metrics
     async function loadAdminDashboard() {

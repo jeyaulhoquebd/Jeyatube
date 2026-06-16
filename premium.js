@@ -5,6 +5,25 @@ document.addEventListener("DOMContentLoaded", async () => {
     const cancelBtn = document.getElementById("cancel-premium-btn");
     const uploadForm = document.getElementById("premium-upload-form");
 
+    const premiumAuthOverlay = document.getElementById("premium-auth-overlay");
+    const premiumGoogleBtn = document.getElementById("premium-google-btn");
+
+    document.addEventListener('authStateChanged', (e) => {
+        if (e.detail) {
+            premiumAuthOverlay.classList.add("hidden");
+        } else {
+            premiumAuthOverlay.classList.remove("hidden");
+        }
+    });
+
+    premiumGoogleBtn.addEventListener("click", async () => {
+        try {
+            await loginWithGoogle();
+        } catch (error) {
+            alert(error.message);
+        }
+    });
+
     function checkPremiumState() {
         const isPremium = localStorage.getItem("jtube_user_premium") === "true";
         if (isPremium) {

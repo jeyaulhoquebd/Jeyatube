@@ -11,7 +11,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         return;
     }
 
-    // Capture Form Element DOM Variables
     const videoPlayer = document.getElementById("video-player");
     const videoTitle = document.getElementById("video-title");
     const channelAvatar = document.getElementById("channel-avatar");
@@ -28,26 +27,102 @@ document.addEventListener("DOMContentLoaded", async () => {
     const commentInput = document.getElementById("comment-input");
     const recommendationsContainer = document.getElementById("recommendations");
 
-    // Convert YouTube URL to Embed URL
+    // Auth Modal DOM
+    const authModal = document.getElementById("auth-modal");
+    const closeAuthBtn = document.getElementById("close-auth");
+    const authForm = document.getElementById("auth-form");
+    const authTitle = document.getElementById("auth-title");
+    const nameGroup = document.getElementById("name-group");
+    const authName = document.getElementById("auth-name");
+    const authEmail = document.getElementById("auth-email");
+    const authPassword = document.getElementById("auth-password");
+    const authSubmitText = document.getElementById("auth-submit-text");
+    const authSwitchText = document.getElementById("auth-switch-text");
+    const authSwitchBtn = document.getElementById("auth-switch-btn");
+    
+    let isRegistering = false;
+
+    // Handle User State
+    document.addEventListener('authStateChanged', async (e) => {
+        if (e.detail) {
+            authModal.classList.add("hidden");
+            await addToHistory(video); // Add to history when logged in user visits
+        }
+    });
+
+    function openAuthModal() {
+        authModal.classList.remove("hidden");
+    }
+
+    closeAuthBtn.addEventListener("click", () => {
+        authModal.classList.add("hidden");
+    });
+
+    authSwitchBtn.addEventListener("click", () => {
+        isRegistering = !isRegistering;
+        if (isRegistering) {
+            authTitle.textContent = "Create an Account";
+            nameGroup.classList.remove("hidden");
+            authName.required = true;
+            authSubmitText.textContent = "Register";
+            authSwitchText.textContent = "Already have an account?";
+            authSwitchBtn.textContent = "Login";
+        } else {
+            authTitle.textContent = "Login Required";
+            nameGroup.classList.add("hidden");
+            authName.required = false;
+            authSubmitText.textContent = "Login";
+            authSwitchText.textContent = "Don't have an account?";
+            authSwitchBtn.textContent = "Register";
+        }
+    });
+
+    authForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const email = authEmail.value;
+        const pass = authPassword.value;
+        try {
+            if (isRegistering) {
+                const name = authName.value;
+                await registerWithEmail(email, pass, name);
+                alert("Registration successful!");
+            } else {
+                await loginWithEmail(email, pass);
+            }
+        } catch (error) {
+            alert(error.message);
+        }
+    });
+
+    const googleAuthBtn = document.getElementById("google-auth-btn");
+    if (googleAuthBtn) {
+        googleAuthBtn.addEventListener("click", async () => {
+            try {
+                await loginWithGoogle();
+            } catch (error) {
+                alert(error.message);
+            }
+        });
+    }
+
+    // YouTube Embed
     function convertToEmbedUrl(url) {
         const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
         const match = url.match(regExp);
         if (match && match[2].length === 11) {
             return 'https://www.youtube.com/embed/' + match[2] + '?autoplay=1';
         }
-        return null; // For fallback
+        return null;
     }
 
     const embedUrl = convertToEmbedUrl(video.videoUrl);
     if (embedUrl) {
-        // Replace video element with iframe
         const container = videoPlayer.parentElement;
         container.innerHTML = `<iframe class="w-full h-full" src="${embedUrl}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
     } else {
         videoPlayer.src = video.videoUrl;
     }
 
-    // Hydrate Player Data views
     videoTitle.textContent = video.title;
     channelAvatar.textContent = video.channel[0];
     channelName.textContent = video.channel;
@@ -56,7 +131,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     function updateInteractionsUI() {
         const currentChannel = channels[video.channel];
-        
         if (currentChannel && currentChannel.subscribed) {
             subscribeBtn.textContent = "Subscribed";
             subscribeBtn.className = "ml-4 bg-zinc-800 text-zinc-400 px-4 py-2 rounded-full font-semibold text-xs md:text-sm transition hover:bg-zinc-700";
@@ -113,6 +187,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     likeBtn.addEventListener("click", async () => {
+        if (!currentUser) return openAuthModal();
         if (!video.likes) video.likes = 0;
         if (video.liked) {
             video.likes--;
@@ -126,6 +201,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     subscribeBtn.addEventListener("click", async () => {
+        if (!currentUser) return openAuthModal();
         let currentChannel = channels[video.channel];
         if (!currentChannel) {
             currentChannel = { subscribers: 0, subscribed: false };
@@ -138,19 +214,20 @@ document.addEventListener("DOMContentLoaded", async () => {
             currentChannel.subscribers++;
             currentChannel.subscribed = true;
         }
-        channels[video.channel] = currentChannel; // Update local mapping
+        channels[video.channel] = currentChannel;
         await saveChannel(video.channel, currentChannel);
         updateInteractionsUI();
     });
 
     commentForm.addEventListener("submit", async (e) => {
         e.preventDefault();
+        if (!currentUser) return openAuthModal();
         const text = commentInput.value.trim();
         if (!text) return;
 
         if (!video.comments) video.comments = [];
         video.comments.unshift({
-            username: "You",
+            username: currentUser.displayName || "User",
             text: text
         });
 
