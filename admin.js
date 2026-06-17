@@ -19,6 +19,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Load elements and paint structural data view metrics
     async function loadAdminDashboard() {
+        await loadChannelsForAdmin();
         const videos = await getVideos();
         videoCount.textContent = videos.length;
         tableBody.innerHTML = "";
@@ -131,6 +132,70 @@ document.addEventListener("DOMContentLoaded", async () => {
             await loadAdminDashboard();
         }
     };
+
+    // Channel Management Logic
+    const channelList = document.getElementById("channel-list");
+    const editChannelSelect = document.getElementById("edit-channel-select");
+    const editChannelForm = document.getElementById("edit-channel-form");
+    const editCAvatar = document.getElementById("edit-c-avatar");
+    const editCCover = document.getElementById("edit-c-cover");
+    const editCBio = document.getElementById("edit-c-bio");
+    const editCLinks = document.getElementById("edit-c-links");
+
+    let currentChannelsData = {};
+
+    async function loadChannelsForAdmin() {
+        currentChannelsData = await getChannels();
+        
+        channelList.innerHTML = "";
+        editChannelSelect.innerHTML = '<option value="">-- Choose a Channel --</option>';
+
+        Object.keys(currentChannelsData).forEach(channelName => {
+            // Populate datalist for video upload
+            const option = document.createElement("option");
+            option.value = channelName;
+            channelList.appendChild(option);
+
+            // Populate select for edit
+            const editOption = document.createElement("option");
+            editOption.value = channelName;
+            editOption.textContent = channelName;
+            editChannelSelect.appendChild(editOption);
+        });
+    }
+
+    editChannelSelect.addEventListener("change", (e) => {
+        const selectedChannel = e.target.value;
+        if (selectedChannel && currentChannelsData[selectedChannel]) {
+            const data = currentChannelsData[selectedChannel];
+            editCAvatar.value = data.avatarUrl || "";
+            editCCover.value = data.coverUrl || "";
+            editCBio.value = data.bio || "";
+            editCLinks.value = data.links || "";
+            editChannelForm.classList.remove("hidden");
+        } else {
+            editChannelForm.classList.add("hidden");
+        }
+    });
+
+    editChannelForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const selectedChannel = editChannelSelect.value;
+        if (!selectedChannel) return;
+
+        const updatedData = {
+            avatarUrl: editCAvatar.value.trim(),
+            coverUrl: editCCover.value.trim(),
+            bio: editCBio.value.trim(),
+            links: editCLinks.value.trim()
+        };
+
+        await saveChannel(selectedChannel, updatedData);
+        alert("Channel updated successfully!");
+        await loadChannelsForAdmin(); // Refresh data
+        editChannelForm.classList.add("hidden");
+        editChannelSelect.value = "";
+    });
 
     // Initialize Dashboard UI Components
     await loadAdminDashboard();

@@ -100,9 +100,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         sidebarChannels.innerHTML = "";
         Object.keys(channels).forEach(channelName => {
             if (channels[channelName].subscribed) {
+                const cData = channels[channelName];
+                const avatarHtml = cData.avatarUrl 
+                    ? `<img src="${cData.avatarUrl}" class="w-6 h-6 rounded-full object-cover">`
+                    : `<div class="bg-zinc-700 w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs">${channelName[0]}</div>`;
+                
                 sidebarChannels.innerHTML += `
                     <a href="channel.html?name=${encodeURIComponent(channelName)}" class="flex items-center space-x-3 p-2 hover:bg-zinc-800 rounded-xl text-zinc-300 transition">
-                        <div class="bg-zinc-700 w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs">${channelName[0]}</div>
+                        ${avatarHtml}
                         <span class="text-sm truncate">${channelName}</span>
                     </a>
                 `;
@@ -113,6 +118,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Render Videos Grid
     async function renderVideos(filterCategory = "all") {
         let videosToRender = [];
+        const channelsMap = await getChannels();
         
         if (filterCategory === "history") {
             videosToRender = await getHistory();
@@ -146,6 +152,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             const ytId = getYoutubeId(video.videoUrl);
             const previewHtml = ytId ? `<iframe class='w-full h-full' src='https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&controls=0&modestbranding=1&showinfo=0' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe>` : "";
 
+            let avatarHtml = `<div class="flex-shrink-0 bg-zinc-700 w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm mt-0.5">${video.channel[0]}</div>`;
+            if (channelsMap[video.channel] && channelsMap[video.channel].avatarUrl) {
+                avatarHtml = `<img src="${channelsMap[video.channel].avatarUrl}" class="flex-shrink-0 w-9 h-9 rounded-full object-cover mt-0.5" alt="${video.channel}">`;
+            }
+
             videoGrid.innerHTML += `
                 <div class="cursor-pointer group relative" onclick="location.href='watch.html?id=${video.id}'"
                      onmouseenter="this.querySelector('.video-preview').innerHTML = \`${previewHtml}\`"
@@ -156,9 +167,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         <span class="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-xs font-semibold z-20">${video.duration}</span>
                     </div>
                     <div class="flex space-x-3">
-                        <div class="flex-shrink-0 bg-zinc-700 w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm mt-0.5">
-                            ${video.channel[0]}
-                        </div>
+                        ${avatarHtml}
                         <div class="flex-1 min-w-0">
                             ${qualityBadgeHtml}
                             <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
