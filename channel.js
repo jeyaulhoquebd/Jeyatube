@@ -133,7 +133,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const previewHtml = ytId ? `<iframe class='w-full h-full' src='https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&controls=0&modestbranding=1&showinfo=0' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe>` : "";
             
             channelVideos.innerHTML += `
-                <div class="cursor-pointer group relative" onclick="location.href='watch.html?id=${video.id}'"
+                <div class="cursor-pointer group relative video-card-custom bg-zinc-800 rounded-xl pb-3 h-full flex flex-col" onclick="location.href='watch.html?id=${video.id}'"
                      onmouseenter="this.querySelector('.video-preview').innerHTML = \`${previewHtml}\`"
                      onmouseleave="this.querySelector('.video-preview').innerHTML = ''">
                     <div class="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-2">
@@ -141,7 +141,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         <div class="video-preview absolute inset-0 w-full h-full bg-black z-10 pointer-events-none empty:hidden"></div>
                         <span class="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-xs font-semibold z-20">${video.duration}</span>
                     </div>
-                    <div>
+                    <div class="px-3 flex-1">
                         <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
                         <p class="text-xs text-zinc-400 mt-1">${video.views} views • ${video.time}</p>
                     </div>

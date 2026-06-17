@@ -166,7 +166,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         <div class="video-preview absolute inset-0 w-full h-full bg-black z-10 pointer-events-none empty:hidden"></div>
                         <span class="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-xs font-semibold z-20">${video.duration}</span>
                     </div>
-                    <div class="flex space-x-3">
+                    <div class="flex space-x-3 px-3 flex-1">
                         ${avatarHtml}
                         <div class="flex-1 min-w-0">
                             ${qualityBadgeHtml}
