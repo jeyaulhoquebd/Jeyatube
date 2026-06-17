@@ -136,6 +136,29 @@ document.addEventListener("DOMContentLoaded", async () => {
             return;
         }
 
+        // Feature 6: Interleave videos so not all videos of one channel are together
+        if (filterCategory === "all") {
+            const channelGroups = {};
+            videosToRender.forEach(v => {
+                if (!channelGroups[v.channel]) channelGroups[v.channel] = [];
+                channelGroups[v.channel].push(v);
+            });
+            
+            const interleaved = [];
+            let added = true;
+            while (added) {
+                added = false;
+                for (const channel in channelGroups) {
+                    const chunk = channelGroups[channel].splice(0, 2); // Take 2 videos from this channel
+                    if (chunk.length > 0) {
+                        interleaved.push(...chunk);
+                        added = true;
+                    }
+                }
+            }
+            videosToRender = interleaved;
+        }
+
         videosToRender.forEach(video => {
             let qualityBadgeHtml = "";
             if (video.contentQuality) {
@@ -150,7 +173,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             const ytId = getYoutubeId(video.videoUrl);
-            const previewHtml = ytId ? `<iframe class='w-full h-full' src='https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&controls=0&modestbranding=1&showinfo=0' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe>` : "";
+            const previewHtml = ytId ? `<iframe class='w-full h-full pointer-events-none' src='https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0&controls=0&modestbranding=1&showinfo=0' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe>` : "";
 
             let avatarHtml = `<div class="flex-shrink-0 bg-zinc-700 w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm mt-0.5">${video.channel[0]}</div>`;
             if (channelsMap[video.channel] && channelsMap[video.channel].avatarUrl) {

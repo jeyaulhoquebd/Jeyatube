@@ -51,6 +51,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             authModal.classList.add("hidden");
             await addToHistory(video); // Add to history when logged in user visits
         }
+        updateInteractionsUI(); // Update UI with correct user state
     });
 
     function openAuthModal() {
@@ -130,22 +131,48 @@ document.addEventListener("DOMContentLoaded", async () => {
     channelAvatar.textContent = video.channel[0];
     channelName.textContent = video.channel;
     videoMeta.textContent = `${video.views} views • ${video.time}`;
-    videoDesc.textContent = video.description;
+    
+    function renderDescription() {
+        const descText = video.description || "";
+        const lines = descText.split('\n');
+        if (lines.length > 3 || descText.length > 200) {
+            let shortText = lines.slice(0, 3).join('\n');
+            if (shortText.length > 200) shortText = shortText.substring(0, 200) + '...';
+            else if (lines.length > 3) shortText += '...';
+            
+            videoDesc.innerHTML = parseLinks(shortText) + '<br><button id="read-more-btn" class="text-zinc-400 hover:text-white font-bold mt-2">Read More</button>';
+            document.getElementById("read-more-btn").addEventListener("click", () => {
+                videoDesc.innerHTML = parseLinks(descText) + '<br><button id="read-less-btn" class="text-zinc-400 hover:text-white font-bold mt-2">Show Less</button>';
+                document.getElementById("read-less-btn").addEventListener("click", renderDescription);
+            });
+        } else {
+            videoDesc.innerHTML = parseLinks(descText);
+        }
+    }
+    renderDescription();
 
     function updateInteractionsUI() {
         const currentChannel = channels[video.channel];
-        if (currentChannel && currentChannel.subscribed) {
+        const isSubscribed = currentChannel && currentChannel.subscribedBy && currentUser && currentChannel.subscribedBy.includes(currentUser.email);
+        
+        if (isSubscribed) {
             subscribeBtn.textContent = "Subscribed";
             subscribeBtn.className = "ml-4 bg-zinc-800 text-zinc-400 px-4 py-2 rounded-full font-semibold text-xs md:text-sm transition hover:bg-zinc-700";
         } else {
             subscribeBtn.textContent = "Subscribe";
             subscribeBtn.className = "ml-4 bg-white text-black px-4 py-2 rounded-full font-semibold text-xs md:text-sm transition hover:bg-zinc-200";
         }
-        channelSubs.textContent = currentChannel ? `${currentChannel.subscribers.toLocaleString()} subscribers` : '0 subscribers';
+        
+        // Calculate subscribers safely
+        const subCount = currentChannel && currentChannel.subscribedBy ? currentChannel.subscribedBy.length : (currentChannel ? currentChannel.subscribers : 0);
+        channelSubs.textContent = `${subCount.toLocaleString()} subscribers`;
 
-        likeCount.textContent = video.likes ? video.likes.toLocaleString() : "0";
+        const likeCountNum = video.likedBy ? video.likedBy.length : (video.likes || 0);
+        likeCount.textContent = likeCountNum.toLocaleString();
+        
+        const isLiked = video.likedBy && currentUser && video.likedBy.includes(currentUser.email);
         const icon = likeBtn.querySelector("i");
-        if (video.liked) {
+        if (isLiked) {
             icon.className = "fas fa-thumbs-up text-blue-500";
         } else {
             icon.className = "far fa-thumbs-up";
@@ -191,13 +218,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     likeBtn.addEventListener("click", async () => {
         if (!currentUser) return openAuthModal();
-        if (!video.likes) video.likes = 0;
-        if (video.liked) {
-            video.likes--;
-            video.liked = false;
+        if (!video.likedBy) video.likedBy = [];
+        
+        const index = video.likedBy.indexOf(currentUser.email);
+        if (index > -1) {
+            video.likedBy.splice(index, 1);
         } else {
-            video.likes++;
-            video.liked = true;
+            video.likedBy.push(currentUser.email);
         }
         await saveVideo(video);
         updateInteractionsUI();
@@ -207,16 +234,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!currentUser) return openAuthModal();
         let currentChannel = channels[video.channel];
         if (!currentChannel) {
-            currentChannel = { subscribers: 0, subscribed: false };
+            currentChannel = { subscribers: 0, subscribedBy: [] };
         }
+        if (!currentChannel.subscribedBy) currentChannel.subscribedBy = [];
 
-        if (currentChannel.subscribed) {
-            currentChannel.subscribers--;
-            currentChannel.subscribed = false;
+        const index = currentChannel.subscribedBy.indexOf(currentUser.email);
+        if (index > -1) {
+            currentChannel.subscribedBy.splice(index, 1);
         } else {
-            currentChannel.subscribers++;
-            currentChannel.subscribed = true;
+            currentChannel.subscribedBy.push(currentUser.email);
         }
+        
         channels[video.channel] = currentChannel;
         await saveChannel(video.channel, currentChannel);
         updateInteractionsUI();

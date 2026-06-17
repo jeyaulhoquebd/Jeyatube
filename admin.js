@@ -207,6 +207,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         const maxPages = 3; // Limit to 150 videos per import to avoid overloading
         let pagesFetched = 0;
 
+        function formatDuration(totalSeconds) {
+            const h = Math.floor(totalSeconds / 3600);
+            const m = Math.floor((totalSeconds % 3600) / 60);
+            const s = totalSeconds % 60;
+            if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        }
+
         try {
             while (pagesFetched < maxPages) {
                 const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=50&playlistId=${playlistId}&key=${ENV.YOUTUBE_API_KEY}&pageToken=${pageToken}`;
@@ -218,7 +226,38 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
 
                 if (data.items && data.items.length > 0) {
-                    allVideos = allVideos.concat(data.items);
+                    const videoIds = data.items.map(item => item.contentDetails.videoId).filter(Boolean).join(',');
+                    if (videoIds) {
+                        const vidUrl = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${videoIds}&key=${ENV.YOUTUBE_API_KEY}`;
+                        const vidRes = await fetch(vidUrl);
+                        const vidData = await vidRes.json();
+                        
+                        const durationMap = {};
+                        if(vidData.items) {
+                            vidData.items.forEach(v => {
+                                durationMap[v.id] = v.contentDetails.duration;
+                            });
+                        }
+
+                        const filteredItems = data.items.filter(item => {
+                            const durationStr = durationMap[item.contentDetails.videoId];
+                            if(!durationStr) return false;
+                            
+                            let totalSeconds = 0;
+                            const match = durationStr.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+                            if(match) {
+                                const h = parseInt(match[1] || 0);
+                                const m = parseInt(match[2] || 0);
+                                const s = parseInt(match[3] || 0);
+                                totalSeconds = h * 3600 + m * 60 + s;
+                            }
+                            
+                            item._durationText = formatDuration(totalSeconds);
+                            return totalSeconds > 180; // Only videos above 3 minutes
+                        });
+
+                        allVideos = allVideos.concat(filteredItems);
+                    }
                 }
 
                 pageToken = data.nextPageToken;
@@ -302,7 +341,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     playlist: "",
                     views: 0,
                     time: "Just now",
-                    duration: "", // Optional duration
+                    duration: item._durationText || "", 
                     thumbnail: snippet.thumbnails.high ? snippet.thumbnails.high.url : (snippet.thumbnails.default ? snippet.thumbnails.default.url : ""),
                     videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
                     description: snippet.description || "Imported from YouTube",

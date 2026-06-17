@@ -162,6 +162,16 @@ function getYoutubeId(url) {
     return (match && match[2].length === 11) ? match[2] : null;
 }
 
+// Parse text to convert URLs to bright links
+function parseLinks(text) {
+    if (!text) return "";
+    // Regular expression to find URLs
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    return text.replace(urlRegex, function(url) {
+        return `<a href="${url}" target="_blank" class="text-blue-400 hover:text-blue-300 font-semibold underline break-all">${url}</a>`;
+    });
+}
+
 // Seed initial data if empty
 async function initializeDatabase() {
     try {

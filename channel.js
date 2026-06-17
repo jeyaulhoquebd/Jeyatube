@@ -97,28 +97,53 @@ document.addEventListener("DOMContentLoaded", async () => {
     } else {
         channelAvatar.innerHTML = `<div class="w-full h-full flex items-center justify-center bg-purple-600 text-3xl font-bold">${channelNameParam[0]}</div>`;
     }
+    
+    document.getElementById("channel-bio").innerHTML = parseLinks(currentChannelData.bio || "");
+    
+    const channelLinks = document.getElementById("channel-links");
+    channelLinks.innerHTML = "";
+    if (currentChannelData.links) {
+        const linksArray = currentChannelData.links.split(",");
+        linksArray.forEach(linkStr => {
+            const parts = linkStr.split("|");
+            if (parts.length === 2) {
+                channelLinks.innerHTML += `<a href="${parts[1].trim()}" target="_blank" class="bg-zinc-800 text-blue-400 hover:text-blue-300 font-semibold text-xs px-3 py-1.5 rounded-full inline-flex items-center space-x-1 border border-zinc-700 transition">
+                    <i class="fas fa-link"></i> <span>${parts[0].trim()}</span>
+                </a>`;
+            }
+        });
+    }
 
     function updateSubscribeUI() {
-        if (currentChannelData.subscribed) {
+        const isSubscribed = currentChannelData.subscribedBy && currentUser && currentChannelData.subscribedBy.includes(currentUser.email);
+        
+        if (isSubscribed) {
             subscribeBtn.textContent = "Subscribed";
             subscribeBtn.className = "mt-4 md:mt-0 mb-2 bg-zinc-800 text-zinc-400 px-6 py-2 rounded-full font-semibold transition text-sm";
         } else {
             subscribeBtn.textContent = "Subscribe";
             subscribeBtn.className = "mt-4 md:mt-0 mb-2 bg-white text-black px-6 py-2 rounded-full font-semibold transition text-sm hover:bg-zinc-200";
         }
-        channelSubs.textContent = `${currentChannelData.subscribers || 0} subscribers`;
+        
+        const subCount = currentChannelData.subscribedBy ? currentChannelData.subscribedBy.length : (currentChannelData.subscribers || 0);
+        channelSubs.textContent = `${subCount.toLocaleString()} subscribers`;
     }
     updateSubscribeUI();
+
+    document.addEventListener('authStateChanged', (e) => {
+        updateSubscribeUI();
+    });
 
     subscribeBtn.addEventListener("click", async () => {
         if (!currentUser) return authModal.classList.remove("hidden");
         
-        if (currentChannelData.subscribed) {
-            currentChannelData.subscribers--;
-            currentChannelData.subscribed = false;
+        if (!currentChannelData.subscribedBy) currentChannelData.subscribedBy = [];
+        
+        const index = currentChannelData.subscribedBy.indexOf(currentUser.email);
+        if (index > -1) {
+            currentChannelData.subscribedBy.splice(index, 1);
         } else {
-            currentChannelData.subscribers++;
-            currentChannelData.subscribed = true;
+            currentChannelData.subscribedBy.push(currentUser.email);
         }
         await saveChannel(channelNameParam, currentChannelData);
         updateSubscribeUI();
@@ -130,7 +155,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     } else {
         videos.forEach(video => {
             const ytId = getYoutubeId(video.videoUrl);
-            const previewHtml = ytId ? `<iframe class='w-full h-full' src='https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&controls=0&modestbranding=1&showinfo=0' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe>` : "";
+            const previewHtml = ytId ? `<iframe class='w-full h-full pointer-events-none' src='https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0&controls=0&modestbranding=1&showinfo=0' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe>` : "";
             
             channelVideos.innerHTML += `
                 <div class="cursor-pointer group relative video-card-custom bg-zinc-800 rounded-xl pb-3 h-full flex flex-col" onclick="location.href='watch.html?id=${video.id}'"
