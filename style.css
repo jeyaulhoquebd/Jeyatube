@@ -1,0 +1,41 @@
+@import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap');
+
+body {
+    font-family: 'Hind Siliguri', sans-serif !important;
+}
+
+/* Beautiful custom scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #18181b; 
+}
+::-webkit-scrollbar-thumb {
+    background: #3f3f46; 
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #dc2626; 
+}
+
+/* Enhancements for video cards based on user request */
+.video-card-custom {
+    transition: transform 0.3s ease, box-shadow 0.3s ease !important;
+}
+
+.video-card-custom:hover {
+    transform: translateY(-5px) !important;
+    box-shadow: 0 8px 16px rgba(220,38,38,0.2) !important; /* Red tinted shadow */
+}
+
+/* Custom Modal Animation */
+.modal-enter {
+    animation: fadeIn 0.3s ease-out forwards;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}

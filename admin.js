@@ -197,6 +197,148 @@ document.addEventListener("DOMContentLoaded", async () => {
         editChannelSelect.value = "";
     });
 
+    // YouTube Import Logic
+    const ytImportForm = document.getElementById("yt-import-form");
+    const ytStatus = document.getElementById("yt-import-status");
+
+    async function fetchYouTubeVideos(playlistId) {
+        let allVideos = [];
+        let pageToken = '';
+        const maxPages = 3; // Limit to 150 videos per import to avoid overloading
+        let pagesFetched = 0;
+
+        try {
+            while (pagesFetched < maxPages) {
+                const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=50&playlistId=${playlistId}&key=${ENV.YOUTUBE_API_KEY}&pageToken=${pageToken}`;
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.error) {
+                    throw new Error(data.error.message);
+                }
+
+                if (data.items && data.items.length > 0) {
+                    allVideos = allVideos.concat(data.items);
+                }
+
+                pageToken = data.nextPageToken;
+                pagesFetched++;
+
+                if (!pageToken) break;
+            }
+            return allVideos;
+        } catch (error) {
+            ytStatus.textContent = `Error fetching videos: ${error.message}`;
+            ytStatus.classList.remove("hidden", "text-green-500", "text-zinc-400");
+            ytStatus.classList.add("text-red-500");
+            console.error(error);
+            return null;
+        }
+    }
+
+    async function getChannelUploadPlaylistId(channelId) {
+        try {
+            const url = `https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=${channelId}&key=${ENV.YOUTUBE_API_KEY}`;
+            const res = await fetch(url);
+            const data = await res.json();
+            
+            if (data.error) throw new Error(data.error.message);
+            if (data.items && data.items.length > 0) {
+                return data.items[0].contentDetails.relatedPlaylists.uploads;
+            }
+            throw new Error("Channel not found or has no uploads playlist.");
+        } catch (error) {
+            ytStatus.textContent = `Error fetching channel: ${error.message}`;
+            ytStatus.classList.remove("hidden", "text-green-500", "text-zinc-400");
+            ytStatus.classList.add("text-red-500");
+            console.error(error);
+            return null;
+        }
+    }
+
+    ytImportForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        
+        const ytChannelId = document.getElementById("yt-channel-id").value.trim();
+        const ytPlaylistId = document.getElementById("yt-playlist-id").value.trim();
+        const targetChannel = document.getElementById("yt-target-channel").value.trim();
+        const category = document.getElementById("yt-category").value.trim();
+
+        if (!ytChannelId && !ytPlaylistId) {
+            alert("Please provide either a YouTube Channel ID or Playlist ID.");
+            return;
+        }
+
+        ytStatus.textContent = "Fetching videos from YouTube... Please wait.";
+        ytStatus.classList.remove("hidden", "text-red-500", "text-green-500");
+        ytStatus.classList.add("text-zinc-400");
+
+        let targetPlaylistId = ytPlaylistId;
+
+        if (!targetPlaylistId && ytChannelId) {
+            targetPlaylistId = await getChannelUploadPlaylistId(ytChannelId);
+        }
+
+        if (!targetPlaylistId) return; // Error already handled
+
+        const videos = await fetchYouTubeVideos(targetPlaylistId);
+        
+        if (videos && videos.length > 0) {
+            ytStatus.textContent = `Found ${videos.length} videos. Importing to Firebase...`;
+
+            for (let i = 0; i < videos.length; i++) {
+                const item = videos[i];
+                const snippet = item.snippet;
+                
+                // Construct new video object
+                const videoId = snippet.resourceId ? snippet.resourceId.videoId : (item.contentDetails ? item.contentDetails.videoId : '');
+                if (!videoId) continue;
+                
+                const newVideo = {
+                    id: "yt_" + videoId, // Using YouTube ID to avoid duplicates
+                    title: snippet.title,
+                    channel: targetChannel,
+                    category: category,
+                    playlist: "",
+                    views: 0,
+                    time: "Just now",
+                    duration: "", // Optional duration
+                    thumbnail: snippet.thumbnails.high ? snippet.thumbnails.high.url : (snippet.thumbnails.default ? snippet.thumbnails.default.url : ""),
+                    videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
+                    description: snippet.description || "Imported from YouTube",
+                    likes: 0,
+                    liked: false,
+                    comments: [],
+                    timestamp: new Date(snippet.publishedAt).getTime()
+                };
+
+                await saveVideo(newVideo);
+            }
+
+            // Create target channel if doesn't exist
+            let channels = await getChannels();
+            if (!channels[targetChannel]) {
+                await saveChannel(targetChannel, { 
+                    subscribers: 0, 
+                    subscribed: false,
+                    avatarUrl: "",
+                    coverUrl: ""
+                });
+            }
+
+            ytStatus.textContent = `Successfully imported ${videos.length} videos to channel ${targetChannel}!`;
+            ytStatus.classList.remove("text-zinc-400");
+            ytStatus.classList.add("text-green-500");
+            
+            ytImportForm.reset();
+            await loadAdminDashboard();
+        } else if (videos && videos.length === 0) {
+            ytStatus.textContent = "No videos found in the provided channel/playlist.";
+            ytStatus.classList.remove("text-zinc-400");
+            ytStatus.classList.add("text-red-500");
+        }
+    });
+
     // Initialize Dashboard UI Components
     await loadAdminDashboard();
 });

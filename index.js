@@ -158,7 +158,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             videoGrid.innerHTML += `
-                <div class="cursor-pointer group relative" onclick="location.href='watch.html?id=${video.id}'"
+                <div class="cursor-pointer group relative video-card-custom bg-zinc-800 rounded-xl pb-3 h-full flex flex-col" onclick="location.href='watch.html?id=${video.id}'"
                      onmouseenter="this.querySelector('.video-preview').innerHTML = \`${previewHtml}\`"
                      onmouseleave="this.querySelector('.video-preview').innerHTML = ''">
                     <div class="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-3">
