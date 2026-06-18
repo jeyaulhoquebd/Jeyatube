@@ -155,6 +155,27 @@ async function getPlaylists() {
     return Object.values(playlistsMap);
 }
 
+// Categories functionality
+async function getCategories() {
+    const snapshot = await db.collection("categories").orderBy("order").get();
+    let categories = [];
+    snapshot.forEach(doc => {
+        categories.push({ id: doc.id, ...doc.data() });
+    });
+    return categories;
+}
+
+async function saveCategory(category) {
+    if (!category.id) {
+        category.id = category.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    }
+    await db.collection("categories").doc(category.id).set(category);
+}
+
+async function deleteCategory(categoryId) {
+    await db.collection("categories").doc(categoryId).delete();
+}
+
 // Extract YouTube ID
 function getYoutubeId(url) {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
@@ -244,6 +265,21 @@ async function initializeDatabase() {
             };
             for (let [name, data] of Object.entries(initialChannels)) {
                 await saveChannel(name, data);
+            }
+        }
+        
+        // Initialize default categories if not exists
+        const categories = await getCategories();
+        if (categories.length === 0) {
+            const defaultCats = [
+                { name: "Islam", order: 1 },
+                { name: "Science", order: 2 },
+                { name: "AI", order: 3 },
+                { name: "Machine Learning", order: 4 },
+                { name: "Entertainment", order: 5 }
+            ];
+            for (let cat of defaultCats) {
+                await saveCategory(cat);
             }
         }
     } catch (error) {

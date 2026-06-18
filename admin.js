@@ -64,7 +64,62 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </tr>
             `;
         });
+
+        // Load Categories
+        await loadCategoriesForAdmin();
     }
+
+    // Categories Logic
+    const categoryListDatalist = document.getElementById("category-list");
+    const ytCategoryDatalist = document.getElementById("yt-category-list"); // if I add one
+    const categoriesTableBody = document.getElementById("categories-table-body");
+    const addCategoryForm = document.getElementById("add-category-form");
+
+    async function loadCategoriesForAdmin() {
+        const categories = await getCategories();
+        
+        // Populate Datalists
+        const optionsHtml = categories.map(c => `<option value="${c.name}">`).join("");
+        if(categoryListDatalist) categoryListDatalist.innerHTML = optionsHtml;
+
+        // Populate Table
+        if(categoriesTableBody) {
+            categoriesTableBody.innerHTML = "";
+            categories.forEach(cat => {
+                categoriesTableBody.innerHTML += `
+                    <tr class="hover:bg-zinc-800/30 transition">
+                        <td class="px-5 py-3.5 text-zinc-400 font-mono">${cat.order}</td>
+                        <td class="px-5 py-3.5 font-semibold text-white">${cat.name}</td>
+                        <td class="px-5 py-3.5 text-center">
+                            <button onclick="deleteCategoryHandler('${cat.id}')" title="Delete category"
+                                    class="text-zinc-500 hover:text-red-400 hover:bg-red-500/10 p-2 rounded-full transition">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+    }
+
+    if(addCategoryForm) {
+        addCategoryForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const name = document.getElementById("new-cat-name").value.trim();
+            const order = parseInt(document.getElementById("new-cat-order").value.trim() || "0");
+            if(!name) return;
+            await saveCategory({ name, order });
+            addCategoryForm.reset();
+            await loadCategoriesForAdmin();
+        });
+    }
+
+    window.deleteCategoryHandler = async function(id) {
+        if(confirm("Are you sure you want to delete this category?")) {
+            await deleteCategory(id);
+            await loadCategoriesForAdmin();
+        }
+    };
 
     // Upload form submission
     uploadForm.addEventListener("submit", async (e) => {

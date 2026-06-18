@@ -125,8 +125,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         } else {
             const videos = await getVideos();
             videosToRender = filterCategory === "all" 
-                ? videos 
-                : videos.filter(v => v.category.toLowerCase() === filterCategory.toLowerCase());
+                ? videos.filter(v => !v.playlist)
+                : videos.filter(v => v.category.toLowerCase() === filterCategory.toLowerCase() && !v.playlist);
         }
 
         videoGrid.innerHTML = "";
@@ -185,7 +185,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                      onmouseenter="this.querySelector('.video-preview').innerHTML = \`${previewHtml}\`"
                      onmouseleave="this.querySelector('.video-preview').innerHTML = ''">
                     <div class="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-3">
-                        <img src="${video.thumbnail}" alt="${video.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-200">
+                        <img src="${video.thumbnail}" alt="${video.title}" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition duration-200">
                         <div class="video-preview absolute inset-0 w-full h-full bg-black z-10 pointer-events-none empty:hidden"></div>
                         <span class="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-xs font-semibold z-20">${video.duration}</span>
                     </div>
@@ -216,21 +216,36 @@ document.addEventListener("DOMContentLoaded", async () => {
         await renderVideos("history");
     });
 
-    categoryBtns.forEach(btn => {
-        btn.addEventListener("click", async (e) => {
-            showingHistory = false;
-            pageTitle.classList.add("hidden");
-            categoryBar.classList.remove("hidden");
-            
-            categoryBtns.forEach(b => b.classList.replace("bg-white", "bg-zinc-800"));
-            categoryBtns.forEach(b => b.classList.replace("text-black", "text-white"));
-            
-            e.target.classList.replace("bg-zinc-800", "bg-white");
-            e.target.classList.replace("text-white", "text-black");
-
-            await renderVideos(e.target.dataset.category);
+    async function renderCategories() {
+        const categories = await getCategories();
+        categoryBar.innerHTML = `<button class="category-btn whitespace-nowrap bg-white text-black px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="all">All</button>`;
+        categories.forEach(cat => {
+            categoryBar.innerHTML += `<button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="${cat.name}">${cat.name}</button>`;
         });
-    });
+        categoryBar.innerHTML += `<button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="playlists">Playlists</button>`;
+
+        const newCategoryBtns = document.querySelectorAll(".category-btn");
+        newCategoryBtns.forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+                showingHistory = false;
+                pageTitle.classList.add("hidden");
+                categoryBar.classList.remove("hidden");
+                
+                newCategoryBtns.forEach(b => b.classList.replace("bg-white", "bg-zinc-800"));
+                newCategoryBtns.forEach(b => b.classList.replace("text-black", "text-white"));
+                
+                e.target.classList.replace("bg-zinc-800", "bg-white");
+                e.target.classList.replace("text-white", "text-black");
+
+                const cat = e.target.dataset.category;
+                if (cat === "playlists") {
+                    window.location.href = "playlists.html";
+                } else {
+                    await renderVideos(cat);
+                }
+            });
+        });
+    }
 
     // Handle home button click
     const homeBtn = document.querySelector('a[href="#"] span').parentElement; // First nav link
@@ -244,6 +259,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
+    await renderCategories();
     await renderSidebarChannels();
     await renderVideos();
 });

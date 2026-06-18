@@ -18,9 +18,9 @@
             <button id="menu-btn" class="text-xl p-2 hover:bg-zinc-800 rounded-full focus:outline-none">
                 <i class="fas fa-bars"></i>
             </button>
-            <a href="index.html" class="flex items-center space-x-1 text-xl font-bold tracking-tighter">
-                <span class="bg-red-600 text-white px-2 py-0.5 rounded font-black">J</span>
-                <span>Tube</span>
+            <a href="index.html" class="flex items-center space-x-1 text-2xl font-black tracking-tighter brand-font">
+                <span class="bg-gradient-to-br from-red-600 to-red-800 text-white px-2.5 py-0.5 rounded-lg shadow-lg shadow-red-600/20">J</span>
+                <span class="brand-logo-text">Tube</span>
             </a>
         </div>
         
@@ -49,11 +49,7 @@
                 <p class="text-xs text-zinc-500 font-bold px-3 uppercase tracking-wider">Subscribed</p>
                 <div id="sidebar-channels" class="mt-2 space-y-1"></div>
 
-                <a href="premium.html" class="flex items-center space-x-4 p-3 text-amber-400 hover:bg-zinc-800 rounded-xl font-bold transition">
-                    <i class="fas fa-crown text-lg w-6 animate-pulse"></i>
-                    <span>JTube Premium</span>
-                </a>
-                <hr class="border-zinc-800 my-2">
+                <hr class="border-zinc-800 my-4">
                 <hr class="border-zinc-800 my-4">
                 <div class="px-3 py-2 space-y-3">
                     <a href="help.html" class="text-xs text-zinc-500 hover:text-zinc-300 transition flex items-center space-x-2"><i class="fas fa-question-circle w-4"></i><span>Help</span></a>
@@ -67,12 +63,7 @@
         <main class="flex-1 p-4 md:p-6 overflow-x-hidden">
             <h2 id="page-title" class="text-xl font-bold mb-4 hidden">Your History</h2>
             <div id="category-bar" class="flex items-center space-x-3 overflow-x-auto pb-4 mb-4" style="-ms-overflow-style:none;scrollbar-width:none;">
-                <button class="category-btn whitespace-nowrap bg-white text-black px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="all">All</button>
-                <button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="Islam">Islam</button>
-                <button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="Science">Science</button>
-                <button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="AI">AI</button>
-                <button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="Machine Learning">Machine Learning</button>
-                <button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="Entertainment">Entertainment</button>
+                <!-- Categories will be injected here dynamically -->
             </div>
             <div id="video-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8"></div>
         </main>
@@ -125,3 +116,4 @@
     <script src="index.js" defer></script>
 </body>
 </html>
+

@@ -122,6 +122,12 @@
                     <i class="fab fa-youtube w-5 text-center text-red-500"></i>
                     <span>Import from YouTube</span>
                 </button>
+
+                <p class="text-[10px] font-bold uppercase tracking-widest text-zinc-600 px-3 mt-5 mb-3">Settings</p>
+                <button class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold text-left text-zinc-400" data-tab="categories">
+                    <i class="fas fa-tags w-5 text-center"></i>
+                    <span>Manage Categories</span>
+                </button>
             </div>
         </aside>
 
@@ -144,13 +150,7 @@
                             <div>
                                 <label class="label">Category *</label>
                                 <input type="text" id="v-category" list="category-list" required placeholder="e.g., Islam" class="input-field">
-                                <datalist id="category-list">
-                                    <option value="Islam">
-                                    <option value="Science">
-                                    <option value="AI">
-                                    <option value="Machine Learning">
-                                    <option value="Entertainment">
-                                </datalist>
+                                <datalist id="category-list"></datalist>
                             </div>
                             <div>
                                 <label class="label">Duration *</label>
@@ -376,6 +376,35 @@
                 </div>
             </div>
 
+            <!-- ===== MANAGE CATEGORIES TAB ===== -->
+            <div id="tab-categories" class="tab-panel">
+                <div class="mb-6 flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                        <h1 class="text-2xl font-black text-white">Manage Categories</h1>
+                        <p class="text-sm text-zinc-500 mt-1">Add or remove categories for the homepage feeds.</p>
+                    </div>
+                </div>
+                <div class="glass-card p-6 max-w-3xl mb-6">
+                    <form id="add-category-form" class="flex space-x-4">
+                        <input type="text" id="new-cat-name" required placeholder="e.g., Gaming" class="input-field flex-1">
+                        <input type="number" id="new-cat-order" required placeholder="Order (e.g. 6)" class="input-field w-32">
+                        <button type="submit" class="btn-success whitespace-nowrap">Add Category</button>
+                    </form>
+                </div>
+                <div class="glass-card overflow-x-auto">
+                    <table class="w-full text-left text-sm text-zinc-300">
+                        <thead class="text-xs uppercase bg-zinc-900/60 text-zinc-500 border-b border-zinc-800">
+                            <tr>
+                                <th class="px-5 py-3.5">Order</th>
+                                <th class="px-5 py-3.5">Category Name</th>
+                                <th class="px-5 py-3.5 text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="categories-table-body" class="divide-y divide-zinc-800/60"></tbody>
+                    </table>
+                </div>
+            </div>
+
         </main>
     </div>
 
@@ -441,3 +470,4 @@
     </script>
 </body>
 </html>
+
