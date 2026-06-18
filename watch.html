@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JTube - Watching Video</title>
+    <meta name="description" content="Watch videos on JTube.">
     <link rel="shortcut icon" href="img/jtubeimg.png" type="image/x-icon">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -47,7 +48,7 @@
             </div>
 
             <div class="bg-zinc-800 p-3 rounded-xl text-sm leading-relaxed">
-                <p id="video-meta" class="font-semibold text-xs text-zinc-300 mb-1">0 views • 0 days ago</p>
+                <p id="video-meta" class="font-semibold text-xs text-zinc-300 mb-1">0 views • Just now</p>
                 <p id="video-desc" class="text-zinc-300 whitespace-pre-line"></p>
             </div>
 
@@ -63,15 +64,13 @@
                         </div>
                     </div>
                 </form>
-
-                <div id="comments-list" class="space-y-4 pt-2">
-                    </div>
+                <div id="comments-list" class="space-y-4 pt-2"></div>
             </div>
         </section>
 
         <aside id="recommendations" class="space-y-4">
             <h3 class="text-sm font-bold text-zinc-400 tracking-wider uppercase mb-1">Up Next</h3>
-            </aside>
+        </aside>
     </main>
 
     <!-- Auth Modal -->
@@ -99,17 +98,17 @@
                 </button>
             </form>
             <p class="text-center text-xs text-zinc-400 mt-6">
-                <span id="auth-switch-text">Don't have an account?</span> 
+                <span id="auth-switch-text">Don't have an account?</span>
                 <button id="auth-switch-btn" class="text-blue-400 hover:text-blue-300 font-bold">Register</button>
             </p>
         </div>
     </div>
 
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-    <script src="data.js"></script>
-    <script src="watch.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js" defer></script>
+    <script src="data.js" defer></script>
+    <script src="watch.js" defer></script>
 </body>
 </html>

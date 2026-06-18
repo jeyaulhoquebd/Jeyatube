@@ -7,14 +7,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         return;
     }
 
+    // Set dynamic page title
+    document.title = `${channelNameParam} - JTube`;
+
     const channelContent = document.getElementById("channel-content");
     const channelLoading = document.getElementById("channel-loading");
     const channelCover = document.getElementById("channel-cover");
     const channelAvatar = document.getElementById("channel-avatar");
     const channelNameTitle = document.getElementById("channel-name-title");
     const channelSubs = document.getElementById("channel-subs");
+    const channelVideoCount = document.getElementById("channel-video-count");
     const subscribeBtn = document.getElementById("subscribe-btn");
     const channelVideos = document.getElementById("channel-videos");
+    const channelPlaylists = document.getElementById("channel-playlists");
     
     // Auth Modal DOM
     const authModal = document.getElementById("auth-modal");
@@ -77,6 +82,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
+    // ===== TAB NAVIGATION =====
+    document.querySelectorAll('.channel-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.channel-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            tab.classList.add('active');
+            const target = document.getElementById('tab-' + tab.dataset.tab);
+            if (target) target.classList.add('active');
+        });
+    });
+
+    // ===== LOAD CHANNEL DATA =====
     let currentChannelData = await getChannel(channelNameParam);
     if (!currentChannelData) {
         currentChannelData = { subscribers: 0, subscribed: false };
@@ -90,14 +107,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     channelSubs.textContent = `${currentChannelData.subscribers || 0} subscribers`;
     
     if (currentChannelData.coverUrl) {
-        channelCover.innerHTML = `<img src="${currentChannelData.coverUrl}" class="w-full h-full object-cover">`;
+        channelCover.innerHTML = `<img src="${currentChannelData.coverUrl}" class="w-full h-full object-cover" loading="lazy" alt="Channel cover">`;
     }
     if (currentChannelData.avatarUrl) {
-        channelAvatar.innerHTML = `<img src="${currentChannelData.avatarUrl}" class="w-full h-full object-cover">`;
+        channelAvatar.innerHTML = `<img src="${currentChannelData.avatarUrl}" class="w-full h-full object-cover" loading="lazy" alt="${channelNameParam}">`;
     } else {
         channelAvatar.innerHTML = `<div class="w-full h-full flex items-center justify-center bg-purple-600 text-3xl font-bold">${channelNameParam[0]}</div>`;
     }
     
+    // About tab content
     document.getElementById("channel-bio").innerHTML = parseLinks(currentChannelData.bio || "");
     
     const channelLinks = document.getElementById("channel-links");
@@ -107,22 +125,23 @@ document.addEventListener("DOMContentLoaded", async () => {
         linksArray.forEach(linkStr => {
             const parts = linkStr.split("|");
             if (parts.length === 2) {
-                channelLinks.innerHTML += `<a href="${parts[1].trim()}" target="_blank" class="bg-zinc-800 text-blue-400 hover:text-blue-300 font-semibold text-xs px-3 py-1.5 rounded-full inline-flex items-center space-x-1 border border-zinc-700 transition">
+                channelLinks.innerHTML += `<a href="${parts[1].trim()}" target="_blank" class="bg-zinc-800 text-blue-400 hover:text-blue-300 font-semibold text-xs px-3 py-1.5 rounded-full inline-flex items-center space-x-1.5 border border-zinc-700 transition">
                     <i class="fas fa-link"></i> <span>${parts[0].trim()}</span>
                 </a>`;
             }
         });
     }
 
+    // ===== SUBSCRIBE LOGIC =====
     function updateSubscribeUI() {
         const isSubscribed = currentChannelData.subscribedBy && currentUser && currentChannelData.subscribedBy.includes(currentUser.email);
         
         if (isSubscribed) {
             subscribeBtn.textContent = "Subscribed";
-            subscribeBtn.className = "mt-4 md:mt-0 mb-2 bg-zinc-800 text-zinc-400 px-6 py-2 rounded-full font-semibold transition text-sm";
+            subscribeBtn.className = "mt-4 sm:mt-0 sm:mb-2 bg-zinc-800 text-zinc-400 px-6 py-2 rounded-full font-semibold transition text-sm flex-shrink-0";
         } else {
             subscribeBtn.textContent = "Subscribe";
-            subscribeBtn.className = "mt-4 md:mt-0 mb-2 bg-white text-black px-6 py-2 rounded-full font-semibold transition text-sm hover:bg-zinc-200";
+            subscribeBtn.className = "mt-4 sm:mt-0 sm:mb-2 bg-white text-black px-6 py-2 rounded-full font-semibold transition text-sm hover:bg-zinc-200 flex-shrink-0";
         }
         
         const subCount = currentChannelData.subscribedBy ? currentChannelData.subscribedBy.length : (currentChannelData.subscribers || 0);
@@ -130,7 +149,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     updateSubscribeUI();
 
-    document.addEventListener('authStateChanged', (e) => {
+    document.addEventListener('authStateChanged', () => {
         updateSubscribeUI();
     });
 
@@ -149,10 +168,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         updateSubscribeUI();
     });
 
+    // ===== VIDEOS TAB =====
     const videos = await getVideosByChannel(channelNameParam);
+    channelVideoCount.textContent = `${videos.length} video${videos.length !== 1 ? 's' : ''}`;
+
     if (videos.length === 0) {
         channelVideos.innerHTML = `<p class="col-span-full text-zinc-500 py-4">No videos found for this channel.</p>`;
     } else {
+        channelVideos.innerHTML = "";
         videos.forEach(video => {
             const ytId = getYoutubeId(video.videoUrl);
             const previewHtml = ytId ? `<iframe class='w-full h-full pointer-events-none' src='https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0&controls=0&modestbranding=1&showinfo=0' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe>` : "";
@@ -162,16 +185,116 @@ document.addEventListener("DOMContentLoaded", async () => {
                      onmouseenter="this.querySelector('.video-preview').innerHTML = \`${previewHtml}\`"
                      onmouseleave="this.querySelector('.video-preview').innerHTML = ''">
                     <div class="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-2">
-                        <img src="${video.thumbnail}" alt="${video.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-200">
+                        <img src="${video.thumbnail}" alt="${video.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-200" loading="lazy">
                         <div class="video-preview absolute inset-0 w-full h-full bg-black z-10 pointer-events-none empty:hidden"></div>
                         <span class="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-xs font-semibold z-20">${video.duration}</span>
                     </div>
                     <div class="px-3 flex-1">
                         <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
-                        <p class="text-xs text-zinc-400 mt-1">${video.views} views • ${video.time}</p>
+                        <p class="text-xs text-zinc-400 mt-1">${(video.views || 0).toLocaleString()} views • ${video.time || ''}</p>
                     </div>
                 </div>
             `;
         });
     }
+
+    // ===== PLAYLISTS TAB (YouTube-style) =====
+    // Group videos by playlist name for this channel
+    const playlistsMap = {};
+    videos.forEach(video => {
+        if (video.playlist && video.playlist.trim() !== "") {
+            const plName = video.playlist.trim();
+            if (!playlistsMap[plName]) {
+                playlistsMap[plName] = [];
+            }
+            playlistsMap[plName].push(video);
+        }
+    });
+
+    const playlistNames = Object.keys(playlistsMap);
+
+    if (playlistNames.length === 0) {
+        channelPlaylists.innerHTML = `<p class="col-span-full text-zinc-500 py-4">This channel has no playlists yet.</p>`;
+    } else {
+        channelPlaylists.innerHTML = "";
+        // Store playlists on window for onclick access
+        window._channelPlaylists = playlistsMap;
+
+        playlistNames.forEach(plName => {
+            const plVideos = playlistsMap[plName];
+            const firstVideo = plVideos[0];
+            const count = plVideos.length;
+
+            channelPlaylists.innerHTML += `
+                <div class="playlist-card group" onclick="openChannelPlaylist('${plName.replace(/'/g, "\\'")}')">
+                    <div class="playlist-stack mb-4 mt-3 mx-2">
+                        <div class="playlist-thumb relative">
+                            <img src="${firstVideo.thumbnail}" alt="${plName}" class="w-full h-full object-cover" loading="lazy">
+                            <div class="playlist-count-badge">
+                                <i class="fas fa-list text-base text-white"></i>
+                                <span class="text-xs font-bold text-white">${count} video${count !== 1 ? 's' : ''}</span>
+                            </div>
+                            <div class="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition flex items-center justify-center">
+                                <i class="fas fa-play text-2xl text-white opacity-0 group-hover:opacity-100 transition drop-shadow-lg"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="px-3 pb-3">
+                        <h3 class="font-bold text-sm line-clamp-2 text-zinc-100 group-hover:text-white leading-snug">${plName}</h3>
+                        <p class="text-xs text-zinc-500 mt-1">Playlist • ${count} video${count !== 1 ? 's' : ''}</p>
+                        <p class="text-xs text-blue-400 mt-1.5 group-hover:text-blue-300 transition font-medium">
+                            <i class="fas fa-play-circle mr-1"></i>View full playlist
+                        </p>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    // ===== PLAYLIST MODAL (opens all videos in that playlist) =====
+    window.openChannelPlaylist = function(plName) {
+        const plVideos = window._channelPlaylists[plName];
+        if (!plVideos || plVideos.length === 0) return;
+
+        // Navigate to the first video with playlist context
+        // But first show an inline expanded view
+        const modal = document.createElement('div');
+        modal.id = 'playlist-modal-overlay';
+        modal.className = 'fixed inset-0 z-[100] bg-zinc-950/95 backdrop-blur-sm flex flex-col';
+        modal.innerHTML = `
+            <div class="max-w-4xl mx-auto w-full flex-1 flex flex-col overflow-hidden">
+                <div class="px-6 py-5 border-b border-zinc-800 flex justify-between items-center flex-shrink-0">
+                    <div>
+                        <h2 class="text-xl font-black text-white">${plName}</h2>
+                        <p class="text-xs text-zinc-400 mt-0.5">${channelNameParam} • ${plVideos.length} video${plVideos.length !== 1 ? 's' : ''}</p>
+                    </div>
+                    <button onclick="document.getElementById('playlist-modal-overlay').remove()" class="text-zinc-400 hover:text-white transition p-2">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                <div class="flex-1 overflow-y-auto p-4 space-y-2">
+                    ${plVideos.map((v, idx) => `
+                        <div class="flex gap-4 p-3 hover:bg-zinc-800/70 rounded-xl cursor-pointer transition group" onclick="location.href='watch.html?id=${v.id}'">
+                            <div class="text-zinc-600 font-bold self-center w-7 text-center text-sm flex-shrink-0">${idx + 1}</div>
+                            <div class="w-36 aspect-video bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 relative">
+                                <img src="${v.thumbnail}" class="w-full h-full object-cover group-hover:scale-105 transition" loading="lazy">
+                                <span class="absolute bottom-1 right-1 bg-black/80 px-1.5 py-0.5 rounded text-[10px] font-semibold">${v.duration || ''}</span>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <h4 class="font-semibold text-sm text-zinc-100 line-clamp-2 group-hover:text-white">${v.title}</h4>
+                                <p class="text-xs text-zinc-500 mt-1">${(v.views || 0).toLocaleString()} views • ${v.time || ''}</p>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="px-6 py-3 border-t border-zinc-800 flex-shrink-0">
+                    <a href="watch.html?id=${plVideos[0].id}" class="inline-flex items-center space-x-2 bg-white text-black px-5 py-2 rounded-full font-bold text-sm hover:bg-zinc-200 transition">
+                        <i class="fas fa-play"></i>
+                        <span>Play all</span>
+                    </a>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    };
 });

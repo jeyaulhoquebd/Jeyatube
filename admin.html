@@ -4,237 +4,440 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JTube Studio - Admin Dashboard</title>
+    <meta name="description" content="JTube Admin Studio – manage videos, channels, and imports.">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="style.css">
+    <style>
+        body { font-family: 'Inter', 'Segoe UI', sans-serif; }
+        .tab-btn { transition: all .2s; }
+        .tab-btn.active {
+            background: linear-gradient(135deg, #ef4444, #b91c1c);
+            color: #fff;
+            box-shadow: 0 4px 18px rgba(239,68,68,.35);
+        }
+        .tab-btn:not(.active):hover { background: rgba(255,255,255,.06); }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+        .glass-card {
+            background: rgba(39,39,42,.7);
+            border: 1px solid rgba(255,255,255,.07);
+            backdrop-filter: blur(8px);
+            border-radius: 1.25rem;
+        }
+        .input-field {
+            width: 100%;
+            background: rgba(9,9,11,.7);
+            border: 1px solid rgba(255,255,255,.1);
+            border-radius: .75rem;
+            padding: .65rem .9rem;
+            font-size: .875rem;
+            color: #e4e4e7;
+            outline: none;
+            transition: border-color .2s, box-shadow .2s;
+        }
+        .input-field:focus { border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,.15); }
+        .label { display: block; font-size: .75rem; font-weight: 600; color: #a1a1aa; margin-bottom: .35rem; }
+        .btn-primary { background: linear-gradient(135deg,#ef4444,#b91c1c); color:#fff; font-weight:700; padding:.7rem 1.5rem; border-radius:.9rem; border:none; cursor:pointer; transition:opacity .2s,transform .15s; }
+        .btn-primary:hover { opacity:.88; transform:translateY(-1px); }
+        .btn-success { background: linear-gradient(135deg,#22c55e,#15803d); color:#fff; font-weight:700; padding:.7rem 1.5rem; border-radius:.9rem; border:none; cursor:pointer; transition:opacity .2s,transform .15s; }
+        .btn-success:hover { opacity:.88; transform:translateY(-1px); }
+        .btn-blue { background: linear-gradient(135deg,#3b82f6,#1d4ed8); color:#fff; font-weight:700; padding:.7rem 1.5rem; border-radius:.9rem; border:none; cursor:pointer; transition:opacity .2s,transform .15s; }
+        .btn-blue:hover { opacity:.88; transform:translateY(-1px); }
+        .sidebar-nav { position:sticky; top:72px; }
+        .avatar-preview, .cover-preview { border-radius:.75rem; overflow:hidden; background:#18181b; border:2px dashed rgba(255,255,255,.1); display:flex; align-items:center; justify-content:center; }
+        @media(max-width:1023px){ .sidebar-nav{position:relative;top:0;} }
+        /* Scrollbar */
+        ::-webkit-scrollbar{width:6px;height:6px;}
+        ::-webkit-scrollbar-track{background:#18181b;}
+        ::-webkit-scrollbar-thumb{background:#3f3f46;border-radius:4px;}
+    </style>
 </head>
-<body class="bg-zinc-900 text-white font-sans antialiased">
+<body class="bg-zinc-950 text-white min-h-screen">
 
     <!-- Admin Login Overlay -->
-    <div id="admin-login-overlay" class="fixed inset-0 z-[200] bg-zinc-900 flex items-center justify-center">
-        <div class="bg-zinc-800 p-8 rounded-2xl w-full max-w-sm shadow-2xl border border-zinc-700 text-center">
-            <div class="inline-flex bg-red-600 text-white w-16 h-16 items-center justify-center rounded-full text-3xl mb-4">
-                <i class="fas fa-lock"></i>
+    <div id="admin-login-overlay" class="fixed inset-0 z-[200] bg-zinc-950 flex items-center justify-center">
+        <div class="glass-card p-10 w-full max-w-sm shadow-2xl text-center">
+            <div class="inline-flex bg-gradient-to-br from-red-500 to-red-700 text-white w-16 h-16 items-center justify-center rounded-2xl text-2xl mb-5 shadow-lg">
+                <i class="fas fa-shield-alt"></i>
             </div>
-            <h2 class="text-2xl font-bold mb-2">Admin Access</h2>
-            <p class="text-xs text-zinc-400 mb-6">Enter the master password to access JTube Studio.</p>
+            <h2 class="text-2xl font-bold mb-1">Studio Access</h2>
+            <p class="text-xs text-zinc-500 mb-7">Enter master password to access JTube Studio.</p>
             <form id="admin-login-form" class="space-y-4">
-                <input type="password" id="admin-password" placeholder="Enter Password" required class="w-full bg-zinc-900 border border-zinc-700 focus:border-red-500 rounded-xl p-3 text-sm text-center text-white focus:outline-none tracking-widest">
-                <button type="submit" class="w-full bg-red-600 hover:bg-red-500 font-bold p-3 rounded-xl transition">
-                    Unlock Studio
+                <input type="password" id="admin-password" placeholder="Master Password" required
+                       class="input-field text-center tracking-widest text-lg">
+                <button type="submit" class="btn-primary w-full text-sm">
+                    <i class="fas fa-unlock mr-2"></i>Unlock Studio
                 </button>
             </form>
-            <a href="index.html" class="block mt-4 text-xs text-zinc-500 hover:text-white transition">Return to Home</a>
+            <a href="index.html" class="block mt-5 text-xs text-zinc-600 hover:text-zinc-400 transition">← Return to Home</a>
         </div>
     </div>
 
-    <header class="sticky top-0 bg-zinc-900 z-50 flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+    <!-- Header -->
+    <header class="sticky top-0 z-50 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800/70 flex items-center justify-between px-6 py-4">
         <div class="flex items-center space-x-3">
-            <a href="index.html" class="flex items-center space-x-1 text-xl font-bold tracking-tighter">
-                <span class="bg-red-600 text-white px-2 py-0.5 rounded font-black">J</span>
-                <span>Tube <span class="text-xs text-zinc-400 font-normal ml-1">Studio</span></span>
+            <a href="index.html" class="flex items-center space-x-1.5 text-xl font-black tracking-tighter">
+                <span class="bg-gradient-to-br from-red-500 to-red-700 text-white px-2 py-0.5 rounded-lg">J</span>
+                <span class="text-white">Tube</span>
             </a>
+            <span class="hidden sm:inline-block bg-zinc-800 text-red-400 text-[10px] font-bold px-2 py-0.5 rounded-full tracking-widest uppercase">Studio</span>
         </div>
-        <div class="flex items-center space-x-4">
-            <a href="index.html" class="text-sm bg-zinc-800 hover:bg-zinc-700 px-4 py-2 rounded-full transition font-medium">
-                <i class="fas fa-eye mr-1"></i> View Site
+        <div class="flex items-center space-x-3">
+            <a href="index.html" class="text-sm bg-zinc-800 hover:bg-zinc-700 px-4 py-2 rounded-full transition font-medium text-zinc-300">
+                <i class="fas fa-eye mr-1.5"></i>View Site
             </a>
-            <div class="bg-red-600 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">A</div>
+            <div class="bg-gradient-to-br from-red-500 to-red-700 w-9 h-9 rounded-full flex items-center justify-center font-black text-sm shadow">A</div>
         </div>
     </header>
 
-    <main class="max-w-7xl mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        <section class="lg:col-span-1 bg-zinc-800/50 p-5 rounded-2xl border border-zinc-800 h-fit space-y-4">
-            <div class="border-b border-zinc-800 pb-2">
-                <h2 class="text-lg font-bold text-zinc-100">Upload New Video</h2>
-                <p class="text-xs text-zinc-400">Add dynamic curated content directly to the platform.</p>
-            </div>
+    <div class="flex max-w-[1400px] mx-auto">
 
-            <form id="upload-form" class="space-y-4">
-                <div>
-                    <label class="block text-xs font-semibold text-zinc-400 mb-1">Video Title</label>
-                    <input type="text" id="v-title" required placeholder="e.g., Introduction to Quantum Computing" class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-2.5 text-sm">
-                </div>
-
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-xs font-semibold text-zinc-400 mb-1">Category</label>
-                        <input type="text" id="v-category" list="category-list" required placeholder="e.g., Islam" class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-2.5 text-sm text-zinc-300">
-                        <datalist id="category-list">
-                            <option value="Islam">
-                            <option value="Science">
-                            <option value="AI">
-                            <option value="Machine Learning">
-                            <option value="Entertainment">
-                        </datalist>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-zinc-400 mb-1">Duration</label>
-                        <input type="text" id="v-duration" required placeholder="e.g., 14:20" class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-2.5 text-sm">
-                    </div>
-                </div>
-
-                <div>
-                    <label class="block text-xs font-semibold text-zinc-400 mb-1">Channel Name</label>
-                    <input type="text" id="v-channel" list="channel-list" required placeholder="e.g., Tech Minds" class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-2.5 text-sm">
-                    <datalist id="channel-list"></datalist>
-                </div>
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2 border-t border-zinc-800 pt-3">
-                    <h3 class="col-span-full text-xs font-bold text-zinc-300">Channel Images (If new channel)</h3>
-                    <div>
-                        <label class="block text-xs font-semibold text-zinc-400 mb-1">Channel Avatar URL</label>
-                        <input type="url" id="c-avatar" placeholder="https://..." class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-2.5 text-sm">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-zinc-400 mb-1">Channel Cover URL</label>
-                        <input type="url" id="c-cover" placeholder="https://..." class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-2.5 text-sm">
-                    </div>
-                </div>
-
-                <div class="border-t border-zinc-800 pt-3">
-                    <label class="block text-xs font-semibold text-zinc-400 mb-1">Playlist Name (Optional)</label>
-                    <input type="text" id="v-playlist" placeholder="e.g., Deep Learning Masterclass" class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-2.5 text-sm">
-                </div>
-
-                <div>
-                    <label class="block text-xs font-semibold text-zinc-400 mb-1">Thumbnail Image URL</label>
-                    <input type="url" id="v-thumbnail" placeholder="Paste image link or leave empty for random stock" class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-2.5 text-sm">
-                </div>
-
-                <div>
-                    <label class="block text-xs font-semibold text-zinc-400 mb-1">Video Source File URL</label>
-                    <input type="url" id="v-url" placeholder="Paste .mp4 file link or leave empty for default stream" class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-2.5 text-sm">
-                </div>
-
-                <div>
-                    <label class="block text-xs font-semibold text-zinc-400 mb-1">Video Description</label>
-                    <textarea id="v-desc" rows="3" placeholder="Provide video details..." class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-2.5 text-sm"></textarea>
-                </div>
-
-                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 font-semibold p-2.5 rounded-xl transition text-sm">
-                    Publish Video
+        <!-- Sidebar Navigation -->
+        <aside class="w-64 flex-shrink-0 p-4 pt-6">
+            <div class="sidebar-nav space-y-1.5">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-zinc-600 px-3 mb-3">Content</p>
+                <button class="tab-btn active w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold text-left" data-tab="upload">
+                    <i class="fas fa-cloud-upload-alt w-5 text-center"></i>
+                    <span>Upload New Video</span>
                 </button>
-            </form>
-        </section>
-
-        <section class="lg:col-span-2 bg-zinc-800/50 p-5 rounded-2xl border border-zinc-800 space-y-4">
-            <div class="flex items-center justify-between border-b border-zinc-800 pb-2">
-                <div>
-                    <h2 class="text-lg font-bold text-zinc-100">Manage Videos</h2>
-                    <p class="text-xs text-zinc-400">Overview of all active database items uploaded on JTube.</p>
-                </div>
-                <div class="bg-zinc-700 px-3 py-1 rounded-full text-xs font-bold text-zinc-300">
-                    Total: <span id="video-count">0</span>
-                </div>
-            </div>
-
-            <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm text-zinc-300">
-                    <thead class="text-xs uppercase bg-zinc-900/60 text-zinc-400 border-b border-zinc-800">
-                        <tr>
-                            <th scope="col" class="px-4 py-3">Video info</th>
-                            <th scope="col" class="px-4 py-3 hidden sm:table-cell">Channel</th>
-                            <th scope="col" class="px-4 py-3">Category</th>
-                            <th scope="col" class="px-4 py-3 text-center">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="admin-table-body" class="divide-y divide-zinc-800">
-                        </tbody>
-                </table>
-            </div>
-        </section>
-
-        <!-- Import from YouTube Section -->
-        <section class="lg:col-span-3 bg-zinc-800/50 p-5 rounded-2xl border border-zinc-800 space-y-4">
-            <div class="border-b border-zinc-800 pb-2">
-                <h2 class="text-lg font-bold text-zinc-100"><i class="fab fa-youtube text-red-500 mr-2"></i>Import from YouTube</h2>
-                <p class="text-xs text-zinc-400">Automatically fetch videos using a YouTube Channel ID or Playlist ID.</p>
-            </div>
-            
-            <form id="yt-import-form" class="space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label class="block text-xs font-semibold text-zinc-400 mb-1">YouTube Channel ID (Optional)</label>
-                        <input type="text" id="yt-channel-id" placeholder="e.g. UCCBGUffdWwRV0gUqgElkCfw" class="w-full bg-zinc-900 border border-zinc-700 focus:border-red-500 focus:outline-none rounded-xl p-2.5 text-sm">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-zinc-400 mb-1">YouTube Playlist ID (Optional)</label>
-                        <input type="text" id="yt-playlist-id" placeholder="e.g. PLnWBgzhpIbv8JzrDh3yP1hqDlyccn2CHI" class="w-full bg-zinc-900 border border-zinc-700 focus:border-red-500 focus:outline-none rounded-xl p-2.5 text-sm">
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label class="block text-xs font-semibold text-zinc-400 mb-1">Target JTube Channel Name</label>
-                        <input type="text" id="yt-target-channel" list="channel-list" required placeholder="Where should these videos be uploaded?" class="w-full bg-zinc-900 border border-zinc-700 focus:border-red-500 focus:outline-none rounded-xl p-2.5 text-sm">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-zinc-400 mb-1">Category</label>
-                        <input type="text" id="yt-category" list="category-list" required placeholder="e.g., Islam" class="w-full bg-zinc-900 border border-zinc-700 focus:border-red-500 focus:outline-none rounded-xl p-2.5 text-sm">
-                    </div>
-                </div>
-
-                <button type="submit" id="yt-import-btn" class="w-full md:w-auto bg-red-600 hover:bg-red-500 font-semibold p-2.5 px-6 rounded-xl transition text-sm flex items-center justify-center space-x-2">
-                    <span>Fetch & Import Videos</span>
+                <button class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold text-left text-zinc-400" data-tab="manage">
+                    <i class="fas fa-film w-5 text-center"></i>
+                    <span>Manage Videos</span>
+                    <span id="sidebar-video-count" class="ml-auto bg-zinc-800 text-xs px-2 py-0.5 rounded-full text-zinc-400">0</span>
                 </button>
-                <p id="yt-import-status" class="text-xs font-bold mt-2 hidden"></p>
-            </form>
-        </section>
 
-        <!-- Manage Channels Section -->
-        <section class="lg:col-span-3 bg-zinc-800/50 p-5 rounded-2xl border border-zinc-800 space-y-4">
-            <div class="border-b border-zinc-800 pb-2">
-                <h2 class="text-lg font-bold text-zinc-100">Manage Channels</h2>
-                <p class="text-xs text-zinc-400">Edit channel profiles, bio, and social links.</p>
-            </div>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <label class="block text-xs font-semibold text-zinc-400 mb-1">Select Channel to Edit</label>
-                    <select id="edit-channel-select" class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-2.5 text-sm text-zinc-300">
-                        <option value="">-- Choose a Channel --</option>
-                    </select>
-                </div>
-            </div>
-
-            <form id="edit-channel-form" class="space-y-4 hidden mt-4 border-t border-zinc-800 pt-4">
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs font-semibold text-zinc-400 mb-1">Channel Avatar URL</label>
-                        <input type="url" id="edit-c-avatar" placeholder="https://..." class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-2.5 text-sm">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-zinc-400 mb-1">Channel Cover URL</label>
-                        <input type="url" id="edit-c-cover" placeholder="https://..." class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-2.5 text-sm">
-                    </div>
-                </div>
-
-                <div>
-                    <label class="block text-xs font-semibold text-zinc-400 mb-1">Bio</label>
-                    <textarea id="edit-c-bio" rows="3" placeholder="Provide channel bio..." class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-2.5 text-sm"></textarea>
-                </div>
-
-                <div>
-                    <label class="block text-xs font-semibold text-zinc-400 mb-1">External Links (Format: LinkTitle|URL, separated by comma)</label>
-                    <input type="text" id="edit-c-links" placeholder="e.g., My Website|https://mysite.com, Twitter|https://twitter.com" class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-2.5 text-sm">
-                </div>
-
-                <button type="submit" class="w-full md:w-auto bg-green-600 hover:bg-green-500 font-semibold p-2.5 px-6 rounded-xl transition text-sm">
-                    Save Channel Changes
+                <p class="text-[10px] font-bold uppercase tracking-widest text-zinc-600 px-3 mt-5 mb-3">Channels</p>
+                <button class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold text-left text-zinc-400" data-tab="create-channel">
+                    <i class="fas fa-plus-circle w-5 text-center"></i>
+                    <span>Create Channel</span>
                 </button>
-            </form>
-        </section>
-    </main>
+                <button class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold text-left text-zinc-400" data-tab="channels">
+                    <i class="fas fa-users w-5 text-center"></i>
+                    <span>Manage Channels</span>
+                </button>
 
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-    <script src="env.js"></script>
-    <script src="data.js"></script>
-    <script src="admin.js"></script>
+                <p class="text-[10px] font-bold uppercase tracking-widest text-zinc-600 px-3 mt-5 mb-3">Import</p>
+                <button class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold text-left text-zinc-400" data-tab="youtube">
+                    <i class="fab fa-youtube w-5 text-center text-red-500"></i>
+                    <span>Import from YouTube</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 p-6 pt-6 min-w-0">
+
+            <!-- ===== UPLOAD VIDEO TAB ===== -->
+            <div id="tab-upload" class="tab-panel active">
+                <div class="mb-6">
+                    <h1 class="text-2xl font-black text-white">Upload New Video</h1>
+                    <p class="text-sm text-zinc-500 mt-1">Add curated video content directly to the JTube platform.</p>
+                </div>
+                <div class="glass-card p-6 max-w-3xl">
+                    <form id="upload-form" class="space-y-5">
+                        <div>
+                            <label class="label">Video Title *</label>
+                            <input type="text" id="v-title" required placeholder="e.g., Introduction to Quantum Computing" class="input-field">
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                                <label class="label">Category *</label>
+                                <input type="text" id="v-category" list="category-list" required placeholder="e.g., Islam" class="input-field">
+                                <datalist id="category-list">
+                                    <option value="Islam">
+                                    <option value="Science">
+                                    <option value="AI">
+                                    <option value="Machine Learning">
+                                    <option value="Entertainment">
+                                </datalist>
+                            </div>
+                            <div>
+                                <label class="label">Duration *</label>
+                                <input type="text" id="v-duration" required placeholder="e.g., 14:20" class="input-field">
+                            </div>
+                            <div>
+                                <label class="label">Channel Name *</label>
+                                <input type="text" id="v-channel" list="channel-list" required placeholder="e.g., Tech Minds" class="input-field">
+                                <datalist id="channel-list"></datalist>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="label">Thumbnail Image URL</label>
+                                <input type="url" id="v-thumbnail" placeholder="Paste image link or leave empty" class="input-field">
+                            </div>
+                            <div>
+                                <label class="label">Video Source URL (YouTube) *</label>
+                                <input type="url" id="v-url" placeholder="https://www.youtube.com/watch?v=..." class="input-field">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="label">Playlist Name (Optional)</label>
+                            <input type="text" id="v-playlist" placeholder="e.g., Deep Learning Masterclass" class="input-field">
+                        </div>
+                        <div>
+                            <label class="label">Video Description</label>
+                            <textarea id="v-desc" rows="3" placeholder="Provide video details..." class="input-field resize-none"></textarea>
+                        </div>
+
+                        <div class="border-t border-zinc-800 pt-5">
+                            <p class="text-xs font-bold text-zinc-400 mb-3 uppercase tracking-wider">Channel Images (only if creating a new channel)</p>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="label">Channel Avatar URL</label>
+                                    <input type="url" id="c-avatar" placeholder="https://..." class="input-field">
+                                </div>
+                                <div>
+                                    <label class="label">Channel Cover URL</label>
+                                    <input type="url" id="c-cover" placeholder="https://..." class="input-field">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between pt-2">
+                            <p id="upload-status" class="text-xs font-bold text-green-400 hidden">✓ Video published successfully!</p>
+                            <button type="submit" class="btn-blue ml-auto flex items-center space-x-2">
+                                <i class="fas fa-paper-plane"></i>
+                                <span>Publish Video</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- ===== MANAGE VIDEOS TAB ===== -->
+            <div id="tab-manage" class="tab-panel">
+                <div class="mb-6 flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                        <h1 class="text-2xl font-black text-white">Manage Videos</h1>
+                        <p class="text-sm text-zinc-500 mt-1">Overview of all active videos in the database.</p>
+                    </div>
+                    <div class="bg-zinc-800 border border-zinc-700 px-4 py-2 rounded-xl text-sm font-bold text-zinc-300">
+                        Total: <span id="video-count" class="text-white">0</span>
+                    </div>
+                </div>
+                <div class="glass-card overflow-x-auto">
+                    <table class="w-full text-left text-sm text-zinc-300">
+                        <thead class="text-xs uppercase bg-zinc-900/60 text-zinc-500 border-b border-zinc-800">
+                            <tr>
+                                <th class="px-5 py-3.5">Video</th>
+                                <th class="px-5 py-3.5 hidden sm:table-cell">Channel</th>
+                                <th class="px-5 py-3.5">Category</th>
+                                <th class="px-5 py-3.5 text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-table-body" class="divide-y divide-zinc-800/60"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ===== CREATE CHANNEL TAB ===== -->
+            <div id="tab-create-channel" class="tab-panel">
+                <div class="mb-6">
+                    <h1 class="text-2xl font-black text-white">Create Channel</h1>
+                    <p class="text-sm text-zinc-500 mt-1">Add a brand new channel with a profile picture and cover photo.</p>
+                </div>
+                <div class="glass-card p-6 max-w-3xl">
+                    <form id="create-channel-form" class="space-y-5">
+                        <div>
+                            <label class="label">Channel Name *</label>
+                            <input type="text" id="new-c-name" required placeholder="e.g., Tech Minds" class="input-field">
+                        </div>
+
+                        <!-- Cover photo preview -->
+                        <div>
+                            <label class="label">Cover Photo URL</label>
+                            <input type="url" id="new-c-cover" placeholder="https://..." class="input-field" oninput="updateCoverPreview(this.value)">
+                            <div id="cover-preview" class="cover-preview mt-3 h-32 text-zinc-600 text-sm">
+                                <span><i class="fas fa-image mr-2"></i>Cover preview</span>
+                            </div>
+                        </div>
+
+                        <!-- Avatar preview -->
+                        <div>
+                            <label class="label">Profile Picture URL</label>
+                            <input type="url" id="new-c-avatar" placeholder="https://..." class="input-field" oninput="updateAvatarPreview(this.value)">
+                            <div class="flex items-center space-x-4 mt-3">
+                                <div id="avatar-preview" class="avatar-preview w-20 h-20 text-zinc-600 text-xl rounded-full border-2 border-dashed border-zinc-700">
+                                    <i class="fas fa-user"></i>
+                                </div>
+                                <p class="text-xs text-zinc-500">Channel profile picture preview</p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="label">Channel Bio</label>
+                            <textarea id="new-c-bio" rows="3" placeholder="Describe your channel..." class="input-field resize-none"></textarea>
+                        </div>
+                        <div>
+                            <label class="label">External Links <span class="text-zinc-600 font-normal">(Format: Title|URL, comma separated)</span></label>
+                            <input type="text" id="new-c-links" placeholder="My Website|https://mysite.com, Twitter|https://twitter.com/..." class="input-field">
+                        </div>
+
+                        <div class="flex items-center justify-between pt-2">
+                            <p id="create-channel-status" class="text-xs font-bold text-green-400 hidden"></p>
+                            <button type="submit" class="btn-success ml-auto flex items-center space-x-2">
+                                <i class="fas fa-plus-circle"></i>
+                                <span>Create Channel</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- ===== MANAGE CHANNELS TAB ===== -->
+            <div id="tab-channels" class="tab-panel">
+                <div class="mb-6">
+                    <h1 class="text-2xl font-black text-white">Manage Channels</h1>
+                    <p class="text-sm text-zinc-500 mt-1">Edit channel profiles, bio, and social links.</p>
+                </div>
+                <div class="glass-card p-6 max-w-3xl space-y-5">
+                    <div>
+                        <label class="label">Select Channel to Edit</label>
+                        <select id="edit-channel-select" class="input-field">
+                            <option value="">-- Choose a Channel --</option>
+                        </select>
+                    </div>
+
+                    <form id="edit-channel-form" class="space-y-5 hidden border-t border-zinc-800 pt-5">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="label">Channel Avatar URL</label>
+                                <input type="url" id="edit-c-avatar" placeholder="https://..." class="input-field" oninput="updateEditAvatarPreview(this.value)">
+                                <div id="edit-avatar-preview" class="avatar-preview w-16 h-16 text-zinc-600 text-lg rounded-full mt-3">
+                                    <i class="fas fa-user"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="label">Channel Cover URL</label>
+                                <input type="url" id="edit-c-cover" placeholder="https://..." class="input-field" oninput="updateEditCoverPreview(this.value)">
+                                <div id="edit-cover-preview" class="cover-preview mt-3 h-20 text-zinc-600 text-sm">
+                                    <span><i class="fas fa-image mr-1"></i>Preview</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="label">Bio</label>
+                            <textarea id="edit-c-bio" rows="3" placeholder="Channel bio..." class="input-field resize-none"></textarea>
+                        </div>
+                        <div>
+                            <label class="label">External Links <span class="text-zinc-600 font-normal">(Title|URL, comma separated)</span></label>
+                            <input type="text" id="edit-c-links" placeholder="My Website|https://mysite.com" class="input-field">
+                        </div>
+                        <div class="flex items-center justify-between pt-2">
+                            <p id="edit-channel-status" class="text-xs font-bold text-green-400 hidden">✓ Channel updated!</p>
+                            <button type="submit" class="btn-success ml-auto flex items-center space-x-2">
+                                <i class="fas fa-save"></i>
+                                <span>Save Changes</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- ===== YOUTUBE IMPORT TAB ===== -->
+            <div id="tab-youtube" class="tab-panel">
+                <div class="mb-6">
+                    <h1 class="text-2xl font-black text-white"><i class="fab fa-youtube text-red-500 mr-2"></i>Import from YouTube</h1>
+                    <p class="text-sm text-zinc-500 mt-1">Automatically fetch videos using a YouTube Channel ID or Playlist ID.</p>
+                </div>
+                <div class="glass-card p-6 max-w-3xl space-y-5">
+                    <form id="yt-import-form" class="space-y-5">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="label">YouTube Channel ID <span class="text-zinc-600 font-normal">(Optional)</span></label>
+                                <input type="text" id="yt-channel-id" placeholder="e.g. UCCBGUffdWwRV0gUqgElkCfw" class="input-field">
+                            </div>
+                            <div>
+                                <label class="label">YouTube Playlist ID <span class="text-zinc-600 font-normal">(Optional)</span></label>
+                                <input type="text" id="yt-playlist-id" placeholder="e.g. PLnWBgzhpIbv8Jzr..." class="input-field">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="label">Target JTube Channel *</label>
+                                <input type="text" id="yt-target-channel" list="channel-list" required placeholder="Where to upload these videos?" class="input-field">
+                            </div>
+                            <div>
+                                <label class="label">Category *</label>
+                                <input type="text" id="yt-category" list="category-list" required placeholder="e.g., Islam" class="input-field">
+                            </div>
+                        </div>
+
+                        <div class="flex items-center space-x-4 flex-wrap gap-3 pt-2">
+                            <button type="submit" id="yt-import-btn" class="btn-primary flex items-center space-x-2">
+                                <i class="fab fa-youtube"></i>
+                                <span>Fetch &amp; Import Videos</span>
+                            </button>
+                            <p id="yt-import-status" class="text-xs font-bold hidden"></p>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js" defer></script>
+    <script src="env.js" defer></script>
+    <script src="data.js" defer></script>
+    <script src="admin.js" defer></script>
+
+    <script>
+        // Tab navigation
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => {
+                    b.classList.remove('active');
+                    b.classList.add('text-zinc-400');
+                });
+                btn.classList.add('active');
+                btn.classList.remove('text-zinc-400');
+
+                document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+                const target = document.getElementById('tab-' + btn.dataset.tab);
+                if (target) target.classList.add('active');
+            });
+        });
+
+        // Create Channel – live previews
+        function updateCoverPreview(url) {
+            const el = document.getElementById('cover-preview');
+            if (url) {
+                el.innerHTML = `<img src="${url}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<span class=text-red-400>Invalid URL</span>'">`;
+            } else {
+                el.innerHTML = '<span><i class="fas fa-image mr-2"></i>Cover preview</span>';
+            }
+        }
+        function updateAvatarPreview(url) {
+            const el = document.getElementById('avatar-preview');
+            if (url) {
+                el.innerHTML = `<img src="${url}" class="w-full h-full object-cover rounded-full" onerror="this.parentElement.innerHTML='<i class=fas fa-user></i>'">`;
+            } else {
+                el.innerHTML = '<i class="fas fa-user"></i>';
+            }
+        }
+        // Manage Channels – live previews
+        function updateEditAvatarPreview(url) {
+            const el = document.getElementById('edit-avatar-preview');
+            if (url) {
+                el.innerHTML = `<img src="${url}" class="w-full h-full object-cover rounded-full">`;
+            } else {
+                el.innerHTML = '<i class="fas fa-user"></i>';
+            }
+        }
+        function updateEditCoverPreview(url) {
+            const el = document.getElementById('edit-cover-preview');
+            if (url) {
+                el.innerHTML = `<img src="${url}" class="w-full h-full object-cover">`;
+            } else {
+                el.innerHTML = '<span><i class="fas fa-image mr-1"></i>Preview</span>';
+            }
+        }
+    </script>
 </body>
 </html>

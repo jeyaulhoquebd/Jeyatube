@@ -4,10 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JTube</title>
+    <meta name="description" content="JTube – Watch curated videos on Islam, Science, AI, Machine Learning and more.">
     <link rel="shortcut icon" href="img/jtubeimg.png" type="image/x-icon">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="bg-zinc-900 text-white font-sans antialiased">
@@ -25,8 +26,8 @@
         
         <div class="flex-1 max-w-xl mx-4 hidden sm:block">
             <div class="flex bg-zinc-800 border border-zinc-700 rounded-full overflow-hidden">
-                <input type="text" placeholder="Search..." class="w-full bg-transparent px-4 py-2 focus:outline-none text-sm text-white">
-                <button class="bg-zinc-700 px-6 hover:bg-zinc-600 border-l border-zinc-700">
+                <input type="text" id="search-input" placeholder="Search..." class="w-full bg-transparent px-4 py-2 focus:outline-none text-sm text-white">
+                <button id="search-btn" class="bg-zinc-700 px-6 hover:bg-zinc-600 border-l border-zinc-700">
                     <i class="fas fa-search text-zinc-400"></i>
                 </button>
             </div>
@@ -39,49 +40,33 @@
     </header>
 
     <div class="flex">
-        <aside id="sidebar" class="fixed md:sticky top-[61px] h-[calc(100vh-61px)] bg-zinc-900 w-64 border-r border-zinc-800 transition-transform -translate-x-full md:translate-x-0 z-40">
+        <aside id="sidebar" class="fixed md:sticky top-[61px] h-[calc(100vh-61px)] bg-zinc-900 w-64 border-r border-zinc-800 transition-transform -translate-x-full md:translate-x-0 z-40 overflow-y-auto">
             <nav class="p-4 space-y-1">
                 <a href="#" class="flex items-center space-x-4 p-3 bg-zinc-800 rounded-xl font-medium"><i class="fas fa-home text-lg w-6"></i> <span>Home</span></a>
                 <a href="playlists.html" class="flex items-center space-x-4 p-3 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-white transition"><i class="fas fa-layer-group text-lg w-6"></i> <span>Playlists</span></a>
                 <a href="#" id="history-btn" class="flex items-center space-x-4 p-3 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-white transition"><i class="fas fa-history text-lg w-6"></i> <span>History</span></a>
                 <hr class="border-zinc-800 my-4">
                 <p class="text-xs text-zinc-500 font-bold px-3 uppercase tracking-wider">Subscribed</p>
-                <div id="sidebar-channels" class="mt-2 space-y-1">
-                    </div>
-                    
-                    <!-- Inside index.html inside the sidebar navigation block -->
-<a href="premium.html" class="flex items-center space-x-4 p-3 text-amber-400 hover:bg-zinc-800 rounded-xl font-bold transition">
-    <i class="fas fa-crown text-lg w-6 animate-pulse"></i> 
-    <span>JTube Premium</span>
-</a>
-<hr class="border-zinc-800 my-2">
+                <div id="sidebar-channels" class="mt-2 space-y-1"></div>
 
-
-<hr class="border-zinc-800 my-4">
-<div class="px-3 py-2 space-y-3">
-    <a href="help.html" class="text-xs text-zinc-500 hover:text-zinc-300 transition flex items-center space-x-2">
-        <i class="fas fa-question-circle w-4"></i>
-        <span>Help</span>
-    </a>
-    <a href="feedback.html" class="text-xs text-zinc-500 hover:text-zinc-300 transition flex items-center space-x-2">
-        <i class="fas fa-comment-alt w-4"></i>
-        <span>Send feedback</span>
-    </a>
-    <a href="terms.html" class="text-xs text-zinc-500 hover:text-zinc-300 transition flex items-center space-x-2">
-        <i class="fas fa-file-contract w-4"></i>
-        <span>Terms</span>
-    </a>
-    <a href="privacy.html" class="text-xs text-zinc-500 hover:text-zinc-300 transition flex items-center space-x-2">
-        <i class="fas fa-shield-alt w-4"></i>
-        <span>Privacy Policy</span>
-    </a>
-</div>
+                <a href="premium.html" class="flex items-center space-x-4 p-3 text-amber-400 hover:bg-zinc-800 rounded-xl font-bold transition">
+                    <i class="fas fa-crown text-lg w-6 animate-pulse"></i>
+                    <span>JTube Premium</span>
+                </a>
+                <hr class="border-zinc-800 my-2">
+                <hr class="border-zinc-800 my-4">
+                <div class="px-3 py-2 space-y-3">
+                    <a href="help.html" class="text-xs text-zinc-500 hover:text-zinc-300 transition flex items-center space-x-2"><i class="fas fa-question-circle w-4"></i><span>Help</span></a>
+                    <a href="feedback.html" class="text-xs text-zinc-500 hover:text-zinc-300 transition flex items-center space-x-2"><i class="fas fa-comment-alt w-4"></i><span>Send feedback</span></a>
+                    <a href="terms.html" class="text-xs text-zinc-500 hover:text-zinc-300 transition flex items-center space-x-2"><i class="fas fa-file-contract w-4"></i><span>Terms</span></a>
+                    <a href="privacy.html" class="text-xs text-zinc-500 hover:text-zinc-300 transition flex items-center space-x-2"><i class="fas fa-shield-alt w-4"></i><span>Privacy Policy</span></a>
+                </div>
             </nav>
         </aside>
 
         <main class="flex-1 p-4 md:p-6 overflow-x-hidden">
             <h2 id="page-title" class="text-xl font-bold mb-4 hidden">Your History</h2>
-            <div id="category-bar" class="flex items-center space-x-3 overflow-x-auto pb-4 mb-4 scrollbar-hide no-scrollbar" style="-ms-overflow-style: none; scrollbar-width: none;">
+            <div id="category-bar" class="flex items-center space-x-3 overflow-x-auto pb-4 mb-4" style="-ms-overflow-style:none;scrollbar-width:none;">
                 <button class="category-btn whitespace-nowrap bg-white text-black px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="all">All</button>
                 <button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="Islam">Islam</button>
                 <button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="Science">Science</button>
@@ -89,9 +74,7 @@
                 <button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="Machine Learning">Machine Learning</button>
                 <button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="Entertainment">Entertainment</button>
             </div>
-
-            <div id="video-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8">
-                </div>
+            <div id="video-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8"></div>
         </main>
     </div>
 
@@ -120,25 +103,25 @@
                 </button>
             </form>
             <div class="mt-6 flex items-center before:mt-0.5 before:flex-1 before:border-t before:border-zinc-700 after:mt-0.5 after:flex-1 after:border-t after:border-zinc-700">
-                <p class="mx-4 mb-0 text-center text-xs font-semibold text-zinc-400">OR</p>
+                <p class="mx-4 text-center text-xs font-semibold text-zinc-400">OR</p>
             </div>
             <button id="google-auth-btn" class="mt-6 w-full flex items-center justify-center space-x-2 bg-white text-black hover:bg-zinc-200 font-bold p-3 rounded-xl transition">
                 <i class="fab fa-google text-red-500"></i>
                 <span>Continue with Google</span>
             </button>
             <p class="text-center text-xs text-zinc-400 mt-6">
-                <span id="auth-switch-text">Don't have an account?</span> 
+                <span id="auth-switch-text">Don't have an account?</span>
                 <button id="auth-switch-btn" class="text-blue-400 hover:text-blue-300 font-bold">Register</button>
             </p>
         </div>
     </div>
 
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-    <script src="env.js"></script>
-    <script src="data.js"></script>
-    <script src="index.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js" defer></script>
+    <script src="env.js" defer></script>
+    <script src="data.js" defer></script>
+    <script src="index.js" defer></script>
 </body>
 </html>

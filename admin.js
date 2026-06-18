@@ -2,7 +2,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     const uploadForm = document.getElementById("upload-form");
     const tableBody = document.getElementById("admin-table-body");
     const videoCount = document.getElementById("video-count");
-    
+    const sidebarVideoCount = document.getElementById("sidebar-video-count");
+
     const adminLoginOverlay = document.getElementById("admin-login-overlay");
     const adminLoginForm = document.getElementById("admin-login-form");
     const adminPassword = document.getElementById("admin-password");
@@ -12,22 +13,29 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (adminPassword.value === "Jeyaul") {
             adminLoginOverlay.classList.add("hidden");
         } else {
-            alert("Incorrect password!");
+            adminPassword.classList.add("border-red-500");
             adminPassword.value = "";
+            adminPassword.placeholder = "Wrong password. Try again.";
+            setTimeout(() => {
+                adminPassword.classList.remove("border-red-500");
+                adminPassword.placeholder = "Master Password";
+            }, 2000);
         }
     });
 
-    // Load elements and paint structural data view metrics
+    // Load admin dashboard
     async function loadAdminDashboard() {
         await loadChannelsForAdmin();
         const videos = await getVideos();
-        videoCount.textContent = videos.length;
+        const count = videos.length;
+        videoCount.textContent = count;
+        sidebarVideoCount.textContent = count;
         tableBody.innerHTML = "";
 
         if (videos.length === 0) {
             tableBody.innerHTML = `
                 <tr>
-                    <td colspan="4" class="text-center py-8 text-zinc-500 italic">No videos inside database. Upload one above!</td>
+                    <td colspan="4" class="text-center py-10 text-zinc-500 italic">No videos in database. Upload one first!</td>
                 </tr>`;
             return;
         }
@@ -35,19 +43,21 @@ document.addEventListener("DOMContentLoaded", async () => {
         videos.forEach(video => {
             tableBody.innerHTML += `
                 <tr class="hover:bg-zinc-800/30 transition">
-                    <td class="px-4 py-3 flex items-center space-x-3">
-                        <img src="${video.thumbnail}" class="w-14 aspect-video object-cover rounded bg-zinc-700 flex-shrink-0">
-                        <div class="truncate max-w-[180px] sm:max-w-xs">
-                            <p class="font-medium text-white truncate text-xs sm:text-sm">${video.title}</p>
+                    <td class="px-5 py-3.5 flex items-center space-x-3 min-w-[200px]">
+                        <img src="${video.thumbnail}" class="w-16 aspect-video object-cover rounded-lg bg-zinc-700 flex-shrink-0" loading="lazy">
+                        <div class="truncate max-w-[200px]">
+                            <p class="font-semibold text-white truncate text-xs sm:text-sm">${video.title}</p>
                             <p class="text-[11px] text-zinc-500 sm:hidden">${video.channel}</p>
+                            <p class="text-[11px] text-zinc-600">${video.views?.toLocaleString() || 0} views</p>
                         </div>
                     </td>
-                    <td class="px-4 py-3 text-zinc-400 text-xs sm:text-sm hidden sm:table-cell">${video.channel}</td>
-                    <td class="px-4 py-3">
-                        <span class="bg-zinc-900 px-2 py-1 rounded text-xs text-zinc-400 border border-zinc-700">${video.category}</span>
+                    <td class="px-5 py-3.5 text-zinc-400 text-xs hidden sm:table-cell">${video.channel}</td>
+                    <td class="px-5 py-3.5">
+                        <span class="bg-zinc-900 border border-zinc-700 px-2.5 py-1 rounded-full text-xs text-zinc-400">${video.category}</span>
                     </td>
-                    <td class="px-4 py-3 text-center">
-                        <button onclick="deleteVideoHandler('${video.id}')" class="text-red-500 hover:text-red-400 hover:bg-red-500/10 p-2 rounded-full transition">
+                    <td class="px-5 py-3.5 text-center">
+                        <button onclick="deleteVideoHandler('${video.id}')" title="Delete video"
+                                class="text-zinc-500 hover:text-red-400 hover:bg-red-500/10 p-2 rounded-full transition">
                             <i class="fas fa-trash-alt"></i>
                         </button>
                     </td>
@@ -56,11 +66,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // Video Submission Sequence
+    // Upload form submission
     uploadForm.addEventListener("submit", async (e) => {
         e.preventDefault();
+        const statusEl = document.getElementById("upload-status");
 
-        // Capture values
         const title = document.getElementById("v-title").value.trim();
         const category = document.getElementById("v-category").value;
         const duration = document.getElementById("v-duration").value.trim();
@@ -72,33 +82,30 @@ document.addEventListener("DOMContentLoaded", async () => {
         let videoUrl = document.getElementById("v-url").value.trim();
         const description = document.getElementById("v-desc").value.trim();
 
-        // Assign clean placeholder defaults if values are left empty
         if (!thumbnail) {
             thumbnail = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=60";
         }
         if (!videoUrl) {
-            videoUrl = "https://www.youtube.com/watch?v=60Yo63VFt-M"; // Only youtube links allowed per prompt
+            videoUrl = "https://www.youtube.com/watch?v=60Yo63VFt-M";
         }
 
-        // Validate YouTube Link
-        const ytRegex = /^(https?\:\/\/)?(www\.youtube\.com|youtu\.?be)\/.+$/;
+        const ytRegex = /^(https?:\/\/)?(www\.youtube\.com|youtu\.?be)\/.+$/;
         if (!ytRegex.test(videoUrl)) {
-            alert("Error: Only YouTube links can be added to the website! Please provide a valid YouTube URL (e.g., https://www.youtube.com/watch?v=...).");
+            alert("Error: Only YouTube links are allowed! Please provide a valid YouTube URL.");
             return;
         }
 
-        // Build new structured layout model payload
         const newVideo = {
             id: "vid_" + Date.now().toString(),
-            title: title,
+            title,
             channel: channelName,
-            category: category,
+            category,
             playlist: playlistName,
             views: 0,
             time: "Just now",
-            duration: duration,
-            thumbnail: thumbnail,
-            videoUrl: videoUrl,
+            duration,
+            thumbnail,
+            videoUrl,
             description: description || "No description provided.",
             likes: 0,
             liked: false,
@@ -106,34 +113,75 @@ document.addEventListener("DOMContentLoaded", async () => {
             timestamp: Date.now()
         };
 
-        // Inject video update sequence to Firebase
         await saveVideo(newVideo);
 
-        // Auto-provision channel profile parameters inside channel database map if not found
         let channels = await getChannels();
         if (!channels[channelName]) {
-            await saveChannel(channelName, { 
-                subscribers: 0, 
+            await saveChannel(channelName, {
+                subscribers: 0,
                 subscribed: false,
                 avatarUrl: cAvatar || "",
                 coverUrl: cCover || ""
             });
         }
 
-        // Reset inputs and repaint table metrics
         uploadForm.reset();
+        statusEl.classList.remove("hidden");
+        setTimeout(() => statusEl.classList.add("hidden"), 3000);
         await loadAdminDashboard();
     });
 
-    // Make target deletion functional context variables accessible globally
     window.deleteVideoHandler = async function(id) {
         if (confirm("Are you sure you want to delete this video from JTube?")) {
-            await deleteVideo(id); // calls data.js delete function
+            await deleteVideo(id);
             await loadAdminDashboard();
         }
     };
 
-    // Channel Management Logic
+    // ===== CREATE CHANNEL =====
+    const createChannelForm = document.getElementById("create-channel-form");
+    const createChannelStatus = document.getElementById("create-channel-status");
+
+    createChannelForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const name = document.getElementById("new-c-name").value.trim();
+        const cover = document.getElementById("new-c-cover").value.trim();
+        const avatar = document.getElementById("new-c-avatar").value.trim();
+        const bio = document.getElementById("new-c-bio").value.trim();
+        const links = document.getElementById("new-c-links").value.trim();
+
+        if (!name) { alert("Please enter a channel name."); return; }
+
+        const existing = await getChannels();
+        if (existing[name]) {
+            createChannelStatus.textContent = "⚠ A channel with this name already exists.";
+            createChannelStatus.className = "text-xs font-bold text-yellow-400";
+            createChannelStatus.classList.remove("hidden");
+            return;
+        }
+
+        await saveChannel(name, {
+            subscribers: 0,
+            subscribed: false,
+            avatarUrl: avatar,
+            coverUrl: cover,
+            bio,
+            links
+        });
+
+        createChannelForm.reset();
+        document.getElementById("cover-preview").innerHTML = '<span><i class="fas fa-image mr-2"></i>Cover preview</span>';
+        document.getElementById("avatar-preview").innerHTML = '<i class="fas fa-user"></i>';
+
+        createChannelStatus.textContent = `✓ Channel "${name}" created successfully!`;
+        createChannelStatus.className = "text-xs font-bold text-green-400";
+        createChannelStatus.classList.remove("hidden");
+        setTimeout(() => createChannelStatus.classList.add("hidden"), 4000);
+
+        await loadChannelsForAdmin();
+    });
+
+    // ===== MANAGE CHANNELS =====
     const channelList = document.getElementById("channel-list");
     const editChannelSelect = document.getElementById("edit-channel-select");
     const editChannelForm = document.getElementById("edit-channel-form");
@@ -141,22 +189,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     const editCCover = document.getElementById("edit-c-cover");
     const editCBio = document.getElementById("edit-c-bio");
     const editCLinks = document.getElementById("edit-c-links");
+    const editChannelStatus = document.getElementById("edit-channel-status");
 
     let currentChannelsData = {};
 
     async function loadChannelsForAdmin() {
         currentChannelsData = await getChannels();
-        
+
         channelList.innerHTML = "";
         editChannelSelect.innerHTML = '<option value="">-- Choose a Channel --</option>';
 
-        Object.keys(currentChannelsData).forEach(channelName => {
-            // Populate datalist for video upload
+        Object.keys(currentChannelsData).sort().forEach(channelName => {
             const option = document.createElement("option");
             option.value = channelName;
             channelList.appendChild(option);
 
-            // Populate select for edit
             const editOption = document.createElement("option");
             editOption.value = channelName;
             editOption.textContent = channelName;
@@ -165,13 +212,18 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     editChannelSelect.addEventListener("change", (e) => {
-        const selectedChannel = e.target.value;
-        if (selectedChannel && currentChannelsData[selectedChannel]) {
-            const data = currentChannelsData[selectedChannel];
+        const selected = e.target.value;
+        if (selected && currentChannelsData[selected]) {
+            const data = currentChannelsData[selected];
             editCAvatar.value = data.avatarUrl || "";
             editCCover.value = data.coverUrl || "";
             editCBio.value = data.bio || "";
             editCLinks.value = data.links || "";
+
+            // Update previews
+            if (typeof updateEditAvatarPreview === "function") updateEditAvatarPreview(data.avatarUrl || "");
+            if (typeof updateEditCoverPreview === "function") updateEditCoverPreview(data.coverUrl || "");
+
             editChannelForm.classList.remove("hidden");
         } else {
             editChannelForm.classList.add("hidden");
@@ -180,8 +232,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     editChannelForm.addEventListener("submit", async (e) => {
         e.preventDefault();
-        const selectedChannel = editChannelSelect.value;
-        if (!selectedChannel) return;
+        const selected = editChannelSelect.value;
+        if (!selected) return;
 
         const updatedData = {
             avatarUrl: editCAvatar.value.trim(),
@@ -190,30 +242,29 @@ document.addEventListener("DOMContentLoaded", async () => {
             links: editCLinks.value.trim()
         };
 
-        await saveChannel(selectedChannel, updatedData);
-        alert("Channel updated successfully!");
-        await loadChannelsForAdmin(); // Refresh data
-        editChannelForm.classList.add("hidden");
-        editChannelSelect.value = "";
+        await saveChannel(selected, updatedData);
+        editChannelStatus.classList.remove("hidden");
+        setTimeout(() => editChannelStatus.classList.add("hidden"), 3000);
+        await loadChannelsForAdmin();
     });
 
-    // YouTube Import Logic
+    // ===== YOUTUBE IMPORT =====
     const ytImportForm = document.getElementById("yt-import-form");
     const ytStatus = document.getElementById("yt-import-status");
+
+    function formatDuration(totalSeconds) {
+        const h = Math.floor(totalSeconds / 3600);
+        const m = Math.floor((totalSeconds % 3600) / 60);
+        const s = totalSeconds % 60;
+        if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    }
 
     async function fetchYouTubeVideos(playlistId) {
         let allVideos = [];
         let pageToken = '';
-        const maxPages = 3; // Limit to 150 videos per import to avoid overloading
+        const maxPages = 3;
         let pagesFetched = 0;
-
-        function formatDuration(totalSeconds) {
-            const h = Math.floor(totalSeconds / 3600);
-            const m = Math.floor((totalSeconds % 3600) / 60);
-            const s = totalSeconds % 60;
-            if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-            return `${m}:${s.toString().padStart(2, '0')}`;
-        }
 
         try {
             while (pagesFetched < maxPages) {
@@ -221,163 +272,128 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const res = await fetch(url);
                 const data = await res.json();
 
-                if (data.error) {
-                    throw new Error(data.error.message);
-                }
+                if (data.error) throw new Error(data.error.message);
 
                 if (data.items && data.items.length > 0) {
                     const videoIds = data.items.map(item => item.contentDetails.videoId).filter(Boolean).join(',');
                     if (videoIds) {
-                        const vidUrl = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${videoIds}&key=${ENV.YOUTUBE_API_KEY}`;
-                        const vidRes = await fetch(vidUrl);
+                        const vidRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${videoIds}&key=${ENV.YOUTUBE_API_KEY}`);
                         const vidData = await vidRes.json();
-                        
+
                         const durationMap = {};
-                        if(vidData.items) {
-                            vidData.items.forEach(v => {
-                                durationMap[v.id] = v.contentDetails.duration;
-                            });
+                        if (vidData.items) {
+                            vidData.items.forEach(v => { durationMap[v.id] = v.contentDetails.duration; });
                         }
 
-                        const filteredItems = data.items.filter(item => {
-                            const durationStr = durationMap[item.contentDetails.videoId];
-                            if(!durationStr) return false;
-                            
-                            let totalSeconds = 0;
-                            const match = durationStr.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-                            if(match) {
-                                const h = parseInt(match[1] || 0);
-                                const m = parseInt(match[2] || 0);
-                                const s = parseInt(match[3] || 0);
-                                totalSeconds = h * 3600 + m * 60 + s;
+                        const filtered = data.items.filter(item => {
+                            const dStr = durationMap[item.contentDetails.videoId];
+                            if (!dStr) return false;
+                            let total = 0;
+                            const match = dStr.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+                            if (match) {
+                                total = (parseInt(match[1] || 0) * 3600) + (parseInt(match[2] || 0) * 60) + parseInt(match[3] || 0);
                             }
-                            
-                            item._durationText = formatDuration(totalSeconds);
-                            return totalSeconds > 180; // Only videos above 3 minutes
+                            item._durationText = formatDuration(total);
+                            return total > 180;
                         });
-
-                        allVideos = allVideos.concat(filteredItems);
+                        allVideos = allVideos.concat(filtered);
                     }
                 }
 
                 pageToken = data.nextPageToken;
                 pagesFetched++;
-
                 if (!pageToken) break;
             }
             return allVideos;
         } catch (error) {
-            ytStatus.textContent = `Error fetching videos: ${error.message}`;
-            ytStatus.classList.remove("hidden", "text-green-500", "text-zinc-400");
-            ytStatus.classList.add("text-red-500");
-            console.error(error);
+            ytStatus.textContent = `Error: ${error.message}`;
+            ytStatus.className = "text-xs font-bold text-red-400";
+            ytStatus.classList.remove("hidden");
             return null;
         }
     }
 
     async function getChannelUploadPlaylistId(channelId) {
         try {
-            const url = `https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=${channelId}&key=${ENV.YOUTUBE_API_KEY}`;
-            const res = await fetch(url);
+            const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=${channelId}&key=${ENV.YOUTUBE_API_KEY}`);
             const data = await res.json();
-            
             if (data.error) throw new Error(data.error.message);
             if (data.items && data.items.length > 0) {
                 return data.items[0].contentDetails.relatedPlaylists.uploads;
             }
-            throw new Error("Channel not found or has no uploads playlist.");
+            throw new Error("Channel not found.");
         } catch (error) {
-            ytStatus.textContent = `Error fetching channel: ${error.message}`;
-            ytStatus.classList.remove("hidden", "text-green-500", "text-zinc-400");
-            ytStatus.classList.add("text-red-500");
-            console.error(error);
+            ytStatus.textContent = `Error: ${error.message}`;
+            ytStatus.className = "text-xs font-bold text-red-400";
+            ytStatus.classList.remove("hidden");
             return null;
         }
     }
 
     ytImportForm.addEventListener("submit", async (e) => {
         e.preventDefault();
-        
         const ytChannelId = document.getElementById("yt-channel-id").value.trim();
         const ytPlaylistId = document.getElementById("yt-playlist-id").value.trim();
         const targetChannel = document.getElementById("yt-target-channel").value.trim();
         const category = document.getElementById("yt-category").value.trim();
 
         if (!ytChannelId && !ytPlaylistId) {
-            alert("Please provide either a YouTube Channel ID or Playlist ID.");
+            alert("Please provide a YouTube Channel ID or Playlist ID.");
             return;
         }
 
         ytStatus.textContent = "Fetching videos from YouTube... Please wait.";
-        ytStatus.classList.remove("hidden", "text-red-500", "text-green-500");
-        ytStatus.classList.add("text-zinc-400");
+        ytStatus.className = "text-xs font-bold text-zinc-400";
+        ytStatus.classList.remove("hidden");
 
         let targetPlaylistId = ytPlaylistId;
-
         if (!targetPlaylistId && ytChannelId) {
             targetPlaylistId = await getChannelUploadPlaylistId(ytChannelId);
         }
-
-        if (!targetPlaylistId) return; // Error already handled
+        if (!targetPlaylistId) return;
 
         const videos = await fetchYouTubeVideos(targetPlaylistId);
-        
         if (videos && videos.length > 0) {
-            ytStatus.textContent = `Found ${videos.length} videos. Importing to Firebase...`;
-
-            for (let i = 0; i < videos.length; i++) {
-                const item = videos[i];
+            ytStatus.textContent = `Found ${videos.length} videos. Importing...`;
+            for (const item of videos) {
                 const snippet = item.snippet;
-                
-                // Construct new video object
                 const videoId = snippet.resourceId ? snippet.resourceId.videoId : (item.contentDetails ? item.contentDetails.videoId : '');
                 if (!videoId) continue;
-                
-                const newVideo = {
-                    id: "yt_" + videoId, // Using YouTube ID to avoid duplicates
+
+                await saveVideo({
+                    id: "yt_" + videoId,
                     title: snippet.title,
                     channel: targetChannel,
-                    category: category,
+                    category,
                     playlist: "",
                     views: 0,
                     time: "Just now",
-                    duration: item._durationText || "", 
-                    thumbnail: snippet.thumbnails.high ? snippet.thumbnails.high.url : (snippet.thumbnails.default ? snippet.thumbnails.default.url : ""),
+                    duration: item._durationText || "",
+                    thumbnail: snippet.thumbnails?.high?.url || snippet.thumbnails?.default?.url || "",
                     videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
                     description: snippet.description || "Imported from YouTube",
                     likes: 0,
                     liked: false,
                     comments: [],
                     timestamp: new Date(snippet.publishedAt).getTime()
-                };
-
-                await saveVideo(newVideo);
-            }
-
-            // Create target channel if doesn't exist
-            let channels = await getChannels();
-            if (!channels[targetChannel]) {
-                await saveChannel(targetChannel, { 
-                    subscribers: 0, 
-                    subscribed: false,
-                    avatarUrl: "",
-                    coverUrl: ""
                 });
             }
 
-            ytStatus.textContent = `Successfully imported ${videos.length} videos to channel ${targetChannel}!`;
-            ytStatus.classList.remove("text-zinc-400");
-            ytStatus.classList.add("text-green-500");
-            
+            const channels = await getChannels();
+            if (!channels[targetChannel]) {
+                await saveChannel(targetChannel, { subscribers: 0, subscribed: false, avatarUrl: "", coverUrl: "" });
+            }
+
+            ytStatus.textContent = `✓ Successfully imported ${videos.length} videos to "${targetChannel}"!`;
+            ytStatus.className = "text-xs font-bold text-green-400";
             ytImportForm.reset();
             await loadAdminDashboard();
         } else if (videos && videos.length === 0) {
-            ytStatus.textContent = "No videos found in the provided channel/playlist.";
-            ytStatus.classList.remove("text-zinc-400");
-            ytStatus.classList.add("text-red-500");
+            ytStatus.textContent = "No qualifying videos found (all under 3 minutes?).";
+            ytStatus.className = "text-xs font-bold text-red-400";
         }
     });
 
-    // Initialize Dashboard UI Components
+    // Initialize
     await loadAdminDashboard();
 });
