@@ -349,7 +349,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                                 total = (parseInt(match[1] || 0) * 3600) + (parseInt(match[2] || 0) * 60) + parseInt(match[3] || 0);
                             }
                             item._durationText = formatDuration(total);
-                            return total > 600; // Only videos longer than 10 minutes
+                            return true; // Save all videos regardless of length
                         });
                         allVideos = allVideos.concat(filtered);
                     }
@@ -444,7 +444,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             ytImportForm.reset();
             await loadAdminDashboard();
         } else if (videos && videos.length === 0) {
-            ytStatus.textContent = "No qualifying videos found (all under 10 minutes?).";
+            ytStatus.textContent = "No videos found.";
             ytStatus.className = "text-xs font-bold text-red-400";
         }
     });
