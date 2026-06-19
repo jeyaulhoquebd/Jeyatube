@@ -17,6 +17,36 @@ const rtdb = firebase.database();
 const auth = firebase.auth();
 const googleProvider = new firebase.auth.GoogleAuthProvider();
 
+// ===== FIRESTORE PERSISTENCE & CACHE =====
+// Enable offline persistence so reads come from cache first (instant loads)
+db.enablePersistence({ synchronizeTabs: true }).catch(err => {
+    if (err.code === 'failed-precondition') {
+        console.warn('Persistence failed: Multiple tabs open.');
+    } else if (err.code === 'unimplemented') {
+        console.warn('Persistence not supported in this browser.');
+    }
+});
+
+// In-memory cache for ultra-fast repeat reads within same session
+const _cache = {
+    videos: null,
+    videosTimestamp: 0,
+    channels: null,
+    channelsTimestamp: 0,
+    categories: null,
+    categoriesTimestamp: 0,
+    TTL: 30000 // 30 seconds cache TTL
+};
+
+function isCacheValid(key) {
+    return _cache[key] !== null && (Date.now() - _cache[key + 'Timestamp']) < _cache.TTL;
+}
+
+function invalidateCache(key) {
+    _cache[key] = null;
+    _cache[key + 'Timestamp'] = 0;
+}
+
 let currentUser = null;
 auth.onAuthStateChanged(user => {
     currentUser = user;
@@ -46,40 +76,84 @@ async function logoutUser() {
     return await auth.signOut();
 }
 
+// ===== VIDEO FUNCTIONS (Firestore-only, cached) =====
+
 async function getVideos() {
+    if (isCacheValid('videos')) return _cache.videos;
+    
     const snapshot = await db.collection("videos").orderBy("timestamp", "desc").get();
     let videos = [];
     snapshot.forEach(doc => {
         videos.push(doc.data());
     });
+    _cache.videos = videos;
+    _cache.videosTimestamp = Date.now();
     return videos;
+}
+
+async function getVideoById(videoId) {
+    // Try cache first
+    if (isCacheValid('videos')) {
+        const cached = _cache.videos.find(v => v.id === videoId);
+        if (cached) return cached;
+    }
+    // Direct Firestore lookup — much faster than fetching ALL videos
+    const doc = await db.collection("videos").doc(videoId).get();
+    return doc.exists ? doc.data() : null;
 }
 
 async function saveVideo(video) {
     if (!video.timestamp) video.timestamp = Date.now();
     await db.collection("videos").doc(video.id).set(video);
-    await rtdb.ref("videos/" + video.id).set(video);
+    invalidateCache('videos');
+}
+
+async function saveBatchVideos(videosArray) {
+    // Firestore batch writes — up to 500 per batch, much faster than individual writes
+    const batchSize = 450;
+    for (let i = 0; i < videosArray.length; i += batchSize) {
+        const batch = db.batch();
+        const chunk = videosArray.slice(i, i + batchSize);
+        chunk.forEach(video => {
+            if (!video.timestamp) video.timestamp = Date.now();
+            const ref = db.collection("videos").doc(video.id);
+            batch.set(ref, video);
+        });
+        await batch.commit();
+    }
+    invalidateCache('videos');
 }
 
 async function deleteVideo(id) {
     await db.collection("videos").doc(id).delete();
-    await rtdb.ref("videos/" + id).remove();
+    invalidateCache('videos');
 }
 
+// ===== CHANNEL FUNCTIONS =====
+
 async function getChannels() {
+    if (isCacheValid('channels')) return _cache.channels;
+    
     const snapshot = await db.collection("channels").get();
     let channels = {};
     snapshot.forEach(doc => {
         channels[doc.id] = doc.data();
     });
+    _cache.channels = channels;
+    _cache.channelsTimestamp = Date.now();
     return channels;
 }
 
 async function saveChannel(channelName, channelData) {
     await db.collection("channels").doc(channelName).set(channelData, { merge: true });
+    invalidateCache('channels');
 }
 
 async function getChannel(channelName) {
+    // Try cache first
+    if (isCacheValid('channels') && _cache.channels[channelName]) {
+        return _cache.channels[channelName];
+    }
     const doc = await db.collection("channels").doc(channelName).get();
     return doc.exists ? doc.data() : null;
 }
@@ -96,11 +170,7 @@ async function incrementView(videoId) {
     await videoRef.update({
         views: firebase.firestore.FieldValue.increment(1)
     });
-    // We update RTDB manually since FieldValue is firestore only
-    const doc = await videoRef.get();
-    if(doc.exists) {
-        await rtdb.ref("videos/" + videoId).update({ views: doc.data().views });
-    }
+    invalidateCache('videos');
 }
 
 async function getUserProfile(uid) {
@@ -155,13 +225,18 @@ async function getPlaylists() {
     return Object.values(playlistsMap);
 }
 
-// Categories functionality
+// ===== CATEGORIES =====
+
 async function getCategories() {
+    if (isCacheValid('categories')) return _cache.categories;
+
     const snapshot = await db.collection("categories").orderBy("order").get();
     let categories = [];
     snapshot.forEach(doc => {
         categories.push({ id: doc.id, ...doc.data() });
     });
+    _cache.categories = categories;
+    _cache.categoriesTimestamp = Date.now();
     return categories;
 }
 
@@ -170,10 +245,12 @@ async function saveCategory(category) {
         category.id = category.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
     }
     await db.collection("categories").doc(category.id).set(category);
+    invalidateCache('categories');
 }
 
 async function deleteCategory(categoryId) {
     await db.collection("categories").doc(categoryId).delete();
+    invalidateCache('categories');
 }
 
 // Extract YouTube ID

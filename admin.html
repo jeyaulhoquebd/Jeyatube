@@ -372,6 +372,23 @@
                             </button>
                             <p id="yt-import-status" class="text-xs font-bold hidden"></p>
                         </div>
+
+                        <!-- Import Progress Bar -->
+                        <div id="yt-progress-bar" class="hidden mt-4">
+                            <div class="flex items-center justify-between mb-1.5">
+                                <p id="yt-progress-text" class="text-xs text-zinc-400 font-medium">Starting...</p>
+                            </div>
+                            <div class="w-full h-2.5 bg-zinc-800 rounded-full overflow-hidden">
+                                <div id="yt-progress-fill" class="h-full bg-gradient-to-r from-red-500 to-red-600 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/50">
+                            <p class="text-[11px] text-zinc-500 leading-relaxed">
+                                <i class="fas fa-info-circle text-zinc-600 mr-1"></i>
+                                Only videos <strong class="text-zinc-400">longer than 3 minutes</strong> will be imported. Video links, thumbnails, titles and metadata are saved directly to Cloud Firestore for ultra-fast website loading. Duplicate videos are automatically skipped.
+                            </p>
+                        </div>
                     </form>
                 </div>
             </div>

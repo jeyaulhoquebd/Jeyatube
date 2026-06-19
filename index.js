@@ -8,6 +8,27 @@ document.addEventListener("DOMContentLoaded", async () => {
     const pageTitle = document.getElementById("page-title");
     const categoryBar = document.getElementById("category-bar");
 
+    // Show skeleton loading cards immediately for fast perceived load
+    function showSkeletonLoading() {
+        let skeletonHtml = '';
+        for (let i = 0; i < 8; i++) {
+            skeletonHtml += `
+                <div class="animate-pulse bg-zinc-800/50 rounded-xl pb-3">
+                    <div class="aspect-video bg-zinc-700/50 rounded-xl mb-3"></div>
+                    <div class="flex space-x-3 px-3">
+                        <div class="w-9 h-9 bg-zinc-700/50 rounded-full flex-shrink-0"></div>
+                        <div class="flex-1 space-y-2">
+                            <div class="h-3.5 bg-zinc-700/50 rounded w-full"></div>
+                            <div class="h-3 bg-zinc-700/50 rounded w-3/4"></div>
+                            <div class="h-2.5 bg-zinc-700/50 rounded w-1/2"></div>
+                        </div>
+                    </div>
+                </div>`;
+        }
+        videoGrid.innerHTML = skeletonHtml;
+    }
+    showSkeletonLoading();
+
     // Auth Modal DOM
     const authModal = document.getElementById("auth-modal");
     const closeAuthBtn = document.getElementById("close-auth");
@@ -195,7 +216,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             ${qualityBadgeHtml}
                             <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
                             <p class="text-xs text-zinc-400 mt-1 hover:text-zinc-200 truncate cursor-pointer" onclick="event.stopPropagation(); location.href='channel.html?name=${encodeURIComponent(video.channel)}'">${video.channel}</p>
-                            <p class="text-xs text-zinc-400 mt-0.5">${video.views} views • ${video.time}</p>
+                            <p class="text-xs text-zinc-400 mt-0.5">${(video.views || 0).toLocaleString()} views • ${video.time}</p>
                         </div>
                     </div>
                 </div>

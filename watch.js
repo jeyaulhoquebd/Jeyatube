@@ -2,9 +2,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     const urlParams = new URLSearchParams(window.location.search);
     const videoId = urlParams.get('id');
 
-    let videos = await getVideos();
     let channels = await getChannels();
-    let video = videos.find(v => v.id === videoId);
+    let video = await getVideoById(videoId);
 
     if (!video) {
         document.body.innerHTML = `<div class="text-center py-20"><h1 class="text-2xl">Video not found.</h1><a href="index.html" class="text-blue-500 mt-4 block">Return Home</a></div>`;
@@ -198,18 +197,21 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    function renderRecommendations() {
+    async function renderRecommendations() {
         recommendationsContainer.innerHTML = `<h3 class="text-xs font-bold text-zinc-400 tracking-wider uppercase mb-1">Up Next</h3>`;
-        videos.filter(v => v.id !== video.id).forEach(v => {
+        // Lazy-load recommendations only when needed
+        const videos = await getVideos();
+        const recs = videos.filter(v => v.id !== video.id).slice(0, 15);
+        recs.forEach(v => {
             recommendationsContainer.innerHTML += `
                 <div class="flex space-x-3 cursor-pointer group" onclick="location.href='watch.html?id=${v.id}'">
                     <div class="relative w-32 sm:w-40 aspect-video bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0">
-                        <img src="${v.thumbnail}" class="w-full h-full object-cover">
+                        <img src="${v.thumbnail}" loading="lazy" class="w-full h-full object-cover">
                     </div>
                     <div class="flex-1">
                         <h4 class="text-xs font-semibold line-clamp-2 text-zinc-100 leading-snug group-hover:text-white">${v.title}</h4>
                         <p class="text-[11px] text-zinc-400 mt-1">${v.channel}</p>
-                        <p class="text-[11px] text-zinc-400">${v.views} views</p>
+                        <p class="text-[11px] text-zinc-400">${(v.views || 0).toLocaleString()} views</p>
                     </div>
                 </div>
             `;
@@ -272,5 +274,5 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     updateInteractionsUI();
-    renderRecommendations();
+    await renderRecommendations();
 });

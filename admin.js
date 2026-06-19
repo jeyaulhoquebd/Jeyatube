@@ -71,7 +71,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Categories Logic
     const categoryListDatalist = document.getElementById("category-list");
-    const ytCategoryDatalist = document.getElementById("yt-category-list"); // if I add one
     const categoriesTableBody = document.getElementById("categories-table-body");
     const addCategoryForm = document.getElementById("add-category-form");
 
@@ -306,6 +305,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     // ===== YOUTUBE IMPORT =====
     const ytImportForm = document.getElementById("yt-import-form");
     const ytStatus = document.getElementById("yt-import-status");
+    const ytProgressBar = document.getElementById("yt-progress-bar");
+    const ytProgressFill = document.getElementById("yt-progress-fill");
+    const ytProgressText = document.getElementById("yt-progress-text");
+    const ytImportBtn = document.getElementById("yt-import-btn");
+
+    function showProgress(percent, text) {
+        if (ytProgressBar) {
+            ytProgressBar.classList.remove("hidden");
+            ytProgressFill.style.width = percent + "%";
+            ytProgressText.textContent = text;
+        }
+    }
+
+    function hideProgress() {
+        if (ytProgressBar) {
+            ytProgressBar.classList.add("hidden");
+        }
+    }
 
     function formatDuration(totalSeconds) {
         const h = Math.floor(totalSeconds / 3600);
@@ -315,14 +332,29 @@ document.addEventListener("DOMContentLoaded", async () => {
         return `${m}:${s.toString().padStart(2, '0')}`;
     }
 
+    function parseDurationToSeconds(dStr) {
+        if (!dStr) return 0;
+        let total = 0;
+        const match = dStr.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+        if (match) {
+            total = (parseInt(match[1] || 0) * 3600) + (parseInt(match[2] || 0) * 60) + parseInt(match[3] || 0);
+        }
+        return total;
+    }
+
     async function fetchYouTubeVideos(playlistId) {
         let allVideos = [];
         let pageToken = '';
-        const maxPages = 3;
+        const maxPages = 10; // Fetch up to 500 videos (10 pages × 50 per page)
         let pagesFetched = 0;
 
         try {
             while (pagesFetched < maxPages) {
+                showProgress(
+                    Math.min(10 + (pagesFetched / maxPages) * 50, 55),
+                    `Fetching page ${pagesFetched + 1}...`
+                );
+
                 const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=50&playlistId=${playlistId}&key=${ENV.YOUTUBE_API_KEY}&pageToken=${pageToken}`;
                 const res = await fetch(url);
                 const data = await res.json();
@@ -340,16 +372,18 @@ document.addEventListener("DOMContentLoaded", async () => {
                             vidData.items.forEach(v => { durationMap[v.id] = v.contentDetails.duration; });
                         }
 
+                        // FILTER: Only keep videos LONGER than 3 minutes (180 seconds)
                         const filtered = data.items.filter(item => {
                             const dStr = durationMap[item.contentDetails.videoId];
                             if (!dStr) return false;
-                            let total = 0;
-                            const match = dStr.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-                            if (match) {
-                                total = (parseInt(match[1] || 0) * 3600) + (parseInt(match[2] || 0) * 60) + parseInt(match[3] || 0);
-                            }
-                            item._durationText = formatDuration(total);
-                            return true; // Save all videos regardless of length
+                            const totalSeconds = parseDurationToSeconds(dStr);
+                            
+                            // Skip videos shorter than 3 minutes
+                            if (totalSeconds < 180) return false;
+                            
+                            item._durationText = formatDuration(totalSeconds);
+                            item._durationSeconds = totalSeconds;
+                            return true;
                         });
                         allVideos = allVideos.concat(filtered);
                     }
@@ -364,12 +398,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             ytStatus.textContent = `Error: ${error.message}`;
             ytStatus.className = "text-xs font-bold text-red-400";
             ytStatus.classList.remove("hidden");
+            hideProgress();
             return null;
         }
     }
 
     async function getChannelUploadPlaylistId(channelId) {
         try {
+            showProgress(5, "Looking up channel...");
             const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=${channelId}&key=${ENV.YOUTUBE_API_KEY}`);
             const data = await res.json();
             if (data.error) throw new Error(data.error.message);
@@ -381,6 +417,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             ytStatus.textContent = `Error: ${error.message}`;
             ytStatus.className = "text-xs font-bold text-red-400";
             ytStatus.classList.remove("hidden");
+            hideProgress();
             return null;
         }
     }
@@ -397,26 +434,46 @@ document.addEventListener("DOMContentLoaded", async () => {
             return;
         }
 
+        // Disable button during import
+        ytImportBtn.disabled = true;
+        ytImportBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Importing...</span>';
+
         ytStatus.textContent = "Fetching videos from YouTube... Please wait.";
         ytStatus.className = "text-xs font-bold text-zinc-400";
         ytStatus.classList.remove("hidden");
+        showProgress(2, "Starting import...");
 
         let targetPlaylistId = ytPlaylistId;
         if (!targetPlaylistId && ytChannelId) {
             targetPlaylistId = await getChannelUploadPlaylistId(ytChannelId);
         }
-        if (!targetPlaylistId) return;
+        if (!targetPlaylistId) {
+            ytImportBtn.disabled = false;
+            ytImportBtn.innerHTML = '<i class="fab fa-youtube"></i> <span>Fetch &amp; Import Videos</span>';
+            return;
+        }
 
         const videos = await fetchYouTubeVideos(targetPlaylistId);
         if (videos && videos.length > 0) {
-            ytStatus.textContent = `Found ${videos.length} videos. Importing...`;
+            showProgress(60, `Found ${videos.length} videos (>3 min). Saving to Firestore...`);
+            ytStatus.textContent = `Found ${videos.length} videos longer than 3 minutes. Saving to database...`;
+
+            // Check existing videos to avoid duplicates
+            const existingVideos = await getVideos();
+            const existingIds = new Set(existingVideos.map(v => v.id));
+
+            // Build array of new videos to save
+            const newVideos = [];
             for (const item of videos) {
                 const snippet = item.snippet;
                 const videoId = snippet.resourceId ? snippet.resourceId.videoId : (item.contentDetails ? item.contentDetails.videoId : '');
                 if (!videoId) continue;
 
-                await saveVideo({
-                    id: "yt_" + videoId,
+                const docId = "yt_" + videoId;
+                if (existingIds.has(docId)) continue; // Skip duplicates
+
+                newVideos.push({
+                    id: docId,
                     title: snippet.title,
                     channel: targetChannel,
                     category,
@@ -424,7 +481,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     views: 0,
                     time: "Just now",
                     duration: item._durationText || "",
-                    thumbnail: snippet.thumbnails?.high?.url || snippet.thumbnails?.default?.url || "",
+                    thumbnail: snippet.thumbnails?.high?.url || snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url || "",
                     videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
                     description: snippet.description || "Imported from YouTube",
                     likes: 0,
@@ -434,19 +491,39 @@ document.addEventListener("DOMContentLoaded", async () => {
                 });
             }
 
+            if (newVideos.length > 0) {
+                // Use batch writes for massive speed improvement
+                showProgress(70, `Writing ${newVideos.length} new videos in batches...`);
+                await saveBatchVideos(newVideos);
+                showProgress(90, "Finalizing...");
+            }
+
+            // Create channel if doesn't exist
             const channels = await getChannels();
             if (!channels[targetChannel]) {
                 await saveChannel(targetChannel, { subscribers: 0, subscribed: false, avatarUrl: "", coverUrl: "" });
             }
 
-            ytStatus.textContent = `✓ Successfully imported ${videos.length} videos to "${targetChannel}"!`;
+            const skipped = videos.length - newVideos.length;
+            let statusMsg = `✓ Successfully imported ${newVideos.length} videos to "${targetChannel}"!`;
+            if (skipped > 0) statusMsg += ` (${skipped} duplicates skipped)`;
+            
+            showProgress(100, "Complete!");
+            ytStatus.textContent = statusMsg;
             ytStatus.className = "text-xs font-bold text-green-400";
             ytImportForm.reset();
             await loadAdminDashboard();
+
+            setTimeout(hideProgress, 3000);
         } else if (videos && videos.length === 0) {
-            ytStatus.textContent = "No videos found.";
-            ytStatus.className = "text-xs font-bold text-red-400";
+            ytStatus.textContent = "No videos found longer than 3 minutes.";
+            ytStatus.className = "text-xs font-bold text-yellow-400";
+            hideProgress();
         }
+
+        // Re-enable button
+        ytImportBtn.disabled = false;
+        ytImportBtn.innerHTML = '<i class="fab fa-youtube"></i> <span>Fetch &amp; Import Videos</span>';
     });
 
     // Initialize
