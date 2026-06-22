@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default rule: deny all access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Videos collection: Public read for fast website loading
+    // Write access could be restricted to authenticated admins in a production app
+    match /videos/{videoId} {
+      allow read: if true;
+      allow write: if true; // Change to 'if request.auth != null' for security
+    }
+
+    // Channels collection: Public read
+    match /channels/{channelId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Categories collection: Public read
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Users collection: Users can read and write only their own data
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // User history subcollection
+      match /history/{historyId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+  }
+}

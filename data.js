@@ -81,6 +81,23 @@ async function logoutUser() {
 async function getVideos() {
     if (isCacheValid('videos')) return _cache.videos;
     
+    try {
+        // Try RTDB first for ultra-fast loading
+        const snapshot = await rtdb.ref('videos').once('value');
+        if (snapshot.exists()) {
+            let videos = [];
+            snapshot.forEach(child => {
+                videos.push(child.val());
+            });
+            videos.sort((a, b) => b.timestamp - a.timestamp);
+            _cache.videos = videos;
+            _cache.videosTimestamp = Date.now();
+            return videos;
+        }
+    } catch (err) {
+        console.warn("RTDB read failed, falling back to Firestore", err);
+    }
+
     const snapshot = await db.collection("videos").orderBy("timestamp", "desc").get();
     let videos = [];
     snapshot.forEach(doc => {
@@ -97,6 +114,17 @@ async function getVideoById(videoId) {
         const cached = _cache.videos.find(v => v.id === videoId);
         if (cached) return cached;
     }
+    
+    try {
+        // Try RTDB first for ultra-fast loading
+        const snapshot = await rtdb.ref(`videos/${videoId}`).once('value');
+        if (snapshot.exists()) {
+            return snapshot.val();
+        }
+    } catch (err) {
+        console.warn("RTDB read failed, falling back to Firestore", err);
+    }
+    
     // Direct Firestore lookup — much faster than fetching ALL videos
     const doc = await db.collection("videos").doc(videoId).get();
     return doc.exists ? doc.data() : null;
@@ -105,12 +133,15 @@ async function getVideoById(videoId) {
 async function saveVideo(video) {
     if (!video.timestamp) video.timestamp = Date.now();
     await db.collection("videos").doc(video.id).set(video);
+    await rtdb.ref(`videos/${video.id}`).set(video); // RTDB Sync
     invalidateCache('videos');
 }
 
 async function saveBatchVideos(videosArray) {
     // Firestore batch writes — up to 500 per batch, much faster than individual writes
     const batchSize = 450;
+    const rtdbUpdates = {}; // RTDB batch updates
+
     for (let i = 0; i < videosArray.length; i += batchSize) {
         const batch = db.batch();
         const chunk = videosArray.slice(i, i + batchSize);
@@ -118,14 +149,24 @@ async function saveBatchVideos(videosArray) {
             if (!video.timestamp) video.timestamp = Date.now();
             const ref = db.collection("videos").doc(video.id);
             batch.set(ref, video);
+            
+            // Collect RTDB updates
+            rtdbUpdates[`videos/${video.id}`] = video;
         });
         await batch.commit();
     }
+    
+    // Save to RTDB for faster subsequent reads
+    if (Object.keys(rtdbUpdates).length > 0) {
+        await rtdb.ref().update(rtdbUpdates);
+    }
+    
     invalidateCache('videos');
 }
 
 async function deleteVideo(id) {
     await db.collection("videos").doc(id).delete();
+    await rtdb.ref(`videos/${id}`).remove(); // RTDB Sync
     invalidateCache('videos');
 }
 
