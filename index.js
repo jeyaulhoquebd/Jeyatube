@@ -48,10 +48,18 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Handle User State
     document.addEventListener('authStateChanged', async (e) => {
+        await renderSidebarChannels(); // Update sidebar on auth state change
         if (e.detail) {
             authModal.classList.add("hidden");
             if (showingHistory) {
                 await renderVideos("history");
+            }
+        } else {
+            if (showingHistory) {
+                showingHistory = false;
+                pageTitle.classList.add("hidden");
+                categoryBar.classList.remove("hidden");
+                await renderVideos("all");
             }
         }
     });
@@ -119,9 +127,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function renderSidebarChannels() {
         const channels = await getChannels();
         sidebarChannels.innerHTML = "";
+        
+        if (!currentUser) {
+            sidebarChannels.innerHTML = `<p class="text-xs text-zinc-500 px-3 py-2">Sign in to see subscriptions</p>`;
+            return;
+        }
+
+        let hasSubs = false;
         Object.keys(channels).forEach(channelName => {
-            if (channels[channelName].subscribed) {
-                const cData = channels[channelName];
+            const cData = channels[channelName];
+            if (cData.subscribedBy && cData.subscribedBy.includes(currentUser.email)) {
+                hasSubs = true;
                 const avatarHtml = cData.avatarUrl 
                     ? `<img src="${cData.avatarUrl}" class="w-6 h-6 rounded-full object-cover">`
                     : `<div class="bg-zinc-700 w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs">${channelName[0]}</div>`;
@@ -134,6 +150,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                 `;
             }
         });
+
+        if (!hasSubs) {
+            sidebarChannels.innerHTML = `<p class="text-xs text-zinc-500 px-3 py-2">No subscriptions yet.</p>`;
+        }
     }
 
     // Render Videos Grid
@@ -201,18 +221,20 @@ document.addEventListener("DOMContentLoaded", async () => {
                 avatarHtml = `<img src="${channelsMap[video.channel].avatarUrl}" class="flex-shrink-0 w-9 h-9 rounded-full object-cover mt-0.5" alt="${video.channel}" loading="lazy">`;
             }
 
+            const ytId = getYoutubeId(video.videoUrl);
             const card = document.createElement('div');
             card.className = "cursor-pointer group relative video-card-custom bg-zinc-800 rounded-xl pb-3 h-full flex flex-col";
             card.onclick = () => location.href = `watch.html?id=${video.id}`;
             card.innerHTML = `
                 <div class="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-3">
                     <img src="${video.thumbnail}" alt="${video.title}" loading="lazy" decoding="async" class="w-full h-full object-cover group-hover:scale-105 transition duration-200">
-                    <div class="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-200 z-10">
+                    <div class="video-preview-container absolute inset-0 w-full h-full bg-black z-20 pointer-events-none hidden"></div>
+                    <div class="play-icon-overlay absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-200 z-10">
                         <div class="w-12 h-12 bg-red-600/90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 scale-75 group-hover:scale-100 shadow-lg">
                             <i class="fas fa-play text-white text-sm ml-0.5"></i>
                         </div>
                     </div>
-                    <span class="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-xs font-semibold z-20">${video.duration}</span>
+                    <span class="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-xs font-semibold z-30">${video.duration}</span>
                 </div>
                 <div class="flex space-x-3 px-3 flex-1">
                     ${avatarHtml}
@@ -224,6 +246,40 @@ document.addEventListener("DOMContentLoaded", async () => {
                     </div>
                 </div>
             `;
+            
+            // Hover to play and prefetch for instant loading
+            let hoverTimeout;
+            card.addEventListener('mouseenter', () => {
+                hoverTimeout = setTimeout(() => {
+                    if (ytId) {
+                        const previewContainer = card.querySelector('.video-preview-container');
+                        if (previewContainer.innerHTML === '') {
+                            previewContainer.innerHTML = `<iframe class='w-full h-full pointer-events-none' src='https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&controls=0&modestbranding=1&showinfo=0' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe>`;
+                        }
+                        previewContainer.classList.remove('hidden');
+                        card.querySelector('.play-icon-overlay').classList.add('hidden');
+                    }
+                    // Prefetch watch page
+                    if (!document.querySelector(`link[href="watch.html?id=${video.id}"]`)) {
+                        const link = document.createElement('link');
+                        link.rel = 'prefetch';
+                        link.href = `watch.html?id=${video.id}`;
+                        document.head.appendChild(link);
+                    }
+                }, 400); // 400ms delay to prevent lag while scrolling
+            });
+            
+            card.addEventListener('mouseleave', () => {
+                clearTimeout(hoverTimeout);
+                const previewContainer = card.querySelector('.video-preview-container');
+                if (previewContainer) {
+                    previewContainer.innerHTML = '';
+                    previewContainer.classList.add('hidden');
+                }
+                const playIcon = card.querySelector('.play-icon-overlay');
+                if (playIcon) playIcon.classList.remove('hidden');
+            });
+            
             fragment.appendChild(card);
         });
 

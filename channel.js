@@ -178,24 +178,59 @@ document.addEventListener("DOMContentLoaded", async () => {
         channelVideos.innerHTML = "";
         const fragment = document.createDocumentFragment();
         videos.forEach(video => {
+            const ytId = getYoutubeId(video.videoUrl);
             const card = document.createElement('div');
             card.className = "cursor-pointer group relative video-card-custom bg-zinc-800 rounded-xl pb-3 h-full flex flex-col";
             card.onclick = () => location.href = `watch.html?id=${video.id}`;
             card.innerHTML = `
                 <div class="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-2">
                     <img src="${video.thumbnail}" alt="${video.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-200" loading="lazy" decoding="async">
-                    <div class="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-200 z-10">
+                    <div class="video-preview-container absolute inset-0 w-full h-full bg-black z-20 pointer-events-none hidden"></div>
+                    <div class="play-icon-overlay absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-200 z-10">
                         <div class="w-12 h-12 bg-red-600/90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 scale-75 group-hover:scale-100 shadow-lg">
                             <i class="fas fa-play text-white text-sm ml-0.5"></i>
                         </div>
                     </div>
-                    <span class="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-xs font-semibold z-20">${video.duration}</span>
+                    <span class="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-xs font-semibold z-30">${video.duration}</span>
                 </div>
                 <div class="px-3 flex-1">
                     <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
                     <p class="text-xs text-zinc-400 mt-1">${(video.views || 0).toLocaleString()} views • ${video.time || ''}</p>
                 </div>
             `;
+            
+            // Hover to play and prefetch for instant loading
+            let hoverTimeout;
+            card.addEventListener('mouseenter', () => {
+                hoverTimeout = setTimeout(() => {
+                    if (ytId) {
+                        const previewContainer = card.querySelector('.video-preview-container');
+                        if (previewContainer.innerHTML === '') {
+                            previewContainer.innerHTML = `<iframe class='w-full h-full pointer-events-none' src='https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&controls=0&modestbranding=1&showinfo=0' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe>`;
+                        }
+                        previewContainer.classList.remove('hidden');
+                        card.querySelector('.play-icon-overlay').classList.add('hidden');
+                    }
+                    if (!document.querySelector(`link[href="watch.html?id=${video.id}"]`)) {
+                        const link = document.createElement('link');
+                        link.rel = 'prefetch';
+                        link.href = `watch.html?id=${video.id}`;
+                        document.head.appendChild(link);
+                    }
+                }, 400);
+            });
+            
+            card.addEventListener('mouseleave', () => {
+                clearTimeout(hoverTimeout);
+                const previewContainer = card.querySelector('.video-preview-container');
+                if (previewContainer) {
+                    previewContainer.innerHTML = '';
+                    previewContainer.classList.add('hidden');
+                }
+                const playIcon = card.querySelector('.play-icon-overlay');
+                if (playIcon) playIcon.classList.remove('hidden');
+            });
+            
             fragment.appendChild(card);
         });
         channelVideos.appendChild(fragment);
