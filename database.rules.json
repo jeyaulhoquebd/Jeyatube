@@ -2,6 +2,11 @@
   "rules": {
     "videos": {
       ".read": true,
+      ".write": true,
+      ".indexOn": ["timestamp", "channel", "category"]
+    },
+    "channels": {
+      ".read": true,
       ".write": true
     }
   }

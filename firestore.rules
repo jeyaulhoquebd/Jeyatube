@@ -7,23 +7,30 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Videos collection: Public read for fast website loading
-    // Write access could be restricted to authenticated admins in a production app
+    // Videos collection: Public read for ultra-fast website loading
+    // Write allowed for admin operations (import, upload, likes, comments)
     match /videos/{videoId} {
       allow read: if true;
-      allow write: if true; // Change to 'if request.auth != null' for security
+      allow create: if true;
+      allow update: if true;
+      allow delete: if true;
     }
 
-    // Channels collection: Public read
+    // Channels collection: Public read for fast channel page loads
+    // Write allowed for subscribe/unsubscribe and admin channel management
     match /channels/{channelId} {
       allow read: if true;
-      allow write: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if true;
     }
 
-    // Categories collection: Public read
+    // Categories collection: Public read for homepage category bar
     match /categories/{categoryId} {
       allow read: if true;
-      allow write: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if true;
     }
 
     // Users collection: Users can read and write only their own data
@@ -34,6 +41,12 @@ service cloud.firestore {
       match /history/{historyId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
+    }
+
+    // Feedback collection: Anyone can submit feedback
+    match /feedback/{feedbackId} {
+      allow read: if false;
+      allow create: if true;
     }
   }
 }

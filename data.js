@@ -35,7 +35,7 @@ const _cache = {
     channelsTimestamp: 0,
     categories: null,
     categoriesTimestamp: 0,
-    TTL: 30000 // 30 seconds cache TTL
+    TTL: 120000 // 2 minutes cache TTL for snappy repeat reads
 };
 
 function isCacheValid(key) {
@@ -76,7 +76,7 @@ async function logoutUser() {
     return await auth.signOut();
 }
 
-// ===== VIDEO FUNCTIONS (Firestore-only, cached) =====
+// ===== VIDEO FUNCTIONS (Firestore + RTDB, cached) =====
 
 async function getVideos() {
     if (isCacheValid('videos')) return _cache.videos;
@@ -132,8 +132,11 @@ async function getVideoById(videoId) {
 
 async function saveVideo(video) {
     if (!video.timestamp) video.timestamp = Date.now();
-    await db.collection("videos").doc(video.id).set(video);
-    await rtdb.ref(`videos/${video.id}`).set(video); // RTDB Sync
+    // Write to both Firestore and RTDB in parallel
+    await Promise.all([
+        db.collection("videos").doc(video.id).set(video),
+        rtdb.ref(`videos/${video.id}`).set(video)
+    ]);
     invalidateCache('videos');
 }
 
@@ -165,15 +168,31 @@ async function saveBatchVideos(videosArray) {
 }
 
 async function deleteVideo(id) {
-    await db.collection("videos").doc(id).delete();
-    await rtdb.ref(`videos/${id}`).remove(); // RTDB Sync
+    // Delete from both in parallel
+    await Promise.all([
+        db.collection("videos").doc(id).delete(),
+        rtdb.ref(`videos/${id}`).remove()
+    ]);
     invalidateCache('videos');
 }
 
-// ===== CHANNEL FUNCTIONS =====
+// ===== CHANNEL FUNCTIONS (Firestore + RTDB, cached) =====
 
 async function getChannels() {
     if (isCacheValid('channels')) return _cache.channels;
+    
+    try {
+        // Try RTDB first for ultra-fast loading
+        const snapshot = await rtdb.ref('channels').once('value');
+        if (snapshot.exists()) {
+            const channels = snapshot.val();
+            _cache.channels = channels;
+            _cache.channelsTimestamp = Date.now();
+            return channels;
+        }
+    } catch (err) {
+        console.warn("RTDB channels read failed, falling back to Firestore", err);
+    }
     
     const snapshot = await db.collection("channels").get();
     let channels = {};
@@ -186,7 +205,11 @@ async function getChannels() {
 }
 
 async function saveChannel(channelName, channelData) {
-    await db.collection("channels").doc(channelName).set(channelData, { merge: true });
+    // Write to both Firestore and RTDB in parallel for fast reads
+    await Promise.all([
+        db.collection("channels").doc(channelName).set(channelData, { merge: true }),
+        rtdb.ref(`channels/${channelName}`).update(channelData)
+    ]);
     invalidateCache('channels');
 }
 
@@ -195,11 +218,29 @@ async function getChannel(channelName) {
     if (isCacheValid('channels') && _cache.channels[channelName]) {
         return _cache.channels[channelName];
     }
+    
+    try {
+        // Try RTDB first
+        const snapshot = await rtdb.ref(`channels/${channelName}`).once('value');
+        if (snapshot.exists()) {
+            return snapshot.val();
+        }
+    } catch (err) {
+        console.warn("RTDB channel read failed, falling back to Firestore", err);
+    }
+    
     const doc = await db.collection("channels").doc(channelName).get();
     return doc.exists ? doc.data() : null;
 }
 
 async function getVideosByChannel(channelName) {
+    // Use in-memory cache if available — avoids a Firestore query entirely
+    if (isCacheValid('videos')) {
+        return _cache.videos
+            .filter(v => v.channel === channelName)
+            .sort((a, b) => b.timestamp - a.timestamp);
+    }
+    
     const snapshot = await db.collection("videos").where("channel", "==", channelName).get();
     let videos = [];
     snapshot.forEach(doc => videos.push(doc.data()));
@@ -211,6 +252,8 @@ async function incrementView(videoId) {
     await videoRef.update({
         views: firebase.firestore.FieldValue.increment(1)
     });
+    // Also increment in RTDB (fire and forget for speed)
+    rtdb.ref(`videos/${videoId}/views`).transaction(current => (current || 0) + 1);
     invalidateCache('videos');
 }
 
@@ -252,6 +295,20 @@ async function getHistory() {
 }
 
 async function getPlaylists() {
+    // Use cache to avoid extra Firestore query
+    if (isCacheValid('videos')) {
+        let playlistsMap = {};
+        _cache.videos.forEach(data => {
+            if (data.playlist && data.playlist.trim() !== "") {
+                if (!playlistsMap[data.playlist]) {
+                    playlistsMap[data.playlist] = { name: data.playlist, videos: [], thumbnail: data.thumbnail, channel: data.channel };
+                }
+                playlistsMap[data.playlist].videos.push(data);
+            }
+        });
+        return Object.values(playlistsMap);
+    }
+    
     const snapshot = await db.collection("videos").where("playlist", "!=", "").get();
     let playlistsMap = {};
     snapshot.forEach(doc => {

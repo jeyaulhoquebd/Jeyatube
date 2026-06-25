@@ -180,6 +180,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             videosToRender = interleaved;
         }
 
+        // Build all cards as a document fragment for maximum DOM performance
+        const fragment = document.createDocumentFragment();
+
         videosToRender.forEach(video => {
             let qualityBadgeHtml = "";
             if (video.contentQuality) {
@@ -193,35 +196,38 @@ document.addEventListener("DOMContentLoaded", async () => {
                 `;
             }
 
-            const ytId = getYoutubeId(video.videoUrl);
-            const previewHtml = ytId ? `<iframe class='w-full h-full pointer-events-none' src='https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0&controls=0&modestbranding=1&showinfo=0' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe>` : "";
-
             let avatarHtml = `<div class="flex-shrink-0 bg-zinc-700 w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm mt-0.5">${video.channel[0]}</div>`;
             if (channelsMap[video.channel] && channelsMap[video.channel].avatarUrl) {
-                avatarHtml = `<img src="${channelsMap[video.channel].avatarUrl}" class="flex-shrink-0 w-9 h-9 rounded-full object-cover mt-0.5" alt="${video.channel}">`;
+                avatarHtml = `<img src="${channelsMap[video.channel].avatarUrl}" class="flex-shrink-0 w-9 h-9 rounded-full object-cover mt-0.5" alt="${video.channel}" loading="lazy">`;
             }
 
-            videoGrid.innerHTML += `
-                <div class="cursor-pointer group relative video-card-custom bg-zinc-800 rounded-xl pb-3 h-full flex flex-col" onclick="location.href='watch.html?id=${video.id}'"
-                     onmouseenter="this.querySelector('.video-preview').innerHTML = \`${previewHtml}\`"
-                     onmouseleave="this.querySelector('.video-preview').innerHTML = ''">
-                    <div class="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-3">
-                        <img src="${video.thumbnail}" alt="${video.title}" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition duration-200">
-                        <div class="video-preview absolute inset-0 w-full h-full bg-black z-10 pointer-events-none empty:hidden"></div>
-                        <span class="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-xs font-semibold z-20">${video.duration}</span>
-                    </div>
-                    <div class="flex space-x-3 px-3 flex-1">
-                        ${avatarHtml}
-                        <div class="flex-1 min-w-0">
-                            ${qualityBadgeHtml}
-                            <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
-                            <p class="text-xs text-zinc-400 mt-1 hover:text-zinc-200 truncate cursor-pointer" onclick="event.stopPropagation(); location.href='channel.html?name=${encodeURIComponent(video.channel)}'">${video.channel}</p>
-                            <p class="text-xs text-zinc-400 mt-0.5">${(video.views || 0).toLocaleString()} views • ${video.time}</p>
+            const card = document.createElement('div');
+            card.className = "cursor-pointer group relative video-card-custom bg-zinc-800 rounded-xl pb-3 h-full flex flex-col";
+            card.onclick = () => location.href = `watch.html?id=${video.id}`;
+            card.innerHTML = `
+                <div class="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-3">
+                    <img src="${video.thumbnail}" alt="${video.title}" loading="lazy" decoding="async" class="w-full h-full object-cover group-hover:scale-105 transition duration-200">
+                    <div class="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-200 z-10">
+                        <div class="w-12 h-12 bg-red-600/90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 scale-75 group-hover:scale-100 shadow-lg">
+                            <i class="fas fa-play text-white text-sm ml-0.5"></i>
                         </div>
+                    </div>
+                    <span class="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-xs font-semibold z-20">${video.duration}</span>
+                </div>
+                <div class="flex space-x-3 px-3 flex-1">
+                    ${avatarHtml}
+                    <div class="flex-1 min-w-0">
+                        ${qualityBadgeHtml}
+                        <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
+                        <p class="text-xs text-zinc-400 mt-1 hover:text-zinc-200 truncate cursor-pointer" onclick="event.stopPropagation(); location.href='channel.html?name=${encodeURIComponent(video.channel)}'">${video.channel}</p>
+                        <p class="text-xs text-zinc-400 mt-0.5">${(video.views || 0).toLocaleString()} views • ${video.time}</p>
                     </div>
                 </div>
             `;
+            fragment.appendChild(card);
         });
+
+        videoGrid.appendChild(fragment);
     }
 
     historyBtn.addEventListener("click", async (e) => {

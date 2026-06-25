@@ -372,14 +372,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                             vidData.items.forEach(v => { durationMap[v.id] = v.contentDetails.duration; });
                         }
 
-                        // FILTER: Only keep videos LONGER than 3 minutes (180 seconds)
+                        // FILTER: Only keep videos LONGER than 1 minute (60 seconds)
                         const filtered = data.items.filter(item => {
                             const dStr = durationMap[item.contentDetails.videoId];
                             if (!dStr) return false;
                             const totalSeconds = parseDurationToSeconds(dStr);
                             
-                            // Skip videos shorter than 3 minutes
-                            if (totalSeconds < 180) return false;
+                            // Skip videos shorter than 1 minute
+                            if (totalSeconds < 60) return false;
                             
                             item._durationText = formatDuration(totalSeconds);
                             item._durationSeconds = totalSeconds;
@@ -455,8 +455,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         const videos = await fetchYouTubeVideos(targetPlaylistId);
         if (videos && videos.length > 0) {
-            showProgress(60, `Found ${videos.length} videos (>3 min). Saving to Firestore...`);
-            ytStatus.textContent = `Found ${videos.length} videos longer than 3 minutes. Saving to database...`;
+            showProgress(60, `Found ${videos.length} videos (>1 min). Saving to Firestore...`);
+            ytStatus.textContent = `Found ${videos.length} videos longer than 1 minute. Saving to database...`;
 
             // Check existing videos to avoid duplicates
             const existingVideos = await getVideos();
@@ -516,7 +516,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             setTimeout(hideProgress, 3000);
         } else if (videos && videos.length === 0) {
-            ytStatus.textContent = "No videos found longer than 3 minutes.";
+            ytStatus.textContent = "No videos found longer than 1 minute.";
             ytStatus.className = "text-xs font-bold text-yellow-400";
             hideProgress();
         }
