@@ -127,7 +127,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     videoTitle.textContent = video.title;
-    channelAvatar.textContent = video.channel[0];
+    const currentChannelData = channels[video.channel];
+    if (currentChannelData && currentChannelData.avatarUrl) {
+        channelAvatar.innerHTML = `<img src="${currentChannelData.avatarUrl}" class="w-full h-full object-cover rounded-full" alt="${video.channel}">`;
+    } else {
+        channelAvatar.textContent = video.channel[0];
+    }
     channelName.textContent = video.channel;
     videoMeta.textContent = `${video.views} views • ${video.time}`;
     
@@ -235,7 +240,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         updateInteractionsUI();
     });
 
-    subscribeBtn.addEventListener("click", async () => {
+    subscribeBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
         if (!currentUser) return openAuthModal();
         let currentChannel = channels[video.channel];
         if (!currentChannel) {
