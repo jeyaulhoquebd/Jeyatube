@@ -177,6 +177,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         
         if (filterCategory === "history") {
             videosToRender = await getHistory();
+        } else if (filterCategory === "playlists") {
+            const videos = await getVideos();
+            videosToRender = videos.filter(v => v.playlist && v.playlist.trim() !== "");
         } else {
             const videos = await getVideos();
             videosToRender = filterCategory === "all" 
@@ -265,7 +268,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             <p class="text-xs truncate">${video.channel}</p>
                             <img src="img/icons.svg" class="w-3 h-3 flex-shrink-0" alt="Verified" title="Verified">
                         </div>
-                        <p class="text-xs text-zinc-400 mt-0.5">${(video.views || 0).toLocaleString()} views • ${video.time}</p>
+                        <p class="text-xs text-zinc-400 mt-0.5">${(video.views || 0).toLocaleString()} views • ${timeAgo(video.timestamp)}</p>
                     </div>
                 </div>
             `;
@@ -318,9 +321,22 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         showingHistory = true;
         pageTitle.classList.remove("hidden");
+        pageTitle.textContent = "Your History";
         categoryBar.classList.add("hidden");
         await renderVideos("history");
     });
+    
+    const sidebarPlaylistsBtn = document.getElementById("sidebar-playlists-btn");
+    if (sidebarPlaylistsBtn) {
+        sidebarPlaylistsBtn.addEventListener("click", async (e) => {
+            e.preventDefault();
+            showingHistory = false;
+            pageTitle.classList.remove("hidden");
+            pageTitle.textContent = "Playlist Videos";
+            categoryBar.classList.add("hidden");
+            await renderVideos("playlists");
+        });
+    }
 
     async function renderCategories() {
         const categories = await getCategories();
@@ -344,11 +360,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 e.target.classList.replace("text-white", "text-black");
 
                 const cat = e.target.dataset.category;
-                if (cat === "playlists") {
-                    window.location.href = "playlists.html";
-                } else {
-                    await renderVideos(cat);
-                }
+                await renderVideos(cat);
             });
         });
     }

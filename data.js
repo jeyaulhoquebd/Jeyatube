@@ -368,6 +368,37 @@ function parseLinks(text) {
     });
 }
 
+function timeAgo(timestamp) {
+    if (!timestamp) return "Just now";
+    const seconds = Math.floor((Date.now() - timestamp) / 1000);
+    let interval = seconds / 31536000;
+    if (interval >= 1) {
+        const val = Math.floor(interval);
+        return val + (val === 1 ? " year ago" : " years ago");
+    }
+    interval = seconds / 2592000;
+    if (interval >= 1) {
+        const val = Math.floor(interval);
+        return val + (val === 1 ? " month ago" : " months ago");
+    }
+    interval = seconds / 86400;
+    if (interval >= 1) {
+        const val = Math.floor(interval);
+        return val + (val === 1 ? " day ago" : " days ago");
+    }
+    interval = seconds / 3600;
+    if (interval >= 1) {
+        const val = Math.floor(interval);
+        return val + (val === 1 ? " hour ago" : " hours ago");
+    }
+    interval = seconds / 60;
+    if (interval >= 1) {
+        const val = Math.floor(interval);
+        return val + (val === 1 ? " minute ago" : " minutes ago");
+    }
+    return "Just now";
+}
+
 // Seed initial data if empty
 async function initializeDatabase() {
     try {

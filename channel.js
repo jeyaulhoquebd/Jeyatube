@@ -195,7 +195,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </div>
                 <div class="px-3 flex-1">
                     <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
-                    <p class="text-xs text-zinc-400 mt-1">${(video.views || 0).toLocaleString()} views • ${video.time || ''}</p>
+                    <p class="text-xs text-zinc-400 mt-1">${(video.views || 0).toLocaleString()} views • ${timeAgo(video.timestamp)}</p>
                 </div>
             `;
             
@@ -326,7 +326,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             </div>
                             <div class="flex-1 min-w-0">
                                 <h4 class="font-semibold text-sm text-zinc-100 line-clamp-2 group-hover:text-white">${v.title}</h4>
-                                <p class="text-xs text-zinc-500 mt-1">${(v.views || 0).toLocaleString()} views • ${v.time || ''}</p>
+                                <p class="text-xs text-zinc-500 mt-1">${(v.views || 0).toLocaleString()} views • ${timeAgo(v.timestamp)}</p>
                             </div>
                         </div>
                     `).join('')}

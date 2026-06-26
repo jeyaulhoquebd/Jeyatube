@@ -135,7 +135,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         channelAvatar.textContent = video.channel[0];
     }
     channelName.textContent = video.channel;
-    videoMeta.textContent = `${video.views} views • ${video.time}`;
+    videoMeta.textContent = `${video.views} views • ${timeAgo(video.timestamp)}`;
     
     function renderDescription() {
         const descText = video.description || "";
