@@ -119,9 +119,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // Toggle Responsive Mobile Sidebar
-    menuBtn.addEventListener("click", () => {
+    const sidebarOverlay = document.getElementById("sidebar-overlay");
+    
+    function toggleSidebar() {
         sidebar.classList.toggle("-translate-x-full");
-    });
+        if (sidebarOverlay) {
+            sidebarOverlay.classList.toggle("hidden");
+        }
+    }
+
+    menuBtn.addEventListener("click", toggleSidebar);
+
+    if (sidebarOverlay) {
+        sidebarOverlay.addEventListener("click", toggleSidebar);
+    }
 
     // Populate Sidebar with Subscribed channels
     async function renderSidebarChannels() {
@@ -201,6 +212,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             }
             videosToRender = interleaved;
+        }
+
+        // Shuffle the videos to show a random order on each reload, while keeping the same number of videos
+        for (let i = videosToRender.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [videosToRender[i], videosToRender[j]] = [videosToRender[j], videosToRender[i]];
         }
 
         // Build all cards as a document fragment for maximum DOM performance

@@ -40,6 +40,9 @@
     </header>
 
     <div class="flex">
+        <!-- Sidebar overlay for mobile -->
+        <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-30 hidden md:hidden"></div>
+        
         <aside id="sidebar" class="fixed md:sticky top-[61px] h-[calc(100vh-61px)] bg-zinc-900 w-64 border-r border-zinc-800 transition-transform -translate-x-full md:translate-x-0 z-40 overflow-y-auto">
             <nav class="p-4 space-y-1">
                 <a href="#" class="flex items-center space-x-4 p-3 bg-zinc-800 rounded-xl font-medium"><i class="fas fa-home text-lg w-6"></i> <span>Home</span></a>
