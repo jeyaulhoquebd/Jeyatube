@@ -494,3 +494,21 @@ async function initializeDatabase() {
 }
 
 initializeDatabase();
+
+// Fetch and append country code to logo
+document.addEventListener('DOMContentLoaded', () => {
+    fetch('https://api.country.is')
+        .then(res => res.json())
+        .then(data => {
+            if (data.country) {
+                const brandLogos = document.querySelectorAll('.brand-logo-text');
+                brandLogos.forEach(logo => {
+                    const span = document.createElement('span');
+                    span.className = 'text-[10px] text-zinc-400 font-medium ml-1 self-start mt-0.5';
+                    span.textContent = data.country;
+                    logo.parentElement.appendChild(span);
+                });
+            }
+        })
+        .catch(err => console.log('Location fetch failed', err));
+});
