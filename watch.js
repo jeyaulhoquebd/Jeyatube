@@ -307,6 +307,28 @@ document.addEventListener("DOMContentLoaded", async () => {
         commentInput.value = "";
     });
 
+    // Auto-rotate on fullscreen for mobile
+    function handleFullscreenChange() {
+        const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+        
+        if (isFullscreen) {
+            // Attempt to lock to landscape on mobile when entering fullscreen
+            if (screen.orientation && screen.orientation.lock) {
+                screen.orientation.lock('landscape').catch((err) => {
+                    console.log('Orientation lock failed:', err);
+                });
+            }
+        } else {
+            // Unlock orientation when exiting fullscreen
+            if (screen.orientation && screen.orientation.unlock) {
+                screen.orientation.unlock();
+            }
+        }
+    }
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
+
     updateInteractionsUI();
     await renderRecommendations();
 });
