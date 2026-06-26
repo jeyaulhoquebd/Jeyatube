@@ -8,6 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const profileForm = document.getElementById("profile-form");
     const cancelEditBtn = document.getElementById("cancel-edit-btn");
     const historyGrid = document.getElementById("history-grid");
+    const savedGrid = document.getElementById("saved-grid");
     
     const pAvatarUrl = document.getElementById("p-avatar-url");
     const pCoverUrl = document.getElementById("p-cover-url");
@@ -16,6 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (e.detail) {
             loadProfile(e.detail);
             loadHistory();
+            loadSavedVideos(e.detail);
         } else {
             window.location.href = "index.html"; // Not logged in
         }
@@ -53,6 +55,36 @@ document.addEventListener("DOMContentLoaded", () => {
 
         history.forEach(video => {
             historyGrid.innerHTML += `
+                <div class="cursor-pointer group relative" onclick="location.href='watch.html?id=${video.id}'">
+                    <div class="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-2">
+                        <img src="${video.thumbnail}" alt="${video.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-200">
+                        <span class="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-xs font-semibold z-20">${video.duration}</span>
+                    </div>
+                    <div>
+                        <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
+                        <div class="flex items-center space-x-1 mt-1">
+                            <p class="text-xs text-zinc-400 truncate">${video.channel}</p>
+                            <img src="img/icons.svg" class="w-3 h-3 flex-shrink-0" alt="Verified" title="Verified">
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    async function loadSavedVideos(user) {
+        const videos = await getVideos();
+        const savedVideos = videos.filter(v => v.savedBy && v.savedBy.includes(user.email));
+        
+        savedGrid.innerHTML = "";
+        
+        if (savedVideos.length === 0) {
+            savedGrid.innerHTML = `<p class="col-span-full text-zinc-500 py-4">No saved videos yet.</p>`;
+            return;
+        }
+
+        savedVideos.forEach(video => {
+            savedGrid.innerHTML += `
                 <div class="cursor-pointer group relative" onclick="location.href='watch.html?id=${video.id}'">
                     <div class="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-2">
                         <img src="${video.thumbnail}" alt="${video.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-200">

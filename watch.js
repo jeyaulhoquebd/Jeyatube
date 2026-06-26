@@ -21,6 +21,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const subscribeBtn = document.getElementById("subscribe-btn");
     const likeBtn = document.getElementById("like-btn");
     const likeCount = document.getElementById("like-count");
+    const saveBtn = document.getElementById("save-btn");
     const videoMeta = document.getElementById("video-meta");
     const videoDesc = document.getElementById("video-desc");
     const commentsList = document.getElementById("comments-list");
@@ -182,6 +183,16 @@ document.addEventListener("DOMContentLoaded", async () => {
             icon.className = "far fa-thumbs-up";
         }
 
+        const isSaved = video.savedBy && currentUser && video.savedBy.includes(currentUser.email);
+        const saveIcon = saveBtn.querySelector("i");
+        if (isSaved) {
+            saveIcon.className = "fas fa-bookmark text-blue-500";
+            saveBtn.querySelector("span").textContent = "Saved";
+        } else {
+            saveIcon.className = "far fa-bookmark";
+            saveBtn.querySelector("span").textContent = "Save";
+        }
+
         commentCount.textContent = video.comments ? video.comments.length : 0;
         renderComments();
     }
@@ -235,6 +246,20 @@ document.addEventListener("DOMContentLoaded", async () => {
             video.likedBy.splice(index, 1);
         } else {
             video.likedBy.push(currentUser.email);
+        }
+        await saveVideo(video);
+        updateInteractionsUI();
+    });
+
+    saveBtn.addEventListener("click", async () => {
+        if (!currentUser) return openAuthModal();
+        if (!video.savedBy) video.savedBy = [];
+        
+        const index = video.savedBy.indexOf(currentUser.email);
+        if (index > -1) {
+            video.savedBy.splice(index, 1);
+        } else {
+            video.savedBy.push(currentUser.email);
         }
         await saveVideo(video);
         updateInteractionsUI();
