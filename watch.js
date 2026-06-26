@@ -210,7 +210,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                     </div>
                     <div class="flex-1">
                         <h4 class="text-xs font-semibold line-clamp-2 text-zinc-100 leading-snug group-hover:text-white">${v.title}</h4>
-                        <p class="text-[11px] text-zinc-400 mt-1">${v.channel}</p>
+                        <div class="flex items-center space-x-1 mt-1">
+                            <p class="text-[11px] text-zinc-400 truncate">${v.channel}</p>
+                            <img src="img/icons.svg" class="w-3 h-3 flex-shrink-0" alt="Verified" title="Verified">
+                        </div>
                         <p class="text-[11px] text-zinc-400">${(v.views || 0).toLocaleString()} views</p>
                     </div>
                 </div>

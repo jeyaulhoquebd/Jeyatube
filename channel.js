@@ -303,8 +303,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             <div class="max-w-4xl mx-auto w-full flex-1 flex flex-col overflow-hidden">
                 <div class="px-6 py-5 border-b border-zinc-800 flex justify-between items-center flex-shrink-0">
                     <div>
-                        <h2 class="text-xl font-black text-white">${plName}</h2>
-                        <p class="text-xs text-zinc-400 mt-0.5">${channelNameParam} • ${plVideos.length} video${plVideos.length !== 1 ? 's' : ''}</p>
+                        <div class="flex items-center space-x-2">
+                            <h2 class="text-xl font-black text-white">${plName}</h2>
+                        </div>
+                        <div class="flex items-center space-x-1 mt-0.5">
+                            <p class="text-xs text-zinc-400">${channelNameParam}</p>
+                            <img src="img/icons.svg" class="w-3 h-3 flex-shrink-0" alt="Verified" title="Verified">
+                            <p class="text-xs text-zinc-400">• ${plVideos.length} video${plVideos.length !== 1 ? 's' : ''}</p>
+                        </div>
                     </div>
                     <button onclick="document.getElementById('playlist-modal-overlay').remove()" class="text-zinc-400 hover:text-white transition p-2">
                         <i class="fas fa-times text-xl"></i>

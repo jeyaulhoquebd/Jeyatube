@@ -60,7 +60,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     </div>
                     <div>
                         <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
-                        <p class="text-xs text-zinc-400 mt-1">${video.channel}</p>
+                        <div class="flex items-center space-x-1 mt-1">
+                            <p class="text-xs text-zinc-400 truncate">${video.channel}</p>
+                            <img src="img/icons.svg" class="w-3 h-3 flex-shrink-0" alt="Verified" title="Verified">
+                        </div>
                     </div>
                 </div>
             `;

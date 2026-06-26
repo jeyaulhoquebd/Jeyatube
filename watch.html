@@ -29,7 +29,10 @@
                 <div class="flex items-center space-x-3 cursor-pointer group" onclick="location.href='channel.html?name=' + encodeURIComponent(document.getElementById('channel-name').textContent)">
                     <div id="channel-avatar" class="bg-zinc-700 w-10 h-10 rounded-full flex items-center justify-center font-bold flex-shrink-0">J</div>
                     <div>
-                        <h4 id="channel-name" class="font-bold text-sm group-hover:text-zinc-300 transition">Channel Name</h4>
+                        <div class="flex items-center space-x-1">
+                            <h4 id="channel-name" class="font-bold text-sm group-hover:text-zinc-300 transition">Channel Name</h4>
+                            <img src="img/icons.svg" class="w-3.5 h-3.5" alt="Verified" title="Verified">
+                        </div>
                         <p id="channel-subs" class="text-xs text-zinc-400">0 subscribers</p>
                     </div>
                     <button id="subscribe-btn" class="ml-4 bg-white text-black px-4 py-2 rounded-full font-semibold text-xs md:text-sm hover:bg-zinc-200 transition">

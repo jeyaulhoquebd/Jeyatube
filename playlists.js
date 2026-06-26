@@ -37,7 +37,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                     </div>
                     <div class="flex-1">
                         <h4 class="font-bold text-sm text-zinc-100 line-clamp-2">${v.title}</h4>
-                        <p class="text-xs text-zinc-400 mt-1">${v.channel}</p>
+                        <div class="flex items-center space-x-1 mt-1">
+                            <p class="text-xs text-zinc-400 truncate">${v.channel}</p>
+                            <img src="img/icons.svg" class="w-3 h-3 flex-shrink-0" alt="Verified" title="Verified">
+                        </div>
                     </div>
                 </div>
             `;
@@ -60,7 +63,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </div>
                 <div>
                     <h3 class="font-bold text-base line-clamp-1 text-zinc-100 group-hover:text-white">${p.name}</h3>
-                    <p class="text-sm text-zinc-400 mt-0.5">${p.channel}</p>
+                    <div class="flex items-center space-x-1 mt-0.5">
+                        <p class="text-sm text-zinc-400 truncate">${p.channel}</p>
+                        <img src="img/icons.svg" class="w-3.5 h-3.5 flex-shrink-0" alt="Verified" title="Verified">
+                    </div>
                 </div>
             </div>
         `;

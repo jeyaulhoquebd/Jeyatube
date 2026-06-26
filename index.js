@@ -145,7 +145,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                 sidebarChannels.innerHTML += `
                     <a href="channel.html?name=${encodeURIComponent(channelName)}" class="flex items-center space-x-3 p-2 hover:bg-zinc-800 rounded-xl text-zinc-300 transition">
                         ${avatarHtml}
-                        <span class="text-sm truncate">${channelName}</span>
+                        <div class="flex items-center space-x-1 min-w-0">
+                            <span class="text-sm truncate">${channelName}</span>
+                            <img src="img/icons.svg" class="w-3.5 h-3.5 flex-shrink-0" alt="Verified" title="Verified">
+                        </div>
                     </a>
                 `;
             }
@@ -241,7 +244,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                     <div class="flex-1 min-w-0">
                         ${qualityBadgeHtml}
                         <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
-                        <p class="text-xs text-zinc-400 mt-1 hover:text-zinc-200 truncate cursor-pointer" onclick="event.stopPropagation(); location.href='channel.html?name=${encodeURIComponent(video.channel)}'">${video.channel}</p>
+                        <div class="flex items-center space-x-1 mt-1 text-zinc-400 hover:text-zinc-200 cursor-pointer w-fit" onclick="event.stopPropagation(); location.href='channel.html?name=${encodeURIComponent(video.channel)}'">
+                            <p class="text-xs truncate">${video.channel}</p>
+                            <img src="img/icons.svg" class="w-3 h-3 flex-shrink-0" alt="Verified" title="Verified">
+                        </div>
                         <p class="text-xs text-zinc-400 mt-0.5">${(video.views || 0).toLocaleString()} views • ${video.time}</p>
                     </div>
                 </div>
