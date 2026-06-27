@@ -27,45 +27,52 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Load admin dashboard
     async function loadAdminDashboard() {
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="4" class="text-center py-10 text-zinc-400">
+                    <i class="fas fa-spinner fa-spin mr-2"></i> Loading videos...
+                </td>
+            </tr>`;
+
         await loadChannelsForAdmin();
         const videos = await getVideos();
         const count = videos.length;
         videoCount.textContent = count;
         sidebarVideoCount.textContent = count;
-        tableBody.innerHTML = "";
 
         if (videos.length === 0) {
             tableBody.innerHTML = `
                 <tr>
                     <td colspan="4" class="text-center py-10 text-zinc-500 italic">No videos in database. Upload one first!</td>
                 </tr>`;
-            return;
+        } else {
+            let html = "";
+            videos.forEach(video => {
+                html += `
+                    <tr class="hover:bg-zinc-800/30 transition">
+                        <td class="px-5 py-3.5 flex items-center space-x-3 min-w-[200px]">
+                            <img src="${video.thumbnail}" class="w-16 aspect-video object-cover rounded-lg bg-zinc-700 flex-shrink-0" loading="lazy">
+                            <div class="truncate max-w-[200px]">
+                                <p class="font-semibold text-white truncate text-xs sm:text-sm">${video.title}</p>
+                                <p class="text-[11px] text-zinc-500 sm:hidden">${video.channel}</p>
+                                <p class="text-[11px] text-zinc-600">${video.views?.toLocaleString() || 0} views</p>
+                            </div>
+                        </td>
+                        <td class="px-5 py-3.5 text-zinc-400 text-xs hidden sm:table-cell">${video.channel}</td>
+                        <td class="px-5 py-3.5">
+                            <span class="bg-zinc-900 border border-zinc-700 px-2.5 py-1 rounded-full text-xs text-zinc-400">${video.category}</span>
+                        </td>
+                        <td class="px-5 py-3.5 text-center">
+                            <button onclick="deleteVideoHandler('${video.id}')" title="Delete video"
+                                    class="text-zinc-500 hover:text-red-400 hover:bg-red-500/10 p-2 rounded-full transition">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+            tableBody.innerHTML = html;
         }
-
-        videos.forEach(video => {
-            tableBody.innerHTML += `
-                <tr class="hover:bg-zinc-800/30 transition">
-                    <td class="px-5 py-3.5 flex items-center space-x-3 min-w-[200px]">
-                        <img src="${video.thumbnail}" class="w-16 aspect-video object-cover rounded-lg bg-zinc-700 flex-shrink-0" loading="lazy">
-                        <div class="truncate max-w-[200px]">
-                            <p class="font-semibold text-white truncate text-xs sm:text-sm">${video.title}</p>
-                            <p class="text-[11px] text-zinc-500 sm:hidden">${video.channel}</p>
-                            <p class="text-[11px] text-zinc-600">${video.views?.toLocaleString() || 0} views</p>
-                        </div>
-                    </td>
-                    <td class="px-5 py-3.5 text-zinc-400 text-xs hidden sm:table-cell">${video.channel}</td>
-                    <td class="px-5 py-3.5">
-                        <span class="bg-zinc-900 border border-zinc-700 px-2.5 py-1 rounded-full text-xs text-zinc-400">${video.category}</span>
-                    </td>
-                    <td class="px-5 py-3.5 text-center">
-                        <button onclick="deleteVideoHandler('${video.id}')" title="Delete video"
-                                class="text-zinc-500 hover:text-red-400 hover:bg-red-500/10 p-2 rounded-full transition">
-                            <i class="fas fa-trash-alt"></i>
-                        </button>
-                    </td>
-                </tr>
-            `;
-        });
 
         // Load Categories
         await loadCategoriesForAdmin();
