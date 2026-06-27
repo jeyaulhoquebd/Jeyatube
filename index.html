@@ -24,18 +24,22 @@
             </a>
         </div>
         
-        <div class="flex-1 max-w-xl mx-4 hidden sm:block">
-            <div class="flex bg-zinc-800 border border-zinc-700 rounded-full overflow-hidden">
-                <input type="text" id="search-input" placeholder="Search..." class="w-full bg-transparent px-4 py-2 focus:outline-none text-sm text-white">
-                <button id="search-btn" class="bg-zinc-700 px-6 hover:bg-zinc-600 border-l border-zinc-700">
-                    <i class="fas fa-search text-zinc-400"></i>
+        <div class="flex-1 max-w-xl mx-4 relative hidden sm:block" id="search-container">
+            <div class="flex bg-zinc-800/80 border border-zinc-700 rounded-full overflow-hidden focus-within:border-red-500/60 focus-within:shadow-lg focus-within:shadow-red-500/10 transition-all duration-300">
+                <input type="text" id="search-input" placeholder="Search videos, channels..." autocomplete="off" class="w-full bg-transparent px-5 py-2.5 focus:outline-none text-sm text-white placeholder-zinc-500">
+                <button id="search-btn" class="bg-zinc-700/80 px-5 hover:bg-red-600 border-l border-zinc-700 transition-colors duration-200 group">
+                    <i class="fas fa-search text-zinc-400 group-hover:text-white transition-colors"></i>
                 </button>
+            </div>
+            <!-- Live Search Dropdown -->
+            <div id="search-dropdown" class="absolute top-full mt-2 left-0 right-0 bg-zinc-900 border border-zinc-700/80 rounded-2xl shadow-2xl shadow-black/50 z-50 hidden overflow-hidden backdrop-blur-lg">
+                <div id="search-results-list" class="max-h-[420px] overflow-y-auto"></div>
             </div>
         </div>
 
         <div class="flex items-center space-x-3">
-            <button class="p-2 hover:bg-zinc-800 rounded-full sm:hidden"><i class="fas fa-search"></i></button>
-            <a href="profile.html" title="Your Profile" class="bg-purple-600 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm text-white hover:opacity-80 transition">U</a>
+            <button id="mobile-search-btn" class="p-2 hover:bg-zinc-800 rounded-full sm:hidden transition"><i class="fas fa-search"></i></button>
+            <a href="profile.html" title="Your Profile" id="header-profile-avatar" class="bg-purple-600 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm text-white hover:opacity-80 transition">U</a>
         </div>
     </header>
 
@@ -65,7 +69,22 @@
         </aside>
 
         <main class="flex-1 p-4 md:p-6 overflow-x-hidden">
+            <!-- Mobile Search Bar -->
+            <div id="mobile-search-bar" class="hidden sm:hidden mb-4">
+                <div class="flex bg-zinc-800/80 border border-zinc-700 rounded-full overflow-hidden focus-within:border-red-500/60 transition-all duration-300">
+                    <input type="text" id="mobile-search-input" placeholder="Search videos, channels..." autocomplete="off" class="w-full bg-transparent px-5 py-2.5 focus:outline-none text-sm text-white placeholder-zinc-500">
+                    <button id="mobile-search-clear" class="px-4 text-zinc-400 hover:text-white transition"><i class="fas fa-times"></i></button>
+                </div>
+            </div>
             <h2 id="page-title" class="text-xl font-bold mb-4 hidden">Your History</h2>
+            <!-- Search Results Section (shown when searching) -->
+            <div id="search-results-section" class="hidden">
+                <div class="flex items-center justify-between mb-5">
+                    <h2 class="text-lg font-bold">Search results for: <span id="search-query-label" class="text-red-400"></span></h2>
+                    <button id="clear-search-btn" class="text-xs text-zinc-400 hover:text-white flex items-center gap-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-full transition"><i class="fas fa-times"></i> Clear</button>
+                </div>
+                <div id="search-results-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-8"></div>
+            </div>
             <div id="category-bar" class="flex items-center space-x-3 overflow-x-auto pb-4 mb-4" style="-ms-overflow-style:none;scrollbar-width:none;">
                 <!-- Categories will be injected here dynamically -->
             </div>

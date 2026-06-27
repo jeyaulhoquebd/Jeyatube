@@ -13,9 +13,37 @@
 
     <header class="bg-zinc-900 flex items-center justify-between px-6 py-4 border-b border-zinc-800">
         <a href="index.html" class="flex items-center space-x-1 text-2xl font-black tracking-tighter brand-font"><span class="bg-gradient-to-br from-red-600 to-red-800 text-white px-2.5 py-0.5 rounded-lg shadow-lg shadow-red-600/20">J</span><span class="brand-logo-text">Tube</span></a>
+        <a href="javascript:history.back()" class="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-full">
+            <i class="fas fa-arrow-left text-xs"></i> Back
+        </a>
     </header>
 
     <main class="flex-1 w-full max-w-6xl mx-auto">
+        <!-- PUBLIC USER PROFILE VIEW (shown when ?user=email is in URL) -->
+        <div id="public-profile-view" class="hidden">
+            <div class="relative w-full h-48 md:h-64 bg-gradient-to-br from-zinc-800 via-zinc-900 to-zinc-800" id="public-profile-cover"></div>
+            <div class="px-6 flex justify-between items-end relative -mt-12 md:-mt-16 mb-6">
+                <div class="flex items-end space-x-4">
+                    <div class="relative w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-zinc-900 bg-gradient-to-br from-purple-600 to-red-600 overflow-hidden flex items-center justify-center" id="public-profile-avatar">
+                        <span id="public-avatar-letter" class="text-4xl font-bold text-white">U</span>
+                    </div>
+                    <div class="mb-2">
+                        <h1 class="text-2xl md:text-3xl font-bold" id="public-profile-name">User</h1>
+                        <p class="text-zinc-400 text-sm" id="public-profile-email"></p>
+                    </div>
+                </div>
+            </div>
+            <div class="px-6 pb-10">
+                <div class="bg-zinc-800/40 border border-zinc-700/50 rounded-2xl p-6 text-center">
+                    <i class="fas fa-user-circle text-4xl text-zinc-600 mb-3 block"></i>
+                    <p class="text-zinc-400 text-sm">This is a public profile view.</p>
+                    <p class="text-zinc-500 text-xs mt-1">Only the account owner can see watch history and saved videos.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- OWN PROFILE VIEW -->
+        <div id="own-profile-view">
         <!-- Cover and Avatar Section -->
         <div class="relative w-full h-48 md:h-64 bg-zinc-800" id="profile-cover">
             <!-- Cover image goes here -->
@@ -70,6 +98,7 @@
                 <!-- Saved videos load here -->
             </div>
         </div>
+        </div> <!-- end own-profile-view -->
     </main>
 
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js" defer></script>

@@ -200,16 +200,89 @@ document.addEventListener("DOMContentLoaded", async () => {
     function renderComments() {
         commentsList.innerHTML = "";
         if (!video.comments) video.comments = [];
-        video.comments.forEach(comment => {
-            commentsList.innerHTML += `
+        video.comments.forEach((comment, idx) => {
+            const avatarLetter = comment.username ? comment.username[0].toUpperCase() : 'U';
+            const profileLink = `profile.html?user=${encodeURIComponent(comment.email || comment.username)}`;
+            const repliesHtml = (comment.replies && comment.replies.length > 0)
+                ? comment.replies.map(r => `
+                    <div class="flex gap-2 items-start text-sm mt-3 ml-1">
+                        <a href="${`profile.html?user=${encodeURIComponent(r.email || r.username)}`}" onclick="event.stopPropagation()" class="bg-gradient-to-br from-blue-600 to-purple-700 w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] flex-shrink-0 cursor-pointer hover:opacity-80 transition" title="View profile">${r.username ? r.username[0].toUpperCase() : 'U'}</a>
+                        <div class="bg-zinc-800/60 rounded-xl px-3 py-2 flex-1">
+                            <p class="font-semibold text-zinc-300 text-xs">${r.username}</p>
+                            <p class="text-zinc-100 mt-0.5 text-sm">${r.text}</p>
+                        </div>
+                    </div>`).join('')
+                : '';
+
+            const commentEl = document.createElement('div');
+            commentEl.className = 'comment-item';
+            commentEl.dataset.idx = idx;
+            commentEl.innerHTML = `
                 <div class="flex gap-3 items-start text-sm">
-                    <div class="bg-zinc-700 w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0">${comment.username[0]}</div>
-                    <div>
-                        <p class="font-semibold text-zinc-300 text-xs">${comment.username}</p>
-                        <p class="text-zinc-100 mt-0.5">${comment.text}</p>
+                    <a href="${profileLink}" onclick="event.stopPropagation()" class="bg-gradient-to-br from-purple-600 to-red-600 w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 cursor-pointer hover:opacity-80 transition" title="View ${comment.username}'s profile">${avatarLetter}</a>
+                    <div class="flex-1">
+                        <div class="bg-zinc-800/50 rounded-xl px-3 py-2">
+                            <a href="${profileLink}" class="font-semibold text-zinc-200 text-xs hover:text-white transition cursor-pointer">${comment.username}</a>
+                            <p class="text-zinc-100 mt-0.5">${comment.text}</p>
+                        </div>
+                        <div class="flex items-center gap-4 mt-1.5 px-1">
+                            <span class="text-[11px] text-zinc-500">${comment.time || 'Just now'}</span>
+                            <button class="reply-btn text-[11px] text-zinc-400 hover:text-red-400 font-semibold transition flex items-center gap-1" data-idx="${idx}">
+                                <i class="fas fa-reply text-[9px]"></i> Reply
+                            </button>
+                        </div>
+                        <!-- Reply input (hidden by default) -->
+                        <div class="reply-form hidden mt-3 flex gap-2 items-start">
+                            <div class="bg-purple-600 w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] flex-shrink-0 text-white">${currentUser ? (currentUser.displayName || 'U')[0].toUpperCase() : 'U'}</div>
+                            <div class="flex-1">
+                                <input type="text" placeholder="Add a reply..." class="reply-input w-full bg-transparent border-b border-zinc-600 focus:border-white focus:outline-none py-1 text-xs text-white">
+                                <div class="flex justify-end space-x-2 mt-1.5">
+                                    <button type="button" class="cancel-reply-btn px-3 py-1 rounded-full text-[11px] font-semibold hover:bg-zinc-800 transition">Cancel</button>
+                                    <button type="button" class="submit-reply-btn bg-blue-600 px-3 py-1 rounded-full text-[11px] font-semibold hover:bg-blue-500 transition" data-idx="${idx}">Reply</button>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Replies -->
+                        <div class="replies-container mt-1">${repliesHtml}</div>
                     </div>
                 </div>
             `;
+            commentsList.appendChild(commentEl);
+        });
+
+        // Attach reply button events
+        commentsList.querySelectorAll('.reply-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (!currentUser) return openAuthModal();
+                const form = btn.closest('.comment-item').querySelector('.reply-form');
+                form.classList.toggle('hidden');
+                if (!form.classList.contains('hidden')) form.querySelector('.reply-input').focus();
+            });
+        });
+        commentsList.querySelectorAll('.cancel-reply-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                btn.closest('.reply-form').classList.add('hidden');
+            });
+        });
+        commentsList.querySelectorAll('.submit-reply-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                if (!currentUser) return openAuthModal();
+                const idx = parseInt(btn.dataset.idx);
+                const input = btn.closest('.reply-form').querySelector('.reply-input');
+                const text = input.value.trim();
+                if (!text) return;
+                if (!video.comments[idx].replies) video.comments[idx].replies = [];
+                video.comments[idx].replies.push({
+                    username: currentUser.displayName || 'User',
+                    email: currentUser.email,
+                    text: text,
+                    time: 'Just now'
+                });
+                input.value = '';
+                await saveVideo(video);
+                renderComments();
+                commentCount.textContent = video.comments.length;
+            });
         });
     }
 
@@ -295,12 +368,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!video.comments) video.comments = [];
         video.comments.unshift({
             username: currentUser.displayName || "User",
-            text: text
+            email: currentUser.email,
+            text: text,
+            time: 'Just now',
+            replies: []
         });
 
         commentInput.value = "";
         await saveVideo(video);
-        updateInteractionsUI();
+        commentCount.textContent = video.comments.length;
+        renderComments();
     });
 
     document.getElementById("cancel-comment").addEventListener("click", () => {

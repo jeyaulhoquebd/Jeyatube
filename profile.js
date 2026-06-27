@@ -1,4 +1,54 @@
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+    // ===== PUBLIC PROFILE VIEW =====
+    const urlParams = new URLSearchParams(window.location.search);
+    const publicUserParam = urlParams.get('user');
+
+    if (publicUserParam) {
+        // Show public profile for another user
+        document.getElementById('own-profile-view').classList.add('hidden');
+        const publicView = document.getElementById('public-profile-view');
+        publicView.classList.remove('hidden');
+
+        // Try to look up by email in Firestore users collection
+        let displayName = publicUserParam;
+        let avatarUrl = null;
+        let coverUrl = null;
+
+        try {
+            // Wait for firebase to be ready
+            await new Promise(resolve => {
+                if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length) return resolve();
+                const interval = setInterval(() => {
+                    if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length) {
+                        clearInterval(interval); resolve();
+                    }
+                }, 100);
+                setTimeout(() => { clearInterval(interval); resolve(); }, 5000);
+            });
+            // Look up user by email
+            const snapshot = await db.collection('users').where('email', '==', publicUserParam).limit(1).get();
+            if (!snapshot.empty) {
+                const data = snapshot.docs[0].data();
+                displayName = data.name || data.displayName || publicUserParam;
+                avatarUrl = data.avatarUrl || null;
+                coverUrl = data.coverUrl || null;
+            }
+        } catch(e) { /* silently fail */ }
+
+        document.getElementById('public-profile-name').textContent = displayName;
+        document.getElementById('public-profile-email').textContent = publicUserParam.includes('@') ? publicUserParam : '';
+        document.getElementById('public-avatar-letter').textContent = displayName[0].toUpperCase();
+
+        if (avatarUrl) {
+            document.getElementById('public-profile-avatar').innerHTML = `<img src="${avatarUrl}" class="w-full h-full object-cover">`;
+        }
+        if (coverUrl) {
+            document.getElementById('public-profile-cover').innerHTML = `<img src="${coverUrl}" class="w-full h-full object-cover">`;
+        }
+        return; // Stop here, don't render own profile
+    }
+
+    // ===== OWN PROFILE VIEW =====
     const profileCover = document.getElementById("profile-cover");
     const profileAvatar = document.getElementById("profile-avatar");
     const profileName = document.getElementById("profile-name");

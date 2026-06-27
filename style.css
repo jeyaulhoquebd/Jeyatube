@@ -92,3 +92,57 @@ header {
     from { filter: drop-shadow(0 0 2px rgba(239,68,68,0.4)); }
     to { filter: drop-shadow(0 0 8px rgba(239,68,68,0.8)); }
 }
+
+/* ===== SEARCH DROPDOWN ===== */
+#search-dropdown {
+    animation: dropdownFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes dropdownFadeIn {
+    from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+#search-dropdown.hidden { display: none !important; }
+
+/* Keyword highlight in search suggestions */
+#search-results-list mark {
+    background: rgba(239, 68, 68, 0.25) !important;
+    color: #fca5a5 !important;
+    border-radius: 3px;
+    padding: 0 2px;
+}
+
+/* ===== COMMENT CARDS ===== */
+.comment-item {
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    margin-bottom: 12px;
+}
+.comment-item:last-child { border-bottom: none; margin-bottom: 0; }
+
+.reply-form {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+/* Mobile search bar slide-in */
+#mobile-search-bar {
+    animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Search results section fade in */
+#search-results-section {
+    animation: fadeIn 0.25s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
