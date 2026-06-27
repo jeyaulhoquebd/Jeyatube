@@ -67,31 +67,7 @@ git push
 
 
 
-You first read the code of my website and then fix some things on the website.
-
-1. I want Import from YouTube
-Automatically fetch videos using a YouTube Channel ID or Playlist ID.
-
-YouTube Channel ID (Optional)
-e.g. UCCBGUffdWwRV0gUqgElkCfw
-YouTube Playlist ID (Optional)
-e.g. PLnWBgzhpIbv8Jzr...
-Target JTube Channel *
-Where to upload these videos?
-Category *
-After giving everything here, if I click on
-Fetch & Import Videos, then first the video link, thumbnail link title, everything will be saved in the Cloud Firestore
-Database and the videos will be played directly on the website from Firestore. So that the videos on the website load very quickly. Now it takes a long time to load.
-
-2. YouTube Channel ID (Optional)
-e.g. UCCBGUffdWwRV0gUqgElkCfw
-YouTube Playlist ID (Optional)
-e.g. PLnWBgzhpIbv8Jzr...
-Target JTube Channel *
-Where to upload these videos?
-If I Fetch & Import Videos with Category *, then the videos longer than 3 minutes with Channel ID or Playlist ID will be filtered and saved in Cloud Firestore
-Database.
-
-Fix the website nicely, now save all the videos in Cloud Firestore
-Database and show them on the website from Cloud Firestore
-Database. Make it so that the videos can be seen on the website as soon as they are entered.
+Please bring some updates to jtube.
+1. The website is very slow, even videos take a long time to load. Fix this.
+2. The website's admin dashboard takes a long time to load, fix this.
+If there is any problem with jtube, fix it.
