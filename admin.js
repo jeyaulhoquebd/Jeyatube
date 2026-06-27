@@ -8,10 +8,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     const adminLoginForm = document.getElementById("admin-login-form");
     const adminPassword = document.getElementById("admin-password");
 
-    adminLoginForm.addEventListener("submit", (e) => {
+    adminLoginForm.addEventListener("submit", async (e) => {
         e.preventDefault();
         if (adminPassword.value === "Jeyaul") {
             adminLoginOverlay.classList.add("hidden");
+            // Load dashboard AFTER login — not before
+            await loadAdminDashboard();
         } else {
             adminPassword.classList.add("border-red-500");
             adminPassword.value = "";
@@ -428,6 +430,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const ytPlaylistId = document.getElementById("yt-playlist-id").value.trim();
         const targetChannel = document.getElementById("yt-target-channel").value.trim();
         const category = document.getElementById("yt-category").value.trim();
+        const playlistName = document.getElementById("yt-playlist-name").value.trim();
 
         if (!ytChannelId && !ytPlaylistId) {
             alert("Please provide a YouTube Channel ID or Playlist ID.");
@@ -477,7 +480,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     title: snippet.title,
                     channel: targetChannel,
                     category,
-                    playlist: "",
+                    playlist: playlistName,
                     views: 0,
                     time: "Just now",
                     duration: item._durationText || "",
@@ -526,6 +529,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         ytImportBtn.innerHTML = '<i class="fab fa-youtube"></i> <span>Fetch &amp; Import Videos</span>';
     });
 
-    // Initialize
-    await loadAdminDashboard();
+    // Do NOT auto-load dashboard on page load (loads after login)
+    // await loadAdminDashboard(); <-- removed for instant page load
 });

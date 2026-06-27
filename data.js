@@ -493,22 +493,28 @@ async function initializeDatabase() {
     }
 }
 
-initializeDatabase();
+// Only seed initial data once per browser session to avoid blocking every page load
+if (!sessionStorage.getItem('jtube_db_init')) {
+    sessionStorage.setItem('jtube_db_init', '1');
+    initializeDatabase(); // non-blocking: no await
+}
 
-// Fetch and append country code to logo
+// Fetch and append country code to logo — fully non-blocking
 document.addEventListener('DOMContentLoaded', () => {
-    fetch('https://api.country.is')
-        .then(res => res.json())
-        .then(data => {
-            if (data.country) {
-                const brandLogos = document.querySelectorAll('.brand-logo-text');
-                brandLogos.forEach(logo => {
-                    const span = document.createElement('span');
-                    span.className = 'text-[10px] text-zinc-400 font-medium ml-1 self-start mt-0.5';
-                    span.textContent = data.country;
-                    logo.parentElement.appendChild(span);
-                });
-            }
-        })
-        .catch(err => console.log('Location fetch failed', err));
+    setTimeout(() => {
+        fetch('https://api.country.is')
+            .then(res => res.json())
+            .then(data => {
+                if (data.country) {
+                    const brandLogos = document.querySelectorAll('.brand-logo-text');
+                    brandLogos.forEach(logo => {
+                        const span = document.createElement('span');
+                        span.className = 'text-[10px] text-zinc-400 font-medium ml-1 self-start mt-0.5';
+                        span.textContent = data.country;
+                        logo.parentElement.appendChild(span);
+                    });
+                }
+            })
+            .catch(() => {}); // Silently ignore
+    }, 2000); // Defer 2 seconds so it never blocks page load
 });

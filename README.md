@@ -66,8 +66,7 @@ git push
 
 
 
-
 Please bring some updates to jtube.
 1. The website is very slow, even videos take a long time to load. Fix this.
 2. The website's admin dashboard takes a long time to load, fix this.
-If there is any problem with jtube, fix it.
+If there is any problem with jtube, fix it.   3. The playlist on this website will be exactly like the picture I have given you there. Now you do what changes you want to make to make it. And the playlist that I will give the ID PLhQjrBD2T380hlTqAU8HfvVepCcjCqTg6 will be like the playlist in the picture. The playlist can be seen in the playlist option of the jtube website.       
