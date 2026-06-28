@@ -499,8 +499,126 @@ if (!sessionStorage.getItem('jtube_db_init')) {
     initializeDatabase(); // non-blocking: no await
 }
 
+// ===== AUTO-SYNC YOUTUBE CHANNELS =====
+async function autoSyncYouTubeChannels() {
+    const apiKey = typeof ENV !== 'undefined' ? ENV.YOUTUBE_API_KEY : null;
+    if (!apiKey) return;
+
+    try {
+        const channels = await getChannels();
+        const now = Date.now();
+        const SYNC_INTERVAL = 12 * 60 * 60 * 1000; // 12 hours between syncs
+
+        for (const [channelName, data] of Object.entries(channels)) {
+            // Only sync if configured and past the interval
+            if ((data.ytChannelId || data.ytPlaylistId) && (!data.lastSyncTime || (now - data.lastSyncTime > SYNC_INTERVAL))) {
+                console.log(`Auto-syncing YouTube channel: ${channelName}`);
+                
+                let playlistId = data.ytPlaylistId;
+                if (!playlistId && data.ytChannelId) {
+                    try {
+                        const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=${data.ytChannelId}&key=${apiKey}`);
+                        const cData = await res.json();
+                        if (cData.items && cData.items.length > 0) {
+                            playlistId = cData.items[0].contentDetails.relatedPlaylists.uploads;
+                            data.ytPlaylistId = playlistId; // Cache it
+                        }
+                    } catch (e) { console.warn("Error looking up playlist ID for auto-sync", e); }
+                }
+
+                if (playlistId) {
+                    try {
+                        // Fetch latest 15 videos to save quota
+                        const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=15&playlistId=${playlistId}&key=${apiKey}`;
+                        const res = await fetch(url);
+                        const pData = await res.json();
+                        
+                        if (pData.items && pData.items.length > 0) {
+                            const videoIds = pData.items.map(item => item.contentDetails.videoId).filter(Boolean).join(',');
+                            
+                            const vidRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${videoIds}&key=${apiKey}`);
+                            const vidData = await vidRes.json();
+                            
+                            const durationMap = {};
+                            if (vidData.items) {
+                                vidData.items.forEach(v => { durationMap[v.id] = v.contentDetails.duration; });
+                            }
+
+                            const existingVideos = await getVideos();
+                            const existingIds = new Set(existingVideos.map(v => v.id));
+                            const newVideos = [];
+
+                            for (const item of pData.items) {
+                                const snippet = item.snippet;
+                                const videoId = snippet.resourceId ? snippet.resourceId.videoId : (item.contentDetails ? item.contentDetails.videoId : '');
+                                if (!videoId) continue;
+                                
+                                const docId = "yt_" + videoId;
+                                if (existingIds.has(docId)) continue; // Already exists
+
+                                const dStr = durationMap[videoId];
+                                if (!dStr) continue;
+                                
+                                // Parse duration
+                                let totalSeconds = 0;
+                                const match = dStr.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+                                if (match) {
+                                    totalSeconds = (parseInt(match[1] || 0) * 3600) + (parseInt(match[2] || 0) * 60) + parseInt(match[3] || 0);
+                                }
+                                if (totalSeconds < 60) continue; // Skip shorts < 1m
+
+                                // Format duration
+                                const h = Math.floor(totalSeconds / 3600);
+                                const m = Math.floor((totalSeconds % 3600) / 60);
+                                const s = totalSeconds % 60;
+                                const durationText = h > 0 ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}` : `${m}:${s.toString().padStart(2, '0')}`;
+
+                                newVideos.push({
+                                    id: docId,
+                                    title: snippet.title,
+                                    channel: channelName,
+                                    category: data.syncCategory || "General",
+                                    playlist: "",
+                                    views: 0,
+                                    time: "Just now",
+                                    duration: durationText,
+                                    thumbnail: snippet.thumbnails?.high?.url || snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url || "",
+                                    videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
+                                    description: snippet.description || "Imported automatically from YouTube",
+                                    likes: 0,
+                                    liked: false,
+                                    comments: [],
+                                    timestamp: new Date(snippet.publishedAt).getTime()
+                                });
+                            }
+
+                            if (newVideos.length > 0) {
+                                await saveBatchVideos(newVideos);
+                                console.log(`Auto-synced ${newVideos.length} new videos for ${channelName}!`);
+                            }
+                        }
+                    } catch (e) { console.warn("Error during auto-sync fetch for " + channelName, e); }
+                }
+
+                // Update sync time
+                await saveChannel(channelName, { ...data, lastSyncTime: Date.now() });
+            }
+        }
+    } catch (e) {
+        console.error("Auto-sync background process failed:", e);
+    }
+}
+
 // Fetch and append country code to logo — fully non-blocking
 document.addEventListener('DOMContentLoaded', () => {
+    // Start YouTube background sync 5 seconds after page load (only once per session)
+    if (!sessionStorage.getItem('jtube_yt_sync')) {
+        sessionStorage.setItem('jtube_yt_sync', '1');
+        setTimeout(() => {
+            autoSyncYouTubeChannels();
+        }, 5000); 
+    }
+
     setTimeout(() => {
         fetch('https://api.country.is')
             .then(res => res.json())

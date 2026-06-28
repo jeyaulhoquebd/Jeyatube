@@ -508,11 +508,17 @@ document.addEventListener("DOMContentLoaded", async () => {
                 showProgress(90, "Finalizing...");
             }
 
-            // Create channel if doesn't exist
+            // Create or update channel with sync configuration
             const channels = await getChannels();
-            if (!channels[targetChannel]) {
-                await saveChannel(targetChannel, { subscribers: 0, subscribed: false, avatarUrl: "", coverUrl: "" });
-            }
+            const channelData = channels[targetChannel] || { subscribers: 0, subscribed: false, avatarUrl: "", coverUrl: "" };
+            
+            // Add sync metadata to the channel to enable future auto-syncing
+            if (ytChannelId) channelData.ytChannelId = ytChannelId;
+            if (targetPlaylistId) channelData.ytPlaylistId = targetPlaylistId;
+            if (category) channelData.syncCategory = category;
+            channelData.lastSyncTime = Date.now(); // We just synced it manually
+
+            await saveChannel(targetChannel, channelData);
 
             const skipped = videos.length - newVideos.length;
             let statusMsg = `✓ Successfully imported ${newVideos.length} videos to "${targetChannel}"!`;
