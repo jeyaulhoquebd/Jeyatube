@@ -146,3 +146,93 @@ header {
     from { opacity: 0; }
     to   { opacity: 1; }
 }
+
+/* ===== JASK AI PANEL ===== */
+.jask-btn-glow {
+    position: relative;
+    overflow: hidden;
+}
+.jask-btn-glow::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: conic-gradient(transparent, rgba(139, 92, 246, 0.3), transparent 30%);
+    animation: jaskBtnRotate 3s linear infinite;
+}
+.jask-btn-glow::after {
+    content: '';
+    position: absolute;
+    inset: 1px;
+    background: inherit;
+    border-radius: inherit;
+}
+.jask-btn-glow > * {
+    position: relative;
+    z-index: 1;
+}
+@keyframes jaskBtnRotate {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+.jask-panel-animate {
+    animation: jaskSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes jaskSlideUp {
+    from { opacity: 0; transform: translateY(16px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.jask-panel-animate.hidden { display: none !important; }
+
+/* Typing dots animation */
+.jask-typing-dot {
+    animation: jaskTypingBounce 0.6s ease-in-out infinite alternate;
+}
+@keyframes jaskTypingBounce {
+    from { opacity: 0.3; transform: scale(0.8); }
+    to   { opacity: 1; transform: scale(1.1); }
+}
+
+/* JAsk messages scrollbar */
+#jask-messages::-webkit-scrollbar {
+    width: 4px;
+}
+#jask-messages::-webkit-scrollbar-track {
+    background: transparent;
+}
+#jask-messages::-webkit-scrollbar-thumb {
+    background: rgba(139, 92, 246, 0.3);
+    border-radius: 10px;
+}
+#jask-messages::-webkit-scrollbar-thumb:hover {
+    background: rgba(139, 92, 246, 0.5);
+}
+
+/* JAsk AI response text styling */
+.jask-ai-response a.jask-video-card {
+    text-decoration: none !important;
+}
+.jask-ai-response a.jask-video-card:hover {
+    transform: translateX(4px);
+}
+
+/* ===== RESPONSIVENESS IMPROVEMENTS ===== */
+@media (max-width: 640px) {
+    .video-card-custom:hover {
+        transform: none !important;
+    }
+    
+    #jask-messages {
+        max-height: 260px;
+    }
+}
+
+@media (max-width: 768px) {
+    main {
+        padding: 12px !important;
+    }
+}

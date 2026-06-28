@@ -370,6 +370,171 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
+    // ===== JAsk AI Panel Logic =====
+    const jaskBtn = document.getElementById("jask-btn");
+    const jaskPanel = document.getElementById("jask-panel");
+    const jaskClose = document.getElementById("jask-close");
+    const jaskInput = document.getElementById("jask-input");
+    const jaskSend = document.getElementById("jask-send");
+    const jaskMessages = document.getElementById("jask-messages");
+    const jaskSuggestions = document.getElementById("jask-suggestions");
+    const jaskWelcome = document.getElementById("jask-welcome");
+
+    // Initialize suggested questions
+    function initJAskSuggestions() {
+        if (!jaskSuggestions) return;
+        const questions = JAsk.getSuggestedQuestions(video);
+        jaskSuggestions.innerHTML = '';
+        questions.forEach(q => {
+            const btn = document.createElement('button');
+            btn.className = 'text-xs px-3 py-1.5 rounded-full border border-violet-500/30 text-violet-300 hover:bg-violet-500/20 hover:border-violet-400/50 transition-all duration-200 text-left';
+            btn.textContent = q;
+            btn.addEventListener('click', () => sendJAskMessage(q));
+            jaskSuggestions.appendChild(btn);
+        });
+    }
+
+    // Format AI response text (markdown-like to HTML)
+    function formatAIResponse(text) {
+        let html = text;
+        // Convert JTube video links: [Title](watch.html?id=xxx) -> clickable cards
+        html = html.replace(/\[([^\]]+)\]\(watch\.html\?id=([^)]+)\)/g, (match, title, id) => {
+            const linkedVideo = allJAskVideos.find(v => v.id === id);
+            if (linkedVideo) {
+                return `<a href="watch.html?id=${id}" class="jask-video-card flex items-center gap-2 p-2 my-1 bg-zinc-800/80 hover:bg-zinc-700/80 rounded-xl border border-zinc-700/50 hover:border-violet-500/30 transition-all group/link no-underline block">
+                    <img src="${linkedVideo.thumbnail}" class="w-16 h-10 rounded-lg object-cover flex-shrink-0">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-xs font-semibold text-zinc-100 line-clamp-1 group-hover/link:text-violet-300 transition">${title}</p>
+                        <p class="text-[10px] text-zinc-500">${linkedVideo.channel} • ${(linkedVideo.views || 0).toLocaleString()} views</p>
+                    </div>
+                    <i class="fas fa-play text-[10px] text-violet-400 opacity-0 group-hover/link:opacity-100 transition"></i>
+                </a>`;
+            }
+            return `<a href="watch.html?id=${id}" class="text-violet-400 hover:text-violet-300 underline">${title}</a>`;
+        });
+        // Bold text
+        html = html.replace(/\*\*([^*]+)\*\*/g, '<strong class="text-zinc-100">$1</strong>');
+        // Italic
+        html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+        // Bullet points
+        html = html.replace(/^[\-•]\s+(.+)/gm, '<span class="flex items-start gap-1.5 mb-0.5"><span class="text-violet-400 mt-0.5">•</span><span>$1</span></span>');
+        // Line breaks
+        html = html.replace(/\n/g, '<br>');
+        // Emojis are already supported
+        return html;
+    }
+
+    let allJAskVideos = [];
+    // Preload videos for link matching
+    async function preloadJAskVideos() {
+        try {
+            allJAskVideos = await getVideos();
+        } catch (e) {
+            allJAskVideos = [];
+        }
+    }
+    preloadJAskVideos();
+
+    // Add a message bubble to the chat
+    function addJAskMessage(content, isUser = false) {
+        if (jaskWelcome && !jaskWelcome.classList.contains('hidden')) {
+            jaskWelcome.classList.add('hidden');
+        }
+        const msg = document.createElement('div');
+        msg.className = isUser
+            ? 'flex justify-end'
+            : 'flex items-start gap-2';
+
+        if (isUser) {
+            msg.innerHTML = `
+                <div class="bg-violet-600/30 border border-violet-500/20 text-sm text-zinc-100 px-3 py-2 rounded-2xl rounded-br-md max-w-[85%] leading-relaxed">
+                    ${content}
+                </div>`;
+        } else {
+            msg.innerHTML = `
+                <div class="w-6 h-6 bg-gradient-to-br from-violet-500 to-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <i class="fas fa-robot text-white text-[9px]"></i>
+                </div>
+                <div class="bg-zinc-800/60 border border-zinc-700/40 text-sm text-zinc-300 px-3 py-2 rounded-2xl rounded-bl-md max-w-[85%] leading-relaxed jask-ai-response">
+                    ${content}
+                </div>`;
+        }
+        jaskMessages.appendChild(msg);
+        jaskMessages.scrollTop = jaskMessages.scrollHeight;
+    }
+
+    // Show typing indicator
+    function showTypingIndicator() {
+        const typing = document.createElement('div');
+        typing.id = 'jask-typing';
+        typing.className = 'flex items-start gap-2';
+        typing.innerHTML = `
+            <div class="w-6 h-6 bg-gradient-to-br from-violet-500 to-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i class="fas fa-robot text-white text-[9px]"></i>
+            </div>
+            <div class="bg-zinc-800/60 border border-zinc-700/40 px-4 py-3 rounded-2xl rounded-bl-md">
+                <div class="flex items-center gap-1">
+                    <div class="jask-typing-dot w-2 h-2 bg-violet-400 rounded-full"></div>
+                    <div class="jask-typing-dot w-2 h-2 bg-violet-400 rounded-full" style="animation-delay: 0.15s"></div>
+                    <div class="jask-typing-dot w-2 h-2 bg-violet-400 rounded-full" style="animation-delay: 0.3s"></div>
+                </div>
+            </div>`;
+        jaskMessages.appendChild(typing);
+        jaskMessages.scrollTop = jaskMessages.scrollHeight;
+    }
+
+    function removeTypingIndicator() {
+        const typing = document.getElementById('jask-typing');
+        if (typing) typing.remove();
+    }
+
+    // Send message to AI
+    async function sendJAskMessage(text) {
+        if (!text || !text.trim()) return;
+        const userMsg = text.trim();
+        jaskInput.value = '';
+
+        // Show user message
+        addJAskMessage(userMsg, true);
+
+        // Show typing...
+        showTypingIndicator();
+
+        try {
+            const result = await JAsk.askGroq(userMsg, video);
+            removeTypingIndicator();
+            addJAskMessage(formatAIResponse(result.text));
+        } catch (err) {
+            removeTypingIndicator();
+            addJAskMessage('⚠️ Something went wrong. Please try again.');
+            console.error('JAsk error:', err);
+        }
+    }
+
+    // Event listeners
+    if (jaskBtn) {
+        jaskBtn.addEventListener('click', () => {
+            jaskPanel.classList.toggle('hidden');
+            if (!jaskPanel.classList.contains('hidden')) {
+                initJAskSuggestions();
+                jaskInput.focus();
+            }
+        });
+    }
+    if (jaskClose) {
+        jaskClose.addEventListener('click', () => {
+            jaskPanel.classList.add('hidden');
+        });
+    }
+    if (jaskSend) {
+        jaskSend.addEventListener('click', () => sendJAskMessage(jaskInput.value));
+    }
+    if (jaskInput) {
+        jaskInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') sendJAskMessage(jaskInput.value);
+        });
+    }
+
     subscribeBtn.addEventListener("click", async (e) => {
         e.stopPropagation();
         if (!currentUser) return openAuthModal();

@@ -45,9 +45,12 @@
                     </button>
                 </div>
 
-                <div class="flex items-center space-x-2">
+                <div class="flex items-center space-x-2 flex-wrap gap-y-2">
                     <button id="like-btn" class="bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold px-4 py-2 rounded-full flex items-center space-x-2 transition">
                         <i class="far fa-thumbs-up"></i> <span id="like-count">0</span>
+                    </button>
+                    <button id="jask-btn" class="jask-btn-glow bg-gradient-to-r from-violet-600 to-blue-500 hover:from-violet-500 hover:to-blue-400 text-sm font-semibold px-4 py-2 rounded-full flex items-center space-x-2 transition-all duration-300 shadow-lg shadow-violet-500/25">
+                        <i class="fas fa-robot"></i> <span>JAsk</span>
                     </button>
                     <button id="share-btn" class="bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold px-4 py-2 rounded-full flex items-center space-x-2 transition">
                         <i class="fas fa-share"></i> <span>Share</span>
@@ -61,6 +64,59 @@
             <div class="bg-zinc-800 p-3 rounded-xl text-sm leading-relaxed">
                 <p id="video-meta" class="font-semibold text-xs text-zinc-300 mb-1">0 views • Just now</p>
                 <p id="video-desc" class="text-zinc-300 whitespace-pre-line"></p>
+            </div>
+
+            <!-- JAsk AI Panel -->
+            <div id="jask-panel" class="hidden jask-panel-animate">
+                <div class="bg-gradient-to-br from-zinc-800/90 to-zinc-900/95 border border-violet-500/20 rounded-2xl overflow-hidden shadow-2xl shadow-violet-500/10 backdrop-blur-xl">
+                    <!-- Header -->
+                    <div class="flex items-center justify-between px-4 py-3 border-b border-zinc-700/50 bg-gradient-to-r from-violet-900/30 to-blue-900/20">
+                        <div class="flex items-center gap-2">
+                            <div class="w-8 h-8 bg-gradient-to-br from-violet-500 to-blue-500 rounded-lg flex items-center justify-center shadow-lg shadow-violet-500/30">
+                                <i class="fas fa-robot text-white text-sm"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-sm font-bold text-white">JAsk AI</h3>
+                                <p class="text-[10px] text-violet-300/70">Powered by Groq</p>
+                            </div>
+                        </div>
+                        <button id="jask-close" class="w-7 h-7 flex items-center justify-center rounded-full hover:bg-zinc-700/50 text-zinc-400 hover:text-white transition">
+                            <i class="fas fa-times text-xs"></i>
+                        </button>
+                    </div>
+
+                    <!-- Welcome + Suggestions -->
+                    <div id="jask-welcome" class="px-4 py-4">
+                        <div class="flex items-start gap-3 mb-4">
+                            <div class="w-7 h-7 bg-gradient-to-br from-violet-500 to-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <i class="fas fa-robot text-white text-[10px]"></i>
+                            </div>
+                            <div>
+                                <p class="text-sm text-zinc-200 leading-relaxed">Hello! 👋 Curious about what you're watching? I'm here to help.</p>
+                                <p class="text-xs text-zinc-500 mt-1">Not sure what to ask? Choose something:</p>
+                            </div>
+                        </div>
+                        <div id="jask-suggestions" class="flex flex-wrap gap-2 ml-10"></div>
+                    </div>
+
+                    <!-- Chat Messages -->
+                    <div id="jask-messages" class="max-h-[340px] overflow-y-auto px-4 space-y-3 scroll-smooth"></div>
+
+                    <!-- Disclaimer -->
+                    <div class="px-4 pt-2 pb-1">
+                        <p class="text-[10px] text-zinc-600 text-center"><i class="fas fa-info-circle"></i> AI can make mistakes, so double-check it.</p>
+                    </div>
+
+                    <!-- Input -->
+                    <div class="px-4 pb-4 pt-2">
+                        <div class="flex items-center gap-2 bg-zinc-800/80 border border-zinc-700/60 rounded-full overflow-hidden focus-within:border-violet-500/50 focus-within:shadow-lg focus-within:shadow-violet-500/10 transition-all duration-300">
+                            <input type="text" id="jask-input" placeholder="Ask a question..." autocomplete="off" class="flex-1 bg-transparent px-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none">
+                            <button id="jask-send" class="px-4 py-2.5 bg-gradient-to-r from-violet-600 to-blue-500 hover:from-violet-500 hover:to-blue-400 text-white transition-all duration-200 flex items-center justify-center">
+                                <i class="fas fa-paper-plane text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="space-y-4">
@@ -126,7 +182,9 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js" defer></script>
+    <script src="env.js" defer></script>
     <script src="data.js" defer></script>
+    <script src="jask.js" defer></script>
     <script src="watch.js" defer></script>
 </body>
 </html>
