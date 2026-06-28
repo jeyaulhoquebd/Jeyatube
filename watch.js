@@ -22,6 +22,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const likeBtn = document.getElementById("like-btn");
     const likeCount = document.getElementById("like-count");
     const saveBtn = document.getElementById("save-btn");
+    const shareBtn = document.getElementById("share-btn");
     const videoMeta = document.getElementById("video-meta");
     const videoDesc = document.getElementById("video-desc");
     const commentsList = document.getElementById("comments-list");
@@ -136,6 +137,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     channelName.textContent = video.channel;
     videoMeta.textContent = `${video.views} views • ${timeAgo(video.timestamp)}`;
+
+    // Update OG meta tags dynamically
+    const ogTitle = document.getElementById("og-title");
+    if (ogTitle) ogTitle.setAttribute("content", video.title);
+    const ogDesc = document.getElementById("og-desc");
+    if (ogDesc) ogDesc.setAttribute("content", video.description ? video.description.substring(0, 150) : "Watch this video on JTube");
+    const ogImage = document.getElementById("og-image");
+    if (ogImage) ogImage.setAttribute("content", video.thumbnail);
+    const ogUrl = document.getElementById("og-url");
+    if (ogUrl) ogUrl.setAttribute("content", window.location.href);
+    document.title = `${video.title} - JTube`;
     
     function renderDescription() {
         const descText = video.description || "";
@@ -337,6 +349,26 @@ document.addEventListener("DOMContentLoaded", async () => {
         await saveVideo(video);
         updateInteractionsUI();
     });
+
+    if (shareBtn) {
+        shareBtn.addEventListener("click", async () => {
+            const shareData = {
+                title: video.title,
+                text: video.description ? video.description.substring(0, 100) : "Watch this video on JTube",
+                url: window.location.href
+            };
+            try {
+                if (navigator.share) {
+                    await navigator.share(shareData);
+                } else {
+                    await navigator.clipboard.writeText(window.location.href);
+                    alert("Link copied to clipboard!");
+                }
+            } catch (err) {
+                console.log("Error sharing:", err);
+            }
+        });
+    }
 
     subscribeBtn.addEventListener("click", async (e) => {
         e.stopPropagation();

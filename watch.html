@@ -6,6 +6,11 @@
     <title>JTube - Watching Video</title>
     <meta name="description" content="Watch videos on JTube.">
     <link rel="shortcut icon" href="img/jtubeimg.png" type="image/x-icon">
+    <meta property="og:title" id="og-title" content="JTube - Watching Video">
+    <meta property="og:description" id="og-desc" content="Watch videos on JTube.">
+    <meta property="og:image" id="og-image" content="img/jtubeimg.png">
+    <meta property="og:url" id="og-url" content="">
+    <meta property="og:type" content="video.other">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
@@ -43,6 +48,9 @@
                 <div class="flex items-center space-x-2">
                     <button id="like-btn" class="bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold px-4 py-2 rounded-full flex items-center space-x-2 transition">
                         <i class="far fa-thumbs-up"></i> <span id="like-count">0</span>
+                    </button>
+                    <button id="share-btn" class="bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold px-4 py-2 rounded-full flex items-center space-x-2 transition">
+                        <i class="fas fa-share"></i> <span>Share</span>
                     </button>
                     <button id="save-btn" class="bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold px-4 py-2 rounded-full flex items-center space-x-2 transition">
                         <i class="far fa-bookmark"></i> <span>Save</span>

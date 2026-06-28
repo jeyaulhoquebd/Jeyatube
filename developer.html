@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JTube - Developer Registration</title>
+    <link rel="shortcut icon" href="img/jtubeimg.png" type="image/x-icon">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-zinc-900 text-white font-sans antialiased flex flex-col min-h-screen">
+
+    <header class="sticky top-0 bg-zinc-900 z-50 flex items-center justify-between px-6 py-4 border-b border-zinc-800">
+        <a href="index.html" class="flex items-center space-x-1 text-2xl font-black tracking-tighter brand-font"><span class="bg-gradient-to-br from-red-600 to-red-800 text-white px-2.5 py-0.5 rounded-lg shadow-lg shadow-red-600/20">J</span><span class="brand-logo-text">Tube</span></a>
+        <a href="index.html" class="text-sm bg-zinc-800 hover:bg-zinc-700 px-4 py-2 rounded-full transition font-medium">Home</a>
+    </header>
+
+    <main class="flex-1 max-w-lg mx-auto w-full p-6 flex flex-col justify-center">
+        <div class="bg-zinc-800/50 p-6 rounded-2xl border border-zinc-800 space-y-6 shadow-xl">
+            
+            <div>
+                <h1 class="text-2xl font-bold text-zinc-100 flex items-center gap-2 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                    <i class="fas fa-code text-blue-500 text-xl"></i> Developer Application
+                </h1>
+                <p class="text-xs text-zinc-400 mt-2">Submit your details if you are interested in developing or maintaining this website.</p>
+            </div>
+
+            <form id="developer-form" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-400 mb-1">Full Name</label>
+                    <input type="text" id="dev-name" required placeholder="e.g., John Doe" class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-3 text-sm">
+                </div>
+                
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-400 mb-1">Email Address</label>
+                    <input type="email" id="dev-email" required placeholder="john@example.com" class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-3 text-sm">
+                </div>
+                
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-400 mb-1">WhatsApp Number</label>
+                    <input type="text" id="dev-whatsapp" required placeholder="+1234567890" class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-3 text-sm">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-400 mb-1">GitHub Link</label>
+                    <input type="url" id="dev-github" required placeholder="https://github.com/username" class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-3 text-sm">
+                </div>
+                
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-400 mb-1">Picture URL (Optional)</label>
+                    <input type="url" id="dev-picture" placeholder="https://example.com/avatar.jpg" class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-3 text-sm">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-400 mb-1">Additional Message</label>
+                    <textarea id="dev-message" rows="3" placeholder="Tell us why you'd be a great fit..." class="w-full bg-zinc-900 border border-zinc-700 focus:border-blue-500 focus:outline-none rounded-xl p-3 text-sm"></textarea>
+                </div>
+
+                <button type="submit" id="dev-submit-btn" class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 font-bold p-3 rounded-xl transition text-sm flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(59,130,246,0.3)]">
+                    <i class="fab fa-telegram-plane"></i> Submit Application
+                </button>
+            </form>
+        </div>
+    </main>
+
+    <footer class="bg-zinc-950 text-center py-4 text-xs text-zinc-600 border-t border-zinc-800">
+        &copy; 2026 JTube Platform.
+    </footer>
+
+    <!-- Include env.js for config -->
+    <script src="env.js" defer></script>
+    <script src="developer.js" defer></script>
+</body>
+</html>
