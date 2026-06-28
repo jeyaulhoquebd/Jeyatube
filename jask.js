@@ -21,10 +21,9 @@ const JAsk = (() => {
         return allVideos;
     }
 
-    // Build a knowledge context string from ALL videos on the platform
+    // (Unused) Full KB builder, kept for reference
     function buildVideoKnowledgeBase(videos) {
         if (!videos || videos.length === 0) return "No videos currently available on the platform.";
-        // Limit to 80 videos and keep compact to stay within token limits
         return videos.slice(0, 80).map((v, i) => {
             const desc = (v.description || '').substring(0, 100).replace(/\n/g, ' ');
             return `${v.id}|${v.title}|${v.channel}|${v.category || ''}|${v.views || 0}|${desc}`;
@@ -101,10 +100,20 @@ const JAsk = (() => {
         }
 
         await loadVideoLibrary();
-        const videoKB = buildVideoKnowledgeBase(allVideos);
         const relevantVideos = findRelevantVideos(userMessage, allVideos);
 
-        // Build system prompt with full video knowledge
+        // Build a smaller knowledge context string from relevant videos ONLY
+        function buildRelevantVideoKnowledgeBase(videos) {
+            if (!videos || videos.length === 0) return "No other specific videos found for this query.";
+            return videos.map((v) => {
+                const desc = (v.description || '').substring(0, 100).replace(/\n/g, ' ');
+                return `${v.id}|${v.title}|${v.channel}|${v.category || ''}|${v.views || 0}|${desc}`;
+            }).join('\n');
+        }
+        
+        const videoKB = buildRelevantVideoKnowledgeBase(relevantVideos);
+
+        // Build system prompt with relevant video knowledge
         const systemPrompt = `You are JAsk, the AI assistant for JTube video platform. Be friendly, concise, use emojis.
 
 CURRENT VIDEO:
@@ -113,21 +122,18 @@ Channel: "${currentVideo.channel}"
 Category: "${currentVideo.category || 'General'}"
 Description: "${(currentVideo.description || '').substring(0, 300)}"
 
-ALL JTUBE VIDEOS (format: ID|Title|Channel|Category|Views|Description):
+RELEVANT JTUBE VIDEOS (format: ID|Title|Channel|Category|Views|Description):
 ${videoKB}
 
 RULES:
 1. Answer about current video using its title/description.
-2. When user asks for a video, find matching ones and link them as: [Title](watch.html?id=ID)
+2. When user asks for a video, find matching ones from the RELEVANT JTUBE VIDEOS list and link them as: [Title](watch.html?id=ID)
 3. Always use that exact link format for JTube videos.
 4. Never invent video IDs that don't exist above.
 5. You can answer general questions but relate to JTube content when possible.`;
 
-        // Add relevant video context to user message
+        // Add user message without duplicating the relevant videos hint
         let enrichedMessage = userMessage;
-        if (relevantVideos.length > 0) {
-            enrichedMessage += `\n\n[System hint: These videos from the library seem most relevant to the query: ${relevantVideos.map(v => `"${v.title}" (ID: ${v.id})`).join(', ')}]`;
-        }
 
         // Maintain conversation context (keep last 6 messages for context)
         conversationHistory.push({ role: "user", content: enrichedMessage });
