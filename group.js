@@ -121,6 +121,21 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    const groupGoogleAuthBtn = document.getElementById("group-google-auth-btn");
+    if (groupGoogleAuthBtn) {
+        groupGoogleAuthBtn.addEventListener("click", async () => {
+            try {
+                groupGoogleAuthBtn.disabled = true;
+                groupGoogleAuthBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connecting...';
+                await loginWithGoogle(); // from data.js
+            } catch (err) {
+                console.error(err);
+                groupGoogleAuthBtn.disabled = false;
+                groupGoogleAuthBtn.innerHTML = '<i class="fab fa-google"></i> Sign In to Join';
+            }
+        });
+    }
+
     // ===== AUTH STATE HANDLING =====
     // Use Firebase's onAuthStateChanged directly — it's the most reliable approach.
     // The `auth` global is defined in data.js (which loads before this script).
@@ -180,7 +195,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 } else if (change.type === 'removed') {
                     const msgId = change.doc.id;
                     const msgElement = document.getElementById(`msg-${msgId}`);
-                    if (msgElement) msgElement.remove();
+                    // Only remove if it was actually deleted from DB
+                    chatRef.doc(msgId).get().then(doc => {
+                        if (!doc.exists && msgElement) {
+                            msgElement.remove();
+                        }
+                    });
                 }
             });
         });
@@ -328,18 +348,23 @@ document.addEventListener("DOMContentLoaded", () => {
         wrapper.className = `flex ${isMe ? 'justify-end' : 'justify-start'} msg-enter`;
         wrapper.id = `msg-${msg._id}`;
 
+        const adminBadge = (msg.email && msg.email.toLowerCase() === 'jeyaulhoquejaber@gmail.com')
+            ? `<span class="bg-red-500/20 text-red-400 text-[8px] px-1.5 py-0.5 rounded font-black uppercase ml-1" title="Admin">Admin</span>` : '';
+
         // Avatar
         let avatarHtml = '';
         if (isAI) {
             avatarHtml = `<div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-indigo-500/20 ring-2 ring-indigo-500/30"><i class="fas fa-robot text-white text-[10px]"></i></div>`;
         } else if (msg.avatarUrl) {
-            avatarHtml = `<img src="${msg.avatarUrl}" class="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-2 ring-zinc-800" loading="lazy">`;
+            avatarHtml = `<img src="${msg.avatarUrl}" class="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-2 ring-zinc-800 hover:ring-indigo-500/50 transition cursor-pointer" loading="lazy">`;
         } else {
             const initial = (msg.name || 'U').charAt(0).toUpperCase();
             const colors = ['bg-purple-600','bg-emerald-600','bg-rose-600','bg-amber-600','bg-cyan-600','bg-pink-600'];
             const colorIdx = (msg.name || '').length % colors.length;
-            avatarHtml = `<div class="w-8 h-8 rounded-full ${colors[colorIdx]} flex items-center justify-center text-[11px] font-bold flex-shrink-0 ring-2 ring-zinc-800">${initial}</div>`;
+            avatarHtml = `<div class="w-8 h-8 rounded-full ${colors[colorIdx]} flex items-center justify-center text-[11px] font-bold flex-shrink-0 ring-2 ring-zinc-800 hover:ring-indigo-500/50 transition cursor-pointer">${initial}</div>`;
         }
+        
+        const avatarWrapperHtml = isAI ? avatarHtml : `<a href="profile.html?user=${encodeURIComponent(msg.email || '')}">${avatarHtml}</a>`;
 
         const ts = msg.timestamp ? new Date(msg.timestamp) : new Date();
         const timeStr = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -371,7 +396,7 @@ document.addEventListener("DOMContentLoaded", () => {
             // === OTHER / AI MESSAGE (left aligned) ===
             const nameBadge = isAI
                 ? `<span class="text-[11px] font-bold text-indigo-400">${msg.name}</span><span class="bg-indigo-500/20 text-indigo-400 text-[8px] px-1.5 py-0.5 rounded font-black uppercase ml-1">AI</span>`
-                : `<span class="text-[11px] font-bold text-zinc-400">${msg.name || 'Anonymous'}</span>`;
+                : `<a href="profile.html?user=${encodeURIComponent(msg.email || '')}" class="text-[11px] font-bold text-zinc-400 hover:text-white transition cursor-pointer">${msg.name || 'Anonymous'}</a>${adminBadge}`;
 
             const bubbleClass = isAI
                 ? 'bg-zinc-900 border border-indigo-500/20 shadow-lg shadow-indigo-500/5'
@@ -379,7 +404,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             wrapper.innerHTML = `
                 <div class="flex gap-2.5 max-w-[85%] sm:max-w-[70%] group">
-                    ${avatarHtml}
+                    ${avatarWrapperHtml}
                     <div class="flex flex-col items-start min-w-0">
                         <div class="flex items-center gap-2 mb-0.5 ml-1">
                             ${nameBadge}
@@ -510,16 +535,19 @@ document.addEventListener("DOMContentLoaded", () => {
                         ? `<img src="${u.avatarUrl}" class="w-9 h-9 rounded-full object-cover" loading="lazy">`
                         : `<div class="w-9 h-9 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold">${name.charAt(0).toUpperCase()}</div>`;
 
+                    const adminBadgeList = (email.toLowerCase() === 'jeyaulhoquejaber@gmail.com')
+                        ? `<span class="bg-red-500/20 text-red-400 text-[8px] px-1.5 py-0.5 rounded-md font-black uppercase ml-1" title="Admin">Admin</span>` : '';
+
                     html += `
-                        <div class="flex items-center gap-3 p-2 rounded-xl hover:bg-zinc-800/50 transition cursor-default">
+                        <a href="profile.html?user=${encodeURIComponent(email)}" class="flex items-center gap-3 p-2 rounded-xl hover:bg-zinc-800/50 transition cursor-pointer">
                             <div class="relative flex-shrink-0">
                                 ${avatarInner}
                             </div>
                             <div class="min-w-0">
-                                <p class="text-xs font-semibold text-zinc-200 truncate">${name}</p>
+                                <p class="text-xs font-semibold text-zinc-200 truncate flex items-center">${name}${adminBadgeList}</p>
                                 <p class="text-[10px] text-zinc-600 truncate">${email}</p>
                             </div>
-                        </div>
+                        </a>
                     `;
                 });
 
