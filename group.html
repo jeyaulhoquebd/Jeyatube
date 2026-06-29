@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JTubeGroup - Community Chat</title>
+    <link rel="shortcut icon" href="img/jtubeimg.png" type="image/x-icon">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        #chat-messages::-webkit-scrollbar { width: 6px; }
+        #chat-messages::-webkit-scrollbar-track { background: transparent; }
+        #chat-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 10px; }
+        #chat-messages::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+    </style>
+</head>
+<body class="bg-zinc-950 text-white font-sans antialiased min-h-screen flex flex-col">
+
+    <header class="bg-zinc-900/90 backdrop-blur-md flex items-center justify-between px-6 py-4 border-b border-zinc-800/80 sticky top-0 z-50">
+        <div class="flex items-center space-x-3">
+            <a href="index.html" class="flex items-center space-x-1.5 text-2xl font-black tracking-tighter brand-font">
+                <span class="bg-gradient-to-br from-red-600 to-red-800 text-white px-2.5 py-0.5 rounded-lg shadow-lg shadow-red-600/20">J</span>
+                <span class="brand-logo-text">Tube</span>
+            </a>
+            <span class="bg-zinc-800 text-blue-400 text-[10px] font-bold px-2 py-0.5 rounded-full tracking-widest uppercase"><i class="fas fa-users mr-1"></i> Group</span>
+        </div>
+        <a href="index.html" class="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-full font-medium">
+            <i class="fas fa-home"></i> Home
+        </a>
+    </header>
+
+    <main class="flex-1 w-full max-w-5xl mx-auto p-4 md:p-6 flex flex-col h-[calc(100vh-73px)]">
+        <!-- Auth Warning (Hidden by default) -->
+        <div id="auth-warning" class="hidden flex-1 flex flex-col items-center justify-center text-center">
+            <div class="w-20 h-20 bg-zinc-800 rounded-full flex items-center justify-center mb-5 border border-zinc-700 shadow-xl">
+                <i class="fas fa-lock text-3xl text-zinc-500"></i>
+            </div>
+            <h2 class="text-3xl font-black mb-2 text-white">Members Only</h2>
+            <p class="text-zinc-400 mb-8 max-w-sm text-sm">Join the JtubeGroup community to chat with other viewers, share videos, and talk to Jaks AI!</p>
+            <a href="index.html" class="bg-white hover:bg-zinc-200 text-black px-8 py-3 rounded-full font-bold transition shadow-lg shadow-white/10">Log In to Join</a>
+        </div>
+
+        <!-- Chat Container -->
+        <div id="chat-container" class="hidden flex-1 flex flex-col bg-zinc-900/50 border border-zinc-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-sm">
+            <!-- Header -->
+            <div class="bg-zinc-900/80 px-6 py-4 border-b border-zinc-800/80 flex justify-between items-center relative z-10 shadow-sm">
+                <div>
+                    <h2 class="font-bold text-lg flex items-center gap-2">
+                        <i class="fas fa-hashtag text-zinc-500"></i> Community Chat
+                    </h2>
+                    <p class="text-xs text-zinc-400 mt-0.5">Type <span class="bg-zinc-800 px-1.5 py-0.5 rounded text-blue-400 font-mono">@JaksAI</span> to ask the AI assistant!</p>
+                </div>
+                <div class="hidden sm:flex items-center -space-x-2" id="active-users-avatars">
+                    <!-- Avatars of active users can go here -->
+                </div>
+            </div>
+
+            <!-- Messages Area -->
+            <div id="chat-messages" class="flex-1 overflow-y-auto p-4 md:p-6 space-y-5 scroll-smooth">
+                <div class="text-center my-6">
+                    <span class="bg-zinc-800/80 text-zinc-400 text-[11px] font-bold px-3 py-1.5 rounded-full uppercase tracking-wider">Welcome to the Group</span>
+                </div>
+                <!-- Messages will be injected here -->
+            </div>
+
+            <!-- AI Typing Indicator (Hidden by default) -->
+            <div id="ai-typing" class="hidden px-6 py-2 bg-zinc-900/90 border-t border-zinc-800 text-xs text-zinc-400 flex items-center gap-2">
+                <div class="flex space-x-1">
+                    <div class="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0s;"></div>
+                    <div class="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s;"></div>
+                    <div class="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.4s;"></div>
+                </div>
+                <span>Jaks AI is thinking...</span>
+            </div>
+
+            <!-- Input Area -->
+            <div class="bg-zinc-900 p-4 border-t border-zinc-800/80 relative z-10">
+                <form id="chat-form" class="flex items-end gap-3 max-w-4xl mx-auto">
+                    <div class="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden focus-within:border-blue-500/50 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all shadow-inner relative">
+                        <textarea id="chat-input" rows="1" placeholder="Type a message or paste a Jtube link..." class="w-full bg-transparent px-4 py-3.5 text-sm text-zinc-200 focus:outline-none resize-none max-h-32 min-h-[50px] leading-relaxed" style="scrollbar-width:none;"></textarea>
+                    </div>
+                    <button type="submit" id="send-btn" class="bg-blue-600 hover:bg-blue-500 text-white w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-600/20">
+                        <i class="fas fa-paper-plane text-sm"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js" defer></script>
+    <script src="env.js" defer></script>
+    <script src="data.js" defer></script>
+    <script src="jask.js" defer></script>
+    <script src="group.js" defer></script>
+</body>
+</html>
