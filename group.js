@@ -1,164 +1,257 @@
-document.addEventListener("DOMContentLoaded", async () => {
+/**
+ * JTubeGroup — Real-time Community Chat
+ * Uses Firebase Realtime Database for instant messaging,
+ * Firestore for user profiles, and JAsk AI for bot responses.
+ */
+document.addEventListener("DOMContentLoaded", () => {
+    // ===== DOM REFERENCES =====
     const authWarning = document.getElementById("auth-warning");
+    const loadingState = document.getElementById("loading-state");
     const chatContainer = document.getElementById("chat-container");
     const chatMessages = document.getElementById("chat-messages");
     const chatForm = document.getElementById("chat-form");
     const chatInput = document.getElementById("chat-input");
     const sendBtn = document.getElementById("send-btn");
     const aiTyping = document.getElementById("ai-typing");
-    
+    const membersToggle = document.getElementById("members-toggle");
+    const membersDrawer = document.getElementById("members-drawer");
+    const closeMembers = document.getElementById("close-members");
+    const membersList = document.getElementById("members-list");
+    const headerAvatars = document.getElementById("header-avatars");
+    const headerMemberCount = document.getElementById("header-member-count");
+    const subtitleMemberCount = document.getElementById("subtitle-member-count");
+
     let allVideos = [];
     let isInitialLoad = true;
+    let chatInitialized = false;
+    let chatListenerRef = null;
 
-    // Load videos for link previews
-    try {
-        allVideos = await getVideos();
-    } catch (e) {
-        console.error("Failed to load videos for previews", e);
-    }
-
-    // Auto resize textarea
-    chatInput.addEventListener('input', function() {
-        this.style.height = 'auto';
-        this.style.height = (this.scrollHeight) + 'px';
-        sendBtn.disabled = this.value.trim().length === 0;
-    });
-
-    chatInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            chatForm.dispatchEvent(new Event('submit'));
-        }
-    });
-
-    // Check Auth State
-    document.addEventListener('authStateChanged', (e) => {
-        if (e.detail) {
-            // Logged in
-            authWarning.classList.add('hidden');
-            chatContainer.classList.remove('hidden');
-            chatContainer.classList.add('flex');
-            initChat(e.detail);
-        } else {
-            // Not logged in
-            authWarning.classList.remove('hidden');
-            authWarning.classList.add('flex');
-            chatContainer.classList.add('hidden');
-            chatContainer.classList.remove('flex');
-        }
-    });
-
-    function initChat(user) {
-        const chatRef = dbRealtime.ref('jtube_group_chat');
-        
-        // Listen for new messages
-        chatRef.limitToLast(100).on('child_added', (snapshot) => {
-            const msg = snapshot.val();
-            renderMessage(msg, user);
+    // ===== TEXTAREA AUTO-RESIZE =====
+    if (chatInput) {
+        chatInput.addEventListener('input', function () {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 112) + 'px';
+            sendBtn.disabled = this.value.trim().length === 0;
         });
 
-        // Handle sending
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (chatInput.value.trim()) {
+                    chatForm.dispatchEvent(new Event('submit'));
+                }
+            }
+        });
+    }
+
+    // ===== MEMBERS DRAWER TOGGLE =====
+    if (membersToggle) {
+        membersToggle.addEventListener('click', () => {
+            membersDrawer.classList.toggle('hidden-drawer');
+        });
+    }
+    if (closeMembers) {
+        closeMembers.addEventListener('click', () => {
+            membersDrawer.classList.add('hidden-drawer');
+        });
+    }
+
+    // ===== AUTH STATE HANDLING =====
+    // Use Firebase's onAuthStateChanged directly — it's the most reliable approach.
+    // The `auth` global is defined in data.js (which loads before this script).
+    auth.onAuthStateChanged(async (user) => {
+        if (loadingState) loadingState.classList.add('hidden');
+
+        if (user) {
+            // === LOGGED IN ===
+            if (authWarning) authWarning.classList.add('hidden');
+            chatContainer.classList.remove('hidden');
+            chatContainer.classList.add('flex');
+
+            // Load videos for link previews (non-blocking)
+            try { allVideos = await getVideos(); } catch (e) { /* silent */ }
+
+            if (!chatInitialized) {
+                initChat(user);
+                chatInitialized = true;
+            }
+        } else {
+            // === NOT LOGGED IN ===
+            chatContainer.classList.add('hidden');
+            chatContainer.classList.remove('flex');
+            if (authWarning) {
+                authWarning.classList.remove('hidden');
+                authWarning.classList.add('flex');
+            }
+        }
+    });
+
+    // ===== INIT CHAT =====
+    function initChat(user) {
+        // Firebase RTDB reference — `rtdb` is defined in data.js line 16
+        const chatRef = rtdb.ref('jtube_group_chat');
+
+        // Listen for last 80 messages
+        chatListenerRef = chatRef.orderByChild('timestamp').limitToLast(80);
+        chatListenerRef.on('child_added', (snapshot) => {
+            const msg = snapshot.val();
+            if (msg) {
+                msg._key = snapshot.key;
+                renderMessage(msg, user);
+            }
+        });
+
+        // Handle form submit
         chatForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const text = chatInput.value.trim();
-            if (!text) return;
+            if (!text || text.length > 2000) return;
+
+            // Anti-spam: prevent rapid fire
+            if (sendBtn.dataset.cooldown === '1') return;
+            sendBtn.dataset.cooldown = '1';
+            setTimeout(() => { sendBtn.dataset.cooldown = '0'; }, 1500);
 
             // Reset input
             chatInput.value = '';
             chatInput.style.height = 'auto';
             sendBtn.disabled = true;
 
+            // Build message payload
             const msgData = {
                 uid: user.uid,
-                email: user.email,
                 name: user.displayName || user.email.split('@')[0],
-                avatarUrl: null, // Could pull from firestore if needed
+                email: user.email,
+                avatarUrl: user.photoURL || null,
                 text: text,
                 timestamp: firebase.database.ServerValue.TIMESTAMP
             };
 
-            // Get user's avatar from Firestore (optional but nice)
+            // Try to get richer avatar from Firestore profile
             try {
-                const profile = await getUserProfile(user.uid);
-                if (profile && profile.avatarUrl) {
-                    msgData.avatarUrl = profile.avatarUrl;
+                if (typeof getUserProfile === 'function') {
+                    const profile = await getUserProfile(user.uid);
+                    if (profile) {
+                        if (profile.avatarUrl) msgData.avatarUrl = profile.avatarUrl;
+                        if (profile.name) msgData.name = profile.name;
+                    }
                 }
-            } catch (err) { }
+            } catch (err) { /* silent */ }
 
-            // Push message
-            await chatRef.push(msgData);
+            // Push to Firebase
+            try {
+                await chatRef.push(msgData);
+            } catch (err) {
+                console.error("Failed to send message:", err);
+                if (typeof showToast === 'function') showToast("Failed to send message", "error");
+                return;
+            }
 
-            // Check if Jaks AI was mentioned
-            if (text.toLowerCase().includes('@jaksai') || text.toLowerCase().startsWith('/ask')) {
+            // ===== JAKS AI TRIGGER =====
+            const lowerText = text.toLowerCase();
+            if (lowerText.includes('@jaksai') || lowerText.startsWith('/ask')) {
                 aiTyping.classList.remove('hidden');
-                
+                chatMessages.scrollTo({ top: chatMessages.scrollHeight, behavior: 'smooth' });
+
                 try {
                     const query = text.replace(/@jaksai|\/ask/gi, '').trim() || "Hello!";
-                    // JAsk expects a current video context, we'll pass a dummy one for the group chat
-                    const dummyContext = { title: 'JtubeGroup Chat', channel: 'Community', category: 'General', description: 'Jtube group chat' };
-                    
+                    const dummyContext = {
+                        title: 'JTubeGroup Community Chat',
+                        channel: 'Community',
+                        category: 'General',
+                        description: 'JTube community group chat — users are chatting together.'
+                    };
+
                     const aiResponse = await JAsk.askGroq(query, dummyContext);
-                    
+
                     const aiMsgData = {
-                        uid: 'jaks_ai',
+                        uid: 'jaks_ai_bot',
                         name: 'Jaks AI',
                         isAI: true,
-                        text: aiResponse.text,
+                        avatarUrl: null,
+                        text: aiResponse.text || "I couldn't process that. Try again!",
                         timestamp: firebase.database.ServerValue.TIMESTAMP
                     };
-                    
+
                     await chatRef.push(aiMsgData);
                 } catch (err) {
-                    console.error("AI Error:", err);
+                    console.error("Jaks AI Error:", err);
+                    // Push an error message from the bot
+                    await chatRef.push({
+                        uid: 'jaks_ai_bot',
+                        name: 'Jaks AI',
+                        isAI: true,
+                        text: "⚠️ Sorry, I'm having trouble right now. Please try again!",
+                        timestamp: firebase.database.ServerValue.TIMESTAMP
+                    });
                 } finally {
                     aiTyping.classList.add('hidden');
                 }
             }
         });
+
+        // Load members
+        loadGroupMembers();
     }
 
+    // ===== RENDER A SINGLE MESSAGE =====
     function renderMessage(msg, currentUser) {
         const isMe = msg.uid === currentUser.uid;
-        const isAI = msg.isAI;
-        
-        const div = document.createElement('div');
-        div.className = `flex ${isMe ? 'justify-end' : 'justify-start'} mb-4 group`;
+        const isAI = msg.isAI === true;
 
+        const wrapper = document.createElement('div');
+        wrapper.className = `flex ${isMe ? 'justify-end' : 'justify-start'} msg-enter`;
+
+        // Avatar
         let avatarHtml = '';
         if (isAI) {
-            avatarHtml = `<div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-500/20 border border-blue-500"><i class="fas fa-robot text-white text-xs"></i></div>`;
+            avatarHtml = `<div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-indigo-500/20 ring-2 ring-indigo-500/30"><i class="fas fa-robot text-white text-[10px]"></i></div>`;
         } else if (msg.avatarUrl) {
-            avatarHtml = `<img src="${msg.avatarUrl}" class="w-8 h-8 rounded-full object-cover flex-shrink-0 border border-zinc-700">`;
+            avatarHtml = `<img src="${msg.avatarUrl}" class="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-2 ring-zinc-800" loading="lazy">`;
         } else {
-            avatarHtml = `<div class="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold flex-shrink-0 border border-zinc-700">${msg.name.charAt(0).toUpperCase()}</div>`;
+            const initial = (msg.name || 'U').charAt(0).toUpperCase();
+            const colors = ['bg-purple-600','bg-emerald-600','bg-rose-600','bg-amber-600','bg-cyan-600','bg-pink-600'];
+            const colorIdx = (msg.name || '').length % colors.length;
+            avatarHtml = `<div class="w-8 h-8 rounded-full ${colors[colorIdx]} flex items-center justify-center text-[11px] font-bold flex-shrink-0 ring-2 ring-zinc-800">${initial}</div>`;
         }
 
-        const timeString = new Date(msg.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        
-        // Parse links and specifically watch.html links
-        let contentHtml = parseLinksAndVideo(msg.text);
+        const ts = msg.timestamp ? new Date(msg.timestamp) : new Date();
+        const timeStr = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        // Parse message text
+        const contentHtml = parseMessageContent(msg.text || '');
 
         if (isMe) {
-            div.innerHTML = `
-                <div class="flex flex-col items-end max-w-[80%]">
+            // === MY MESSAGE (right aligned, blue bubble) ===
+            wrapper.innerHTML = `
+                <div class="flex flex-col items-end max-w-[85%] sm:max-w-[70%] group">
                     <div class="flex items-end gap-2">
-                        <span class="text-[10px] text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity mb-1">${timeString}</span>
-                        <div class="bg-blue-600 text-white px-4 py-2 rounded-2xl rounded-tr-sm shadow-md leading-relaxed text-sm break-words">
+                        <span class="text-[9px] text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity mb-1 select-none">${timeStr}</span>
+                        <div class="bg-indigo-600 text-white px-3.5 py-2 rounded-2xl rounded-br-md shadow-md text-[13px] leading-relaxed break-words min-w-[40px]">
                             ${contentHtml}
                         </div>
                     </div>
                 </div>
             `;
         } else {
-            div.innerHTML = `
-                <div class="flex gap-3 max-w-[85%]">
+            // === OTHER / AI MESSAGE (left aligned) ===
+            const nameBadge = isAI
+                ? `<span class="text-[11px] font-bold text-indigo-400">${msg.name}</span><span class="bg-indigo-500/20 text-indigo-400 text-[8px] px-1.5 py-0.5 rounded font-black uppercase ml-1">AI</span>`
+                : `<span class="text-[11px] font-bold text-zinc-400">${msg.name || 'Anonymous'}</span>`;
+
+            const bubbleClass = isAI
+                ? 'bg-zinc-900 border border-indigo-500/20 shadow-lg shadow-indigo-500/5'
+                : 'bg-zinc-800/80';
+
+            wrapper.innerHTML = `
+                <div class="flex gap-2.5 max-w-[85%] sm:max-w-[70%] group">
                     ${avatarHtml}
-                    <div class="flex flex-col items-start">
-                        <div class="flex items-center gap-2 mb-1">
-                            <span class="text-xs font-bold ${isAI ? 'text-blue-400' : 'text-zinc-300'}">${msg.name} ${isAI ? '<i class="fas fa-certificate text-[10px] text-blue-500 ml-0.5"></i>' : ''}</span>
-                            <span class="text-[10px] text-zinc-500">${timeString}</span>
+                    <div class="flex flex-col items-start min-w-0">
+                        <div class="flex items-center gap-2 mb-0.5 ml-1">
+                            ${nameBadge}
+                            <span class="text-[9px] text-zinc-600">${timeStr}</span>
                         </div>
-                        <div class="${isAI ? 'bg-zinc-800/80 border border-blue-500/30' : 'bg-zinc-800'} text-zinc-100 px-4 py-2 rounded-2xl rounded-tl-sm shadow-md leading-relaxed text-sm break-words w-full">
+                        <div class="${bubbleClass} text-zinc-200 px-3.5 py-2 rounded-2xl rounded-bl-md shadow-sm text-[13px] leading-relaxed break-words min-w-[40px]">
                             ${contentHtml}
                         </div>
                     </div>
@@ -166,63 +259,136 @@ document.addEventListener("DOMContentLoaded", async () => {
             `;
         }
 
-        chatMessages.appendChild(div);
-        
-        // Auto scroll down smoothly
+        chatMessages.appendChild(wrapper);
+
+        // Auto-scroll
         if (isInitialLoad) {
             chatMessages.scrollTop = chatMessages.scrollHeight;
-            setTimeout(() => isInitialLoad = false, 1000);
+            setTimeout(() => { isInitialLoad = false; }, 1500);
         } else {
-            chatMessages.scrollTo({
-                top: chatMessages.scrollHeight,
-                behavior: 'smooth'
-            });
+            // Only auto-scroll if user is near the bottom
+            const distFromBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight;
+            if (distFromBottom < 200 || isMe) {
+                chatMessages.scrollTo({ top: chatMessages.scrollHeight, behavior: 'smooth' });
+            }
         }
     }
 
-    function parseLinksAndVideo(text) {
-        // Escape HTML
-        let safeText = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        
-        // Check for Jtube video links first
-        const watchLinkRegex = /watch\.html\?id=([a-zA-Z0-9_-]+)/g;
-        let hasVideoLink = false;
-        
-        safeText = safeText.replace(watchLinkRegex, (match, id) => {
+    // ===== PARSE MESSAGE CONTENT =====
+    function parseMessageContent(text) {
+        // 1. Escape HTML
+        let safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        // 2. JTube video link previews
+        const watchRegex = /watch\.html\?id=([a-zA-Z0-9_-]+)/g;
+        safe = safe.replace(watchRegex, (match, id) => {
             const video = allVideos.find(v => v.id === id);
             if (video) {
-                hasVideoLink = true;
-                return `
-                    <a href="watch.html?id=${video.id}" class="block mt-2 mb-1 bg-zinc-900 border border-zinc-700/80 rounded-xl overflow-hidden hover:border-zinc-500 transition max-w-sm group no-underline text-current">
-                        <div class="aspect-video relative overflow-hidden">
-                            <img src="${video.thumbnail}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
-                            <div class="absolute inset-0 bg-black/10 group-hover:bg-black/30 transition flex items-center justify-center">
-                                <i class="fas fa-play text-white text-3xl opacity-0 group-hover:opacity-100 transition drop-shadow-lg"></i>
-                            </div>
-                            <span class="absolute bottom-2 right-2 bg-black/80 px-1.5 py-0.5 rounded text-[10px] font-semibold">${video.duration}</span>
+                return `<a href="watch.html?id=${video.id}" class="chat-video-preview block mt-2 mb-1 bg-zinc-950 border border-zinc-700/60 rounded-xl overflow-hidden hover:border-indigo-500/40 transition max-w-xs no-underline text-current cursor-pointer">
+                    <div class="aspect-video relative overflow-hidden">
+                        <img src="${video.thumbnail}" class="w-full h-full object-cover" loading="lazy">
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
+                        <div class="absolute bottom-2 right-2 bg-black/80 px-1.5 py-0.5 rounded text-[10px] font-bold">${video.duration || ''}</div>
+                        <div class="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition bg-black/20">
+                            <div class="w-10 h-10 bg-white/90 rounded-full flex items-center justify-center"><i class="fas fa-play text-black text-sm ml-0.5"></i></div>
                         </div>
-                        <div class="p-3">
-                            <h4 class="text-sm font-bold line-clamp-2 leading-snug group-hover:text-blue-400 transition">${video.title}</h4>
-                            <p class="text-xs text-zinc-400 mt-1 flex items-center gap-1">
-                                ${video.channel} <i class="fas fa-check-circle text-[10px]"></i>
-                            </p>
-                        </div>
-                    </a>
-                `;
+                    </div>
+                    <div class="p-2.5">
+                        <h4 class="text-xs font-bold line-clamp-2 leading-snug text-white">${video.title}</h4>
+                        <p class="text-[10px] text-zinc-500 mt-1 flex items-center gap-1">${video.channel} <img src="img/icons.svg" class="w-3 h-3"></p>
+                    </div>
+                </a>`;
             }
-            return `<a href="${match}" class="text-blue-400 hover:underline break-all">${match}</a>`;
+            return `<a href="${match}" class="text-indigo-400 hover:underline break-all">${match}</a>`;
         });
 
-        // Convert standard URLs if they weren't matched as videos
-        const urlRegex = /(https?:\/\/[^\s]+)(?![^<]*>|[^<>]*<\/)/g;
-        safeText = safeText.replace(urlRegex, function(url) {
-            return `<a href="${url}" target="_blank" class="text-blue-400 hover:underline break-all">${url}</a>`;
+        // 3. Standard URLs
+        const urlRegex = /(https?:\/\/[^\s<]+)/g;
+        safe = safe.replace(urlRegex, (url) => {
+            // Don't double-wrap URLs already inside an href
+            if (safe.indexOf(`href="${url}"`) !== -1) return url;
+            return `<a href="${url}" target="_blank" rel="noopener" class="text-indigo-400 hover:underline break-all">${url}</a>`;
         });
 
-        // Convert newlines to breaks for regular text parts
-        // A bit tricky because we injected HTML blocks. Let's just do a simple replace that ignores HTML
-        // Actually, we can just style the container with whitespace-pre-wrap
-        
-        return `<div class="whitespace-pre-wrap font-sans">${safeText}</div>`;
+        // 4. @JaksAI mention highlight
+        safe = safe.replace(/@JaksAI/gi, '<span class="text-indigo-400 font-bold">@JaksAI</span>');
+
+        // 5. /ask command highlight
+        safe = safe.replace(/^\/ask/gm, '<span class="text-indigo-400 font-mono font-bold">/ask</span>');
+
+        return `<div class="whitespace-pre-wrap">${safe}</div>`;
+    }
+
+    // ===== LOAD GROUP MEMBERS =====
+    async function loadGroupMembers() {
+        try {
+            if (typeof db === 'undefined') return;
+
+            const snapshot = await db.collection("users").get();
+            const users = [];
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                data._id = doc.id;
+                users.push(data);
+            });
+
+            const totalCount = users.length + 1; // +1 for Jaks AI bot
+
+            // Update counts
+            if (headerMemberCount) headerMemberCount.textContent = `${totalCount}`;
+            if (subtitleMemberCount) subtitleMemberCount.textContent = `${totalCount} members`;
+
+            // Build header avatars (max 5)
+            if (headerAvatars) {
+                let html = '';
+                users.slice(0, 5).forEach(u => {
+                    const name = u.name || u.displayName || u.email || 'User';
+                    if (u.avatarUrl) {
+                        html += `<img src="${u.avatarUrl}" class="w-7 h-7 rounded-full border-2 border-zinc-900 object-cover" title="${name}" loading="lazy">`;
+                    } else {
+                        const initial = name.charAt(0).toUpperCase();
+                        html += `<div class="w-7 h-7 rounded-full bg-purple-600 border-2 border-zinc-900 flex items-center justify-center text-[9px] font-bold" title="${name}">${initial}</div>`;
+                    }
+                });
+                if (users.length > 5) {
+                    html += `<div class="w-7 h-7 rounded-full bg-zinc-800 border-2 border-zinc-900 flex items-center justify-center text-[9px] font-bold text-zinc-400">+${users.length - 5}</div>`;
+                }
+                headerAvatars.innerHTML = html;
+            }
+
+            // Build members list in drawer
+            if (membersList) {
+                let html = '';
+                users.forEach(u => {
+                    const name = u.name || u.displayName || u.email || 'User';
+                    const email = u.email || '';
+                    const avatarInner = u.avatarUrl
+                        ? `<img src="${u.avatarUrl}" class="w-9 h-9 rounded-full object-cover" loading="lazy">`
+                        : `<div class="w-9 h-9 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold">${name.charAt(0).toUpperCase()}</div>`;
+
+                    html += `
+                        <div class="flex items-center gap-3 p-2 rounded-xl hover:bg-zinc-800/50 transition cursor-default">
+                            <div class="relative flex-shrink-0">
+                                ${avatarInner}
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-xs font-semibold text-zinc-200 truncate">${name}</p>
+                                <p class="text-[10px] text-zinc-600 truncate">${email}</p>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                if (users.length === 0) {
+                    html = '<p class="text-center text-xs text-zinc-600 py-8">No members yet.</p>';
+                }
+
+                membersList.innerHTML = html;
+            }
+
+        } catch (e) {
+            console.error("Error loading group members:", e);
+            if (membersList) membersList.innerHTML = '<p class="text-center text-xs text-zinc-500 py-8">Could not load members.</p>';
+        }
     }
 });
