@@ -5,6 +5,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     let channels = await getChannels();
     let video = await getVideoById(videoId);
 
+    const loadingScreen = document.getElementById("video-loading-screen");
+    if (loadingScreen) {
+        loadingScreen.style.opacity = '0';
+        setTimeout(() => loadingScreen.classList.add("hidden"), 300);
+    }
+
     if (!video) {
         document.body.innerHTML = `<div class="text-center py-20"><h1 class="text-2xl">Video not found.</h1><a href="index.html" class="text-blue-500 mt-4 block">Return Home</a></div>`;
         return;
@@ -123,7 +129,18 @@ document.addEventListener("DOMContentLoaded", async () => {
     const embedUrl = convertToEmbedUrl(video.videoUrl);
     if (embedUrl) {
         const container = videoPlayer.parentElement;
-        container.innerHTML = `<iframe class="w-full h-full" src="${embedUrl}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+        container.innerHTML = `
+            <div id="iframe-loading" class="absolute inset-0 flex items-center justify-center bg-black z-10">
+                <div class="w-10 h-10 border-4 border-zinc-700 border-t-red-600 rounded-full animate-spin"></div>
+            </div>
+            <iframe id="youtube-iframe" class="w-full h-full relative z-20 opacity-0 transition-opacity duration-300" src="${embedUrl}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+        `;
+        const iframe = document.getElementById("youtube-iframe");
+        const iframeLoading = document.getElementById("iframe-loading");
+        iframe.onload = () => {
+            iframe.classList.remove("opacity-0");
+            if (iframeLoading) iframeLoading.classList.add("hidden");
+        };
     } else {
         videoPlayer.src = video.videoUrl;
     }

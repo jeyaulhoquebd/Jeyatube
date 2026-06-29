@@ -88,17 +88,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // ===== INIT CHAT =====
     function initChat(user) {
-        // Firebase RTDB reference — `rtdb` is defined in data.js line 16
-        const chatRef = rtdb.ref('jtube_group_chat');
+        // Firebase Firestore reference
+        const chatRef = db.collection('jtube_group_chat');
 
         // Listen for last 80 messages
-        chatListenerRef = chatRef.orderByChild('timestamp').limitToLast(80);
-        chatListenerRef.on('child_added', (snapshot) => {
-            const msg = snapshot.val();
-            if (msg) {
-                msg._key = snapshot.key;
-                renderMessage(msg, user);
-            }
+        chatListenerRef = chatRef.orderBy('timestamp').limitToLast(80);
+        chatListenerRef.onSnapshot((snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === 'added') {
+                    const msg = change.doc.data();
+                    msg._id = change.doc.id;
+                    renderMessage(msg, user);
+                }
+            });
         });
 
         // Handle form submit
@@ -124,7 +126,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 email: user.email,
                 avatarUrl: user.photoURL || null,
                 text: text,
-                timestamp: firebase.database.ServerValue.TIMESTAMP
+                timestamp: Date.now() // Use client timestamp for immediate sorting
             };
 
             // Try to get richer avatar from Firestore profile
@@ -140,7 +142,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             // Push to Firebase
             try {
-                await chatRef.push(msgData);
+                await chatRef.add(msgData);
             } catch (err) {
                 console.error("Failed to send message:", err);
                 if (typeof showToast === 'function') showToast("Failed to send message", "error");
@@ -170,19 +172,19 @@ document.addEventListener("DOMContentLoaded", () => {
                         isAI: true,
                         avatarUrl: null,
                         text: aiResponse.text || "I couldn't process that. Try again!",
-                        timestamp: firebase.database.ServerValue.TIMESTAMP
+                        timestamp: Date.now() + 1 // Add 1ms to ensure AI message appears after user message
                     };
 
-                    await chatRef.push(aiMsgData);
+                    await chatRef.add(aiMsgData);
                 } catch (err) {
                     console.error("Jaks AI Error:", err);
                     // Push an error message from the bot
-                    await chatRef.push({
+                    await chatRef.add({
                         uid: 'jaks_ai_bot',
                         name: 'Jaks AI',
                         isAI: true,
                         text: "⚠️ Sorry, I'm having trouble right now. Please try again!",
-                        timestamp: firebase.database.ServerValue.TIMESTAMP
+                        timestamp: Date.now() + 1
                     });
                 } finally {
                     aiTyping.classList.add('hidden');

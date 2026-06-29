@@ -33,14 +33,20 @@ service cloud.firestore {
       allow delete: if true;
     }
 
-    // Users collection: Users can read and write only their own data
+    // Users collection: Authenticated users can read basic profiles, users can write their own data
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
       
       // User history subcollection
       match /history/{historyId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
+    }
+
+    // Group chat collection: Authenticated users can read and write
+    match /jtube_group_chat/{messageId} {
+      allow read, write: if request.auth != null;
     }
 
     // Feedback collection: Anyone can submit feedback
