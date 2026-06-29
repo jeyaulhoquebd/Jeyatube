@@ -104,7 +104,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     channelContent.classList.remove("hidden");
     
     channelNameTitle.textContent = channelNameParam;
-    channelSubs.textContent = `${currentChannelData.subscribers || 0} subscribers`;
+    channelSubs.textContent = `${formatCompactNumber(currentChannelData.subscribers)} subscribers`;
     
     if (currentChannelData.coverUrl) {
         channelCover.innerHTML = `<img src="${currentChannelData.coverUrl}" class="w-full h-full object-cover" loading="lazy" alt="Channel cover">`;
@@ -145,7 +145,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         
         const subCount = currentChannelData.subscribedBy ? currentChannelData.subscribedBy.length : (currentChannelData.subscribers || 0);
-        channelSubs.textContent = `${subCount.toLocaleString()} subscribers`;
+        channelSubs.textContent = `${formatCompactNumber(subCount)} subscribers`;
     }
     updateSubscribeUI();
 
@@ -195,7 +195,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </div>
                 <div class="px-3 flex-1">
                     <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
-                    <p class="text-xs text-zinc-400 mt-1">${(video.views || 0).toLocaleString()} views • ${timeAgo(video.timestamp)}</p>
+                    <p class="text-xs text-zinc-400 mt-1">${formatCompactNumber(video.views)} views • ${timeAgo(video.timestamp)}</p>
                 </div>
             `;
             
@@ -326,7 +326,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             </div>
                             <div class="flex-1 min-w-0">
                                 <h4 class="font-semibold text-sm text-zinc-100 line-clamp-2 group-hover:text-white">${v.title}</h4>
-                                <p class="text-xs text-zinc-500 mt-1">${(v.views || 0).toLocaleString()} views • ${timeAgo(v.timestamp)}</p>
+                                <p class="text-xs text-zinc-500 mt-1">${formatCompactNumber(v.views)} views • ${timeAgo(v.timestamp)}</p>
                             </div>
                         </div>
                     `).join('')}

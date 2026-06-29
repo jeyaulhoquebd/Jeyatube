@@ -128,7 +128,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             <h3 class="font-bold text-lg text-white text-center line-clamp-1">${c.name}</h3>
                             <img src="img/icons.svg" class="w-4 h-4 flex-shrink-0" alt="Verified" title="Verified">
                         </div>
-                        <p class="text-xs text-zinc-400 mb-4">${subCount.toLocaleString()} subscribers</p>
+                        <p class="text-xs text-zinc-400 mb-4">${formatCompactNumber(subCount)} subscribers</p>
                         
                         <button class="w-full ${btnClass} px-4 py-2 rounded-full font-semibold transition text-sm" onclick="subscribeToChannel(event, '${c.name.replace(/'/g, "\\'")}')">
                             ${btnText}

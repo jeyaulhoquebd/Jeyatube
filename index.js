@@ -281,7 +281,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             <p class="text-xs truncate">${video.channel}</p>
                             <img src="img/icons.svg" class="w-3 h-3 flex-shrink-0" alt="Verified" title="Verified">
                         </div>
-                        <p class="text-xs text-zinc-400 mt-0.5">${(video.views || 0).toLocaleString()} views • ${timeAgo(video.timestamp)}</p>
+                        <p class="text-xs text-zinc-400 mt-0.5">${formatCompactNumber(video.views)} views • ${timeAgo(video.timestamp)}</p>
                     </div>
                 </div>
             `;
@@ -410,7 +410,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         <p class="text-xs truncate">${video.channel}</p>
                         <img src="img/icons.svg" class="w-3 h-3 flex-shrink-0" alt="Verified" title="Verified">
                     </div>
-                    <p class="text-xs text-zinc-400 mt-0.5">${(video.views || 0).toLocaleString()} views • ${timeAgo(video.timestamp)}</p>
+                    <p class="text-xs text-zinc-400 mt-0.5">${formatCompactNumber(video.views)} views • ${timeAgo(video.timestamp)}</p>
                 </div>
             </div>
         `;

@@ -136,7 +136,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         channelAvatar.textContent = video.channel[0];
     }
     channelName.textContent = video.channel;
-    videoMeta.textContent = `${video.views} views • ${timeAgo(video.timestamp)}`;
+    videoMeta.textContent = `${formatCompactNumber(video.views)} views • ${timeAgo(video.timestamp)}`;
 
     // Update OG meta tags dynamically
     const ogTitle = document.getElementById("og-title");
@@ -182,10 +182,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         
         // Calculate subscribers safely
         const subCount = currentChannel && currentChannel.subscribedBy ? currentChannel.subscribedBy.length : (currentChannel ? currentChannel.subscribers : 0);
-        channelSubs.textContent = `${subCount.toLocaleString()} subscribers`;
+        channelSubs.textContent = `${formatCompactNumber(subCount)} subscribers`;
 
         const likeCountNum = video.likedBy ? video.likedBy.length : (video.likes || 0);
-        likeCount.textContent = likeCountNum.toLocaleString();
+        likeCount.textContent = formatCompactNumber(likeCountNum);
         
         const isLiked = video.likedBy && currentUser && video.likedBy.includes(currentUser.email);
         const icon = likeBtn.querySelector("i");
@@ -315,7 +315,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             <p class="text-[11px] text-zinc-400 truncate">${v.channel}</p>
                             <img src="img/icons.svg" class="w-3 h-3 flex-shrink-0" alt="Verified" title="Verified">
                         </div>
-                        <p class="text-[11px] text-zinc-400">${(v.views || 0).toLocaleString()} views</p>
+                        <p class="text-[11px] text-zinc-400">${formatCompactNumber(v.views)} views</p>
                     </div>
                 </div>
             `;
@@ -405,7 +405,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     <img src="${linkedVideo.thumbnail}" class="w-16 h-10 rounded-lg object-cover flex-shrink-0">
                     <div class="flex-1 min-w-0">
                         <p class="text-xs font-semibold text-zinc-100 line-clamp-1 group-hover/link:text-violet-300 transition">${title}</p>
-                        <p class="text-[10px] text-zinc-500">${linkedVideo.channel} • ${(linkedVideo.views || 0).toLocaleString()} views</p>
+                        <p class="text-[10px] text-zinc-500">${linkedVideo.channel} • ${formatCompactNumber(linkedVideo.views)} views</p>
                     </div>
                     <i class="fas fa-play text-[10px] text-violet-400 opacity-0 group-hover/link:opacity-100 transition"></i>
                 </a>`;

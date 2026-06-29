@@ -56,7 +56,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         <div class="flex flex-col sm:flex-row sm:items-center sm:space-x-1 mt-1 sm:mt-1.5 text-xs text-zinc-400">
                             <p class="truncate hover:text-zinc-300">${v.channel}</p>
                             <span class="hidden sm:inline">•</span>
-                            <p>${(v.views || 0).toLocaleString()} views</p>
+                            <p>${formatCompactNumber(v.views)} views</p>
                         </div>
                     </div>
                 </div>

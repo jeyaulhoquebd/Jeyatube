@@ -55,7 +55,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             <div class="truncate max-w-[200px]">
                                 <p class="font-semibold text-white truncate text-xs sm:text-sm">${video.title}</p>
                                 <p class="text-[11px] text-zinc-500 sm:hidden">${video.channel}</p>
-                                <p class="text-[11px] text-zinc-600">${video.views?.toLocaleString() || 0} views</p>
+                                <p class="text-[11px] text-zinc-600">${formatCompactNumber(video.views)} views</p>
                             </div>
                         </td>
                         <td class="px-5 py-3.5 text-zinc-400 text-xs hidden sm:table-cell">${video.channel}</td>
@@ -158,19 +158,40 @@ document.addEventListener("DOMContentLoaded", async () => {
             return;
         }
 
+        let fetchedViews = 0;
+        let fetchedLikes = 0;
+        let ytId = null;
+        if (typeof getYoutubeId === 'function') {
+            ytId = getYoutubeId(videoUrl);
+        } else {
+            const match = videoUrl.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/);
+            ytId = (match && match[2].length === 11) ? match[2] : null;
+        }
+        
+        if (ytId) {
+            try {
+                const sRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${ytId}&key=${ENV.YOUTUBE_API_KEY}`);
+                const sData = await sRes.json();
+                if (sData.items && sData.items.length > 0) {
+                    fetchedViews = parseInt(sData.items[0].statistics?.viewCount || 0);
+                    fetchedLikes = parseInt(sData.items[0].statistics?.likeCount || 0);
+                }
+            } catch(e) {}
+        }
+
         const newVideo = {
-            id: "vid_" + Date.now().toString(),
+            id: ytId ? "yt_" + ytId : "vid_" + Date.now().toString(),
             title,
             channel: channelName,
             category,
             playlist: playlistName,
-            views: 0,
+            views: fetchedViews,
             time: "Just now",
             duration,
             thumbnail,
             videoUrl,
             description: description || "No description provided.",
-            likes: 0,
+            likes: fetchedLikes,
             liked: false,
             comments: [],
             timestamp: Date.now()
@@ -373,12 +394,19 @@ document.addEventListener("DOMContentLoaded", async () => {
                 if (data.items && data.items.length > 0) {
                     const videoIds = data.items.map(item => item.contentDetails.videoId).filter(Boolean).join(',');
                     if (videoIds) {
-                        const vidRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${videoIds}&key=${ENV.YOUTUBE_API_KEY}`);
+                        const vidRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails,statistics&id=${videoIds}&key=${ENV.YOUTUBE_API_KEY}`);
                         const vidData = await vidRes.json();
 
                         const durationMap = {};
+                        const statsMap = {};
                         if (vidData.items) {
-                            vidData.items.forEach(v => { durationMap[v.id] = v.contentDetails.duration; });
+                            vidData.items.forEach(v => { 
+                                durationMap[v.id] = v.contentDetails.duration;
+                                statsMap[v.id] = {
+                                    views: parseInt(v.statistics?.viewCount || 0),
+                                    likes: parseInt(v.statistics?.likeCount || 0)
+                                };
+                            });
                         }
 
                         // FILTER: Only keep videos LONGER than 1 minute (60 seconds)
@@ -392,6 +420,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                             
                             item._durationText = formatDuration(totalSeconds);
                             item._durationSeconds = totalSeconds;
+                            item._views = statsMap[item.contentDetails.videoId]?.views || 0;
+                            item._likes = statsMap[item.contentDetails.videoId]?.likes || 0;
                             return true;
                         });
                         allVideos = allVideos.concat(filtered);
@@ -412,14 +442,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    async function getChannelUploadPlaylistId(channelId) {
+    async function getChannelDetails(channelId) {
         try {
             showProgress(5, "Looking up channel...");
-            const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=${channelId}&key=${ENV.YOUTUBE_API_KEY}`);
+            const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=contentDetails,statistics&id=${channelId}&key=${ENV.YOUTUBE_API_KEY}`);
             const data = await res.json();
             if (data.error) throw new Error(data.error.message);
             if (data.items && data.items.length > 0) {
-                return data.items[0].contentDetails.relatedPlaylists.uploads;
+                return {
+                    playlistId: data.items[0].contentDetails.relatedPlaylists.uploads,
+                    subscribers: parseInt(data.items[0].statistics?.subscriberCount || 0)
+                };
             }
             throw new Error("Channel not found.");
         } catch (error) {
@@ -454,8 +487,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         showProgress(2, "Starting import...");
 
         let targetPlaylistId = ytPlaylistId;
+        let fetchedSubscribers = 0;
+        
         if (!targetPlaylistId && ytChannelId) {
-            targetPlaylistId = await getChannelUploadPlaylistId(ytChannelId);
+            const cDetails = await getChannelDetails(ytChannelId);
+            if (cDetails) {
+                targetPlaylistId = cDetails.playlistId;
+                fetchedSubscribers = cDetails.subscribers;
+            }
+        } else if (ytChannelId) {
+            const cDetails = await getChannelDetails(ytChannelId);
+            if (cDetails) {
+                fetchedSubscribers = cDetails.subscribers;
+            }
         }
         if (!targetPlaylistId) {
             ytImportBtn.disabled = false;
@@ -488,13 +532,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                     channel: targetChannel,
                     category,
                     playlist: playlistName,
-                    views: 0,
+                    views: item._views || 0,
                     time: "Just now",
                     duration: item._durationText || "",
                     thumbnail: snippet.thumbnails?.high?.url || snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url || "",
                     videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
                     description: snippet.description || "Imported from YouTube",
-                    likes: 0,
+                    likes: item._likes || 0,
                     liked: false,
                     comments: [],
                     timestamp: new Date(snippet.publishedAt).getTime()
@@ -516,6 +560,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (ytChannelId) channelData.ytChannelId = ytChannelId;
             if (targetPlaylistId) channelData.ytPlaylistId = targetPlaylistId;
             if (category) channelData.syncCategory = category;
+            
+            // Only update subscribers if they grew (don't overwrite with 0 if API failed)
+            if (fetchedSubscribers > (channelData.subscribers || 0)) {
+                channelData.subscribers = fetchedSubscribers;
+            }
+            
             channelData.lastSyncTime = Date.now(); // We just synced it manually
 
             await saveChannel(targetChannel, channelData);

@@ -399,6 +399,14 @@ function timeAgo(timestamp) {
     return "Just now";
 }
 
+// Format number concisely (e.g. 1.2M, 15K)
+function formatCompactNumber(number) {
+    if (number === undefined || number === null) return "0";
+    const num = parseInt(number, 10);
+    if (isNaN(num)) return "0";
+    return new Intl.NumberFormat('en-US', { notation: "compact", maximumFractionDigits: 1 }).format(num);
+}
+
 // Seed initial data if empty
 async function initializeDatabase() {
     try {
@@ -499,7 +507,7 @@ if (!sessionStorage.getItem('jtube_db_init')) {
     initializeDatabase(); // non-blocking: no await
 }
 
-// ===== AUTO-SYNC YOUTUBE CHANNELS =====
+// ===== AUTO-SYNC YOUTUBE CHANNELS & STATS =====
 async function autoSyncYouTubeChannels() {
     const apiKey = typeof ENV !== 'undefined' ? ENV.YOUTUBE_API_KEY : null;
     if (!apiKey) return;
@@ -508,24 +516,37 @@ async function autoSyncYouTubeChannels() {
         const channels = await getChannels();
         const now = Date.now();
         const SYNC_INTERVAL = 12 * 60 * 60 * 1000; // 12 hours between syncs
+        let hasUpdates = false;
+        const allVideos = await getVideos(); // Fetch all once for fast lookup
 
         for (const [channelName, data] of Object.entries(channels)) {
             // Only sync if configured and past the interval
             if ((data.ytChannelId || data.ytPlaylistId) && (!data.lastSyncTime || (now - data.lastSyncTime > SYNC_INTERVAL))) {
-                console.log(`Auto-syncing YouTube channel: ${channelName}`);
+                console.log(`Auto-syncing YouTube channel & stats: ${channelName}`);
                 
                 let playlistId = data.ytPlaylistId;
-                if (!playlistId && data.ytChannelId) {
+                let ytChannelId = data.ytChannelId;
+                
+                // 1. Sync Channel Subscribers & Get Playlist ID if needed
+                if (ytChannelId) {
                     try {
-                        const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=${data.ytChannelId}&key=${apiKey}`);
+                        const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=contentDetails,statistics&id=${ytChannelId}&key=${apiKey}`);
                         const cData = await res.json();
                         if (cData.items && cData.items.length > 0) {
-                            playlistId = cData.items[0].contentDetails.relatedPlaylists.uploads;
-                            data.ytPlaylistId = playlistId; // Cache it
+                            const item = cData.items[0];
+                            if (!playlistId) {
+                                playlistId = item.contentDetails.relatedPlaylists.uploads;
+                                data.ytPlaylistId = playlistId; // Cache it
+                            }
+                            // Update subscribers from YouTube
+                            if (item.statistics && item.statistics.subscriberCount) {
+                                data.subscribers = parseInt(item.statistics.subscriberCount);
+                            }
                         }
-                    } catch (e) { console.warn("Error looking up playlist ID for auto-sync", e); }
+                    } catch (e) { console.warn("Error syncing channel stats", e); }
                 }
 
+                // 2. Fetch new videos from Playlist
                 if (playlistId) {
                     try {
                         // Fetch latest 15 videos to save quota
@@ -536,16 +557,19 @@ async function autoSyncYouTubeChannels() {
                         if (pData.items && pData.items.length > 0) {
                             const videoIds = pData.items.map(item => item.contentDetails.videoId).filter(Boolean).join(',');
                             
-                            const vidRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${videoIds}&key=${apiKey}`);
+                            const vidRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails,statistics&id=${videoIds}&key=${apiKey}`);
                             const vidData = await vidRes.json();
                             
                             const durationMap = {};
+                            const statsMap = {};
                             if (vidData.items) {
-                                vidData.items.forEach(v => { durationMap[v.id] = v.contentDetails.duration; });
+                                vidData.items.forEach(v => { 
+                                    durationMap[v.id] = v.contentDetails.duration; 
+                                    statsMap[v.id] = v.statistics || {};
+                                });
                             }
 
-                            const existingVideos = await getVideos();
-                            const existingIds = new Set(existingVideos.map(v => v.id));
+                            const existingIds = new Set(allVideos.map(v => v.id));
                             const newVideos = [];
 
                             for (const item of pData.items) {
@@ -573,19 +597,21 @@ async function autoSyncYouTubeChannels() {
                                 const s = totalSeconds % 60;
                                 const durationText = h > 0 ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}` : `${m}:${s.toString().padStart(2, '0')}`;
 
+                                const stats = statsMap[videoId] || {};
+
                                 newVideos.push({
                                     id: docId,
                                     title: snippet.title,
                                     channel: channelName,
                                     category: data.syncCategory || "General",
                                     playlist: "",
-                                    views: 0,
+                                    views: parseInt(stats.viewCount || 0),
                                     time: "Just now",
                                     duration: durationText,
                                     thumbnail: snippet.thumbnails?.high?.url || snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url || "",
                                     videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
                                     description: snippet.description || "Imported automatically from YouTube",
-                                    likes: 0,
+                                    likes: parseInt(stats.likeCount || 0),
                                     liked: false,
                                     comments: [],
                                     timestamp: new Date(snippet.publishedAt).getTime()
@@ -595,14 +621,59 @@ async function autoSyncYouTubeChannels() {
                             if (newVideos.length > 0) {
                                 await saveBatchVideos(newVideos);
                                 console.log(`Auto-synced ${newVideos.length} new videos for ${channelName}!`);
+                                hasUpdates = true;
+                                allVideos.push(...newVideos); // Add to local array so stats sync sees them if needed
                             }
                         }
                     } catch (e) { console.warn("Error during auto-sync fetch for " + channelName, e); }
                 }
 
+                // 3. Sync stats for existing videos belonging to this channel
+                const channelVideos = allVideos.filter(v => v.channel === channelName && v.id.startsWith("yt_"));
+                if (channelVideos.length > 0) {
+                    console.log(`Syncing YouTube stats for ${channelVideos.length} existing videos of ${channelName}...`);
+                    const chunkedVideos = [];
+                    for(let i=0; i < channelVideos.length; i+=50) {
+                        chunkedVideos.push(channelVideos.slice(i, i+50));
+                    }
+                    
+                    const updatedVideos = [];
+                    for(const chunk of chunkedVideos) {
+                        const ytIds = chunk.map(v => v.id.replace("yt_", "")).join(',');
+                        try {
+                            const statsRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${ytIds}&key=${apiKey}`);
+                            const statsData = await statsRes.json();
+                            if (statsData.items) {
+                                statsData.items.forEach(ytVid => {
+                                    const jtubeVid = chunk.find(v => v.id === `yt_${ytVid.id}`);
+                                    if (jtubeVid && ytVid.statistics) {
+                                        const newViews = parseInt(ytVid.statistics.viewCount || jtubeVid.views);
+                                        const newLikes = parseInt(ytVid.statistics.likeCount || jtubeVid.likes);
+                                        if (jtubeVid.views !== newViews || jtubeVid.likes !== newLikes) {
+                                            jtubeVid.views = newViews;
+                                            jtubeVid.likes = newLikes;
+                                            updatedVideos.push(jtubeVid);
+                                        }
+                                    }
+                                });
+                            }
+                        } catch(e) { console.warn("Error syncing video stats batch", e); }
+                    }
+                    
+                    if (updatedVideos.length > 0) {
+                        await saveBatchVideos(updatedVideos);
+                        hasUpdates = true;
+                        console.log(`Updated YouTube stats for ${updatedVideos.length} videos of ${channelName}.`);
+                    }
+                }
+
                 // Update sync time
                 await saveChannel(channelName, { ...data, lastSyncTime: Date.now() });
             }
+        }
+
+        if (hasUpdates && typeof renderVideos === 'function') {
+            renderVideos("all"); // Refresh UI if on homepage
         }
     } catch (e) {
         console.error("Auto-sync background process failed:", e);
