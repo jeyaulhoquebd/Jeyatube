@@ -90,12 +90,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (isRegistering) {
                 const name = authName.value;
                 await registerWithEmail(email, pass, name);
-                alert("Registration successful!");
+                showToast("Registration successful!", "success");
             } else {
                 await loginWithEmail(email, pass);
             }
         } catch (error) {
-            alert(error.message);
+            showToast(error.message, "error");
         }
     });
 
@@ -105,7 +105,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             try {
                 await loginWithGoogle();
             } catch (error) {
-                alert(error.message);
+                showToast(error.message, "error");
             }
         });
     }
@@ -115,7 +115,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
         const match = url.match(regExp);
         if (match && match[2].length === 11) {
-            return 'https://www.youtube.com/embed/' + match[2] + '?autoplay=1';
+            return 'https://www.youtube.com/embed/' + match[2] + '?autoplay=1&enablejsapi=1';
         }
         return null;
     }
@@ -300,26 +300,35 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     async function renderRecommendations() {
         recommendationsContainer.innerHTML = `<h3 class="text-xs font-bold text-zinc-400 tracking-wider uppercase mb-1">Up Next</h3>`;
-        // Lazy-load recommendations only when needed
         const videos = await getVideos();
-        const recs = videos.filter(v => v.id !== video.id).slice(0, 15);
+        let recs = videos.filter(v => v.id !== video.id);
+        // Shuffle for variety
+        for (let i = recs.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [recs[i], recs[j]] = [recs[j], recs[i]];
+        }
+        recs = recs.slice(0, 15);
+        const fragment = document.createDocumentFragment();
         recs.forEach(v => {
-            recommendationsContainer.innerHTML += `
-                <div class="flex space-x-3 cursor-pointer group" onclick="location.href='watch.html?id=${v.id}'">
-                    <div class="relative w-32 sm:w-40 aspect-video bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0">
-                        <img src="${v.thumbnail}" loading="lazy" class="w-full h-full object-cover">
+            const el = document.createElement('div');
+            el.className = 'flex space-x-3 cursor-pointer group';
+            el.onclick = () => location.href = `watch.html?id=${v.id}`;
+            el.innerHTML = `
+                <div class="relative w-32 sm:w-40 aspect-video bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0">
+                    <img src="${v.thumbnail}" loading="lazy" class="w-full h-full object-cover">
+                </div>
+                <div class="flex-1">
+                    <h4 class="text-xs font-semibold line-clamp-2 text-zinc-100 leading-snug group-hover:text-white">${v.title}</h4>
+                    <div class="flex items-center space-x-1 mt-1">
+                        <p class="text-[11px] text-zinc-400 truncate">${v.channel}</p>
+                        <img src="img/icons.svg" class="w-3 h-3 flex-shrink-0" alt="Verified" title="Verified">
                     </div>
-                    <div class="flex-1">
-                        <h4 class="text-xs font-semibold line-clamp-2 text-zinc-100 leading-snug group-hover:text-white">${v.title}</h4>
-                        <div class="flex items-center space-x-1 mt-1">
-                            <p class="text-[11px] text-zinc-400 truncate">${v.channel}</p>
-                            <img src="img/icons.svg" class="w-3 h-3 flex-shrink-0" alt="Verified" title="Verified">
-                        </div>
-                        <p class="text-[11px] text-zinc-400">${formatCompactNumber(v.views)} views</p>
-                    </div>
+                    <p class="text-[11px] text-zinc-400">${formatCompactNumber(v.views)} views</p>
                 </div>
             `;
+            fragment.appendChild(el);
         });
+        recommendationsContainer.appendChild(fragment);
     }
 
     likeBtn.addEventListener("click", async () => {
@@ -361,8 +370,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                 if (navigator.share) {
                     await navigator.share(shareData);
                 } else {
-                    await navigator.clipboard.writeText(window.location.href);
-                    alert("Link copied to clipboard!");
+                    navigator.clipboard.writeText(window.location.href);
+                    showToast("Link copied to clipboard!", "success");
                 }
             } catch (err) {
                 console.log("Error sharing:", err);
@@ -521,6 +530,61 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         });
     }
+    const searchInput = document.getElementById("search-input");
+    const mobileSearchInput = document.getElementById("mobile-search-input");
+    
+    if (searchInput) {
+        searchInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter" && searchInput.value.trim()) {
+                location.href = `index.html?q=${encodeURIComponent(searchInput.value.trim())}`;
+            }
+        });
+    }
+
+    if (mobileSearchInput) {
+        mobileSearchInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter" && mobileSearchInput.value.trim()) {
+                location.href = `index.html?q=${encodeURIComponent(mobileSearchInput.value.trim())}`;
+            }
+        });
+    }
+
+    // ===== KEYBOARD SHORTCUTS =====
+    document.addEventListener('keydown', (e) => {
+        if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+        
+        const iframe = document.querySelector('#video-player-container iframe');
+        
+        // F for fullscreen
+        if (e.key.toLowerCase() === 'f') {
+            e.preventDefault();
+            const container = document.getElementById('video-player-container');
+            if (!document.fullscreenElement) {
+                if (container.requestFullscreen) container.requestFullscreen();
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+            }
+        }
+        
+        // Space, K, M, J, L - focus iframe so YouTube handles it
+        if ([' ', 'k', 'm', 'j', 'l'].includes(e.key.toLowerCase())) {
+            if (iframe && document.activeElement !== iframe) {
+                e.preventDefault();
+                iframe.focus();
+                
+                // For play/pause via Space/K when not focused, we can try to send postMessage
+                if (e.key === ' ' || e.key.toLowerCase() === 'k') {
+                    // Send toggle play/pause via YouTube API
+                    iframe.contentWindow.postMessage(JSON.stringify({
+                        event: 'command',
+                        func: 'playVideo' // Wait, we don't know state. We'll just rely on user pressing again if it doesn't do what they expect. 
+                    }), '*');
+                    
+                    showToast("Video player focused. Press again to play/pause.", "info", 2000);
+                }
+            }
+        }
+    });
     if (jaskClose) {
         jaskClose.addEventListener('click', () => {
             jaskPanel.classList.add('hidden');

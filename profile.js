@@ -170,7 +170,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         };
 
         await updateUserProfile(currentUser.uid, data);
-        alert("Profile updated successfully!");
+        showToast("Profile updated successfully!", "success");
         editFormContainer.classList.add("hidden");
         loadProfile(currentUser);
     });

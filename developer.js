@@ -28,7 +28,7 @@ ${picture ? `*Picture URL:* ${picture}\n` : ''}
         const chatId = typeof ENV !== 'undefined' ? ENV.TELEGRAM_CHAT_ID : null;
 
         if (!botToken || !chatId) {
-            alert("Telegram configuration is missing in env.js!");
+            showToast("Telegram configuration is missing in env.js!", "error");
             return;
         }
 
@@ -51,16 +51,15 @@ ${picture ? `*Picture URL:* ${picture}\n` : ''}
             });
 
             if (response.ok) {
-                alert("Application submitted successfully!");
+                showToast("Application submitted successfully!", "success");
                 devForm.reset();
             } else {
-                const errData = await response.json();
-                console.error("Telegram API Error:", errData);
-                alert("Failed to submit application. Please try again later.");
+                console.error("Telegram API Error:", await response.text());
+                showToast("Failed to submit application. Please try again later.", "error");
             }
         } catch (error) {
-            console.error("Error sending to Telegram:", error);
-            alert("An error occurred while submitting.");
+            console.error("Network Error:", error);
+            showToast("An error occurred while submitting.", "error");
         } finally {
             submitBtn.innerHTML = '<i class="fab fa-telegram-plane"></i> Submit Application';
             submitBtn.disabled = false;

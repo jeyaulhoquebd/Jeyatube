@@ -706,4 +706,66 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .catch(() => {}); // Silently ignore
     }, 2000); // Defer 2 seconds so it never blocks page load
+
+    // ===== TOAST NOTIFICATION SYSTEM =====
+    let toastContainer = document.getElementById('toast-container');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.id = 'toast-container';
+        document.body.appendChild(toastContainer);
+    }
+
+    // ===== SCROLL-TO-TOP BUTTON =====
+    const scrollBtn = document.createElement('button');
+    scrollBtn.id = 'scroll-to-top';
+    scrollBtn.innerHTML = '<i class="fas fa-arrow-up"></i>';
+    scrollBtn.title = 'Back to top';
+    scrollBtn.addEventListener('click', () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    document.body.appendChild(scrollBtn);
+
+    window.addEventListener('scroll', () => {
+        if (window.scrollY > 400) {
+            scrollBtn.classList.add('visible');
+        } else {
+            scrollBtn.classList.remove('visible');
+        }
+    }, { passive: true });
 });
+
+// ===== GLOBAL TOAST FUNCTION =====
+// Usage: showToast('Message', 'success') — types: success, error, info, warning
+function showToast(message, type = 'info', duration = 3500) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const icons = {
+        success: 'fa-circle-check',
+        error: 'fa-circle-xmark',
+        info: 'fa-circle-info',
+        warning: 'fa-triangle-exclamation'
+    };
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `<i class="fas ${icons[type] || icons.info}"></i><span>${message}</span>`;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.classList.add('toast-out');
+        toast.addEventListener('animationend', () => toast.remove());
+    }, duration);
+}
+
+// ===== DURATION BADGE CLASS HELPER =====
+function getDurationBadgeClass(durationStr) {
+    if (!durationStr) return '';
+    const parts = durationStr.split(':').map(Number);
+    let totalMinutes = 0;
+    if (parts.length === 3) totalMinutes = parts[0] * 60 + parts[1];
+    else if (parts.length === 2) totalMinutes = parts[0];
+    if (totalMinutes < 5) return 'duration-short';
+    if (totalMinutes >= 30) return 'duration-long';
+    return 'duration-medium';
+}

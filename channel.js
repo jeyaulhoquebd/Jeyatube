@@ -67,7 +67,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
             authModal.classList.add("hidden");
         } catch (error) {
-            alert(error.message);
+            showToast(error.message, "error");
         }
     });
 
@@ -77,7 +77,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 await loginWithGoogle();
                 authModal.classList.add("hidden");
             } catch (error) {
-                alert(error.message);
+                showToast(error.message, "error");
             }
         });
     }

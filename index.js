@@ -112,12 +112,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (isRegistering) {
                 const name = authName.value;
                 await registerWithEmail(email, pass, name);
-                alert("Registration successful!");
+                showToast('Registration successful!', 'success');
             } else {
                 await loginWithEmail(email, pass);
             }
         } catch (error) {
-            alert(error.message);
+            showToast(error.message, 'error');
         }
     });
 
@@ -126,7 +126,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             try {
                 await loginWithGoogle();
             } catch (error) {
-                alert(error.message);
+                showToast(error.message, 'error');
             }
         });
     }
@@ -196,7 +196,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         } else {
             const videos = await getVideos();
             videosToRender = filterCategory === "all" 
-                ? videos.filter(v => !v.playlist)
+                ? videos
                 : videos.filter(v => v.category.toLowerCase() === filterCategory.toLowerCase() && !v.playlist);
         }
 
@@ -270,7 +270,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                             <i class="fas fa-play text-white text-sm ml-0.5"></i>
                         </div>
                     </div>
-                    <span class="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-xs font-semibold z-30">${video.duration}</span>
+                    <span class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-xs font-semibold z-30 ${getDurationBadgeClass(video.duration)}">${video.duration}</span>
                 </div>
                 <div class="flex space-x-3 px-3 flex-1">
                     ${avatarHtml}
@@ -400,7 +400,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         <i class="fas fa-play text-white text-sm ml-0.5"></i>
                     </div>
                 </div>
-                <span class="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-xs font-semibold z-30">${video.duration}</span>
+                <span class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-xs font-semibold z-30 ${getDurationBadgeClass(video.duration)}">${video.duration}</span>
             </div>
             <div class="flex space-x-3 px-3 flex-1">
                 ${avatarHtml}
@@ -543,9 +543,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         mobileSearchClear.addEventListener('click', () => { mobileSearchBar.classList.add('hidden'); clearSearch(); });
     }
 
-    // Handle home button click
-    const homeBtn = document.querySelector('a[href="#"] span').parentElement; // First nav link
-    if(homeBtn && homeBtn.innerText.includes("Home")){
+    // Handle home button click — robust selector using data lookup
+    const homeBtn = document.querySelector('nav a[href="#"]');
+    if (homeBtn) {
         homeBtn.addEventListener("click", async (e) => {
             e.preventDefault();
             clearSearch();
@@ -561,8 +561,63 @@ document.addEventListener("DOMContentLoaded", async () => {
         allVideosCache = await getVideos();
     }
 
+    // ===== TRENDING SECTION =====
+    async function renderTrendingStrip() {
+        const trendingContainer = document.getElementById('trending-section');
+        if (!trendingContainer) return;
+        const videos = await getVideos();
+        const channelsMap = await getChannels();
+        const trending = [...videos].sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, 8);
+        if (trending.length === 0) {
+            trendingContainer.classList.add('hidden');
+            return;
+        }
+        let html = `<div class="flex items-center space-x-2 mb-3">
+            <i class="fas fa-fire text-red-500"></i>
+            <h2 class="text-base font-bold text-white">Trending Now</h2>
+        </div><div class="trending-strip">`;
+        trending.forEach(v => {
+            const cData = channelsMap[v.channel];
+            const avatarHtml = cData && cData.avatarUrl
+                ? `<img src="${cData.avatarUrl}" class="w-6 h-6 rounded-full object-cover" loading="lazy">`
+                : `<div class="w-6 h-6 bg-zinc-600 rounded-full flex items-center justify-center text-[10px] font-bold">${v.channel[0]}</div>`;
+            html += `
+            <div class="trending-card" onclick="location.href='watch.html?id=${v.id}'">
+                <div class="relative aspect-video">
+                    <img src="${v.thumbnail}" class="w-full h-full object-cover" loading="lazy">
+                    <span class="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold ${getDurationBadgeClass(v.duration)}">${v.duration}</span>
+                </div>
+                <div class="p-3">
+                    <h4 class="text-xs font-semibold line-clamp-2 leading-snug text-zinc-100 mb-1.5">${v.title}</h4>
+                    <div class="flex items-center space-x-1.5">
+                        ${avatarHtml}
+                        <span class="text-[11px] text-zinc-400 truncate">${v.channel}</span>
+                        <span class="text-[10px] text-zinc-500">• ${formatCompactNumber(v.views)} views</span>
+                    </div>
+                </div>
+            </div>`;
+        });
+        html += '</div>';
+        trendingContainer.innerHTML = html;
+    }
+
+    // ===== FOOTER =====
+    function renderFooter() {
+        const main = document.querySelector('main');
+        if (!main || document.querySelector('.jtube-footer')) return;
+        const footer = document.createElement('div');
+        footer.className = 'jtube-footer';
+        footer.innerHTML = `
+            <p>© ${new Date().getFullYear()} <a href="index.html"><strong>JTube</strong></a> — Built with ❤️ | 
+            <a href="terms.html">Terms</a> · <a href="privacy.html">Privacy</a> · <a href="developer.html">Developer</a></p>
+        `;
+        main.appendChild(footer);
+    }
+
     await renderCategories();
     await renderSidebarChannels();
     await renderVideos();
+    renderTrendingStrip(); // non-blocking
     preloadVideosForSearch(); // non-blocking preload for instant search
+    renderFooter();
 });

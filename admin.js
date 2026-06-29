@@ -10,7 +10,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     adminLoginForm.addEventListener("submit", async (e) => {
         e.preventDefault();
-        if (adminPassword.value === "Jeyaul") {
+        const masterPass = typeof ENV !== 'undefined' && ENV.ADMIN_PASSWORD ? ENV.ADMIN_PASSWORD : "Jeyaul";
+        if (adminPassword.value === masterPass) {
             adminLoginOverlay.classList.add("hidden");
             // Load dashboard AFTER login — not before
             await loadAdminDashboard();
@@ -152,9 +153,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             videoUrl = "https://www.youtube.com/watch?v=60Yo63VFt-M";
         }
 
-        const ytRegex = /^(https?:\/\/)?(www\.youtube\.com|youtu\.?be)\/.+$/;
-        if (!ytRegex.test(videoUrl)) {
-            alert("Error: Only YouTube links are allowed! Please provide a valid YouTube URL.");
+        const videoUrlInput = document.getElementById("v-url").value.trim();
+        if (videoUrlInput && !getYoutubeId(videoUrlInput)) {
+            showToast("Error: Only YouTube links are allowed! Please provide a valid YouTube URL.", "error");
             return;
         }
 
@@ -229,12 +230,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     createChannelForm.addEventListener("submit", async (e) => {
         e.preventDefault();
         const name = document.getElementById("new-c-name").value.trim();
+        if (!name) { showToast("Please enter a channel name.", "warning"); return; }
+
         const cover = document.getElementById("new-c-cover").value.trim();
         const avatar = document.getElementById("new-c-avatar").value.trim();
         const bio = document.getElementById("new-c-bio").value.trim();
         const links = document.getElementById("new-c-links").value.trim();
-
-        if (!name) { alert("Please enter a channel name."); return; }
 
         const existing = await getChannels();
         if (existing[name]) {
@@ -466,14 +467,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     ytImportForm.addEventListener("submit", async (e) => {
         e.preventDefault();
-        const ytChannelId = document.getElementById("yt-channel-id").value.trim();
-        const ytPlaylistId = document.getElementById("yt-playlist-id").value.trim();
+        const channelId = document.getElementById("yt-channel-id").value.trim();
+        const playlistId = document.getElementById("yt-playlist-id").value.trim();
         const targetChannel = document.getElementById("yt-target-channel").value.trim();
         const category = document.getElementById("yt-category").value.trim();
         const playlistName = document.getElementById("yt-playlist-name").value.trim();
-
-        if (!ytChannelId && !ytPlaylistId) {
-            alert("Please provide a YouTube Channel ID or Playlist ID.");
+        
+        if (!channelId && !playlistId) {
+            showToast("Please provide a YouTube Channel ID or Playlist ID.", "warning");
             return;
         }
 

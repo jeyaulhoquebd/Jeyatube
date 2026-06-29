@@ -49,7 +49,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
             authModal.classList.add("hidden");
         } catch (error) {
-            alert(error.message);
+            showToast(error.message, "error");
         }
     });
 
@@ -59,7 +59,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 await loginWithGoogle();
                 authModal.classList.add("hidden");
             } catch (error) {
-                alert(error.message);
+                showToast(error.message, "error");
             }
         });
     }
@@ -98,6 +98,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     function renderChannels() {
         grid.innerHTML = "";
+        const fragment = document.createDocumentFragment();
         channels.forEach(c => {
             const isSubscribed = c.subscribedBy && currentUser && c.subscribedBy.includes(currentUser.email);
             const subCount = c.subscribedBy ? c.subscribedBy.length : (c.subscribers || 0);
@@ -115,28 +116,31 @@ document.addEventListener("DOMContentLoaded", async () => {
                 ? `<img src="${c.coverUrl}" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition">`
                 : `<div class="w-full h-full bg-zinc-800"></div>`;
 
-            grid.innerHTML += `
-                <div class="cursor-pointer group relative bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 rounded-2xl overflow-hidden transition" onclick="location.href='channel.html?name=${encodeURIComponent(c.name)}'">
-                    <div class="h-24 w-full relative">
-                        ${coverHtml}
+            const el = document.createElement('div');
+            el.className = "cursor-pointer group relative bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 rounded-2xl overflow-hidden transition";
+            el.onclick = () => location.href = `channel.html?name=${encodeURIComponent(c.name)}`;
+            el.innerHTML = `
+                <div class="h-24 w-full relative">
+                    ${coverHtml}
+                </div>
+                <div class="px-5 pb-5 flex flex-col items-center -mt-10 relative">
+                    <div class="w-20 h-20 rounded-full border-4 border-zinc-900 overflow-hidden bg-zinc-700 shadow-lg mb-3">
+                        ${avatarHtml}
                     </div>
-                    <div class="px-5 pb-5 flex flex-col items-center -mt-10 relative">
-                        <div class="w-20 h-20 rounded-full border-4 border-zinc-900 overflow-hidden bg-zinc-700 shadow-lg mb-3">
-                            ${avatarHtml}
-                        </div>
-                        <div class="flex items-center space-x-1 mb-1">
-                            <h3 class="font-bold text-lg text-white text-center line-clamp-1">${c.name}</h3>
-                            <img src="img/icons.svg" class="w-4 h-4 flex-shrink-0" alt="Verified" title="Verified">
-                        </div>
-                        <p class="text-xs text-zinc-400 mb-4">${formatCompactNumber(subCount)} subscribers</p>
-                        
-                        <button class="w-full ${btnClass} px-4 py-2 rounded-full font-semibold transition text-sm" onclick="subscribeToChannel(event, '${c.name.replace(/'/g, "\\'")}')">
-                            ${btnText}
-                        </button>
+                    <div class="flex items-center space-x-1 mb-1">
+                        <h3 class="font-bold text-lg text-white text-center line-clamp-1">${c.name}</h3>
+                        <img src="img/icons.svg" class="w-4 h-4 flex-shrink-0" alt="Verified" title="Verified">
                     </div>
+                    <p class="text-xs text-zinc-400 mb-4">${formatCompactNumber(subCount)} subscribers</p>
+                    
+                    <button class="w-full ${btnClass} px-4 py-2 rounded-full font-semibold transition text-sm" onclick="subscribeToChannel(event, '${c.name.replace(/'/g, "\\'")}')">
+                        ${btnText}
+                    </button>
                 </div>
             `;
+            fragment.appendChild(el);
         });
+        grid.appendChild(fragment);
     }
 
     renderChannels();
