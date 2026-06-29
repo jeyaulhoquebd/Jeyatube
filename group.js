@@ -164,6 +164,19 @@ document.addEventListener("DOMContentLoaded", () => {
                     const msg = change.doc.data();
                     msg._id = change.doc.id;
                     renderMessage(msg, user);
+                } else if (change.type === 'modified') {
+                    const msg = change.doc.data();
+                    const msgElement = document.getElementById(`msg-${change.doc.id}`);
+                    if (msgElement) {
+                        const scoreSpan = msgElement.querySelector('.react-msg-btn span');
+                        const reactBtn = msgElement.querySelector('.react-msg-btn');
+                        if (scoreSpan && reactBtn) {
+                            scoreSpan.textContent = msg.score > 0 ? msg.score : '';
+                            if (msg.score > 0) {
+                                reactBtn.classList.remove('opacity-0', 'group-hover:opacity-100');
+                            }
+                        }
+                    }
                 } else if (change.type === 'removed') {
                     const msgId = change.doc.id;
                     const msgElement = document.getElementById(`msg-${msgId}`);
@@ -183,6 +196,18 @@ document.addEventListener("DOMContentLoaded", () => {
                         } catch (err) {
                             console.error("Error deleting message:", err);
                         }
+                    }
+                }
+                
+                const reactBtn = e.target.closest('.react-msg-btn');
+                if (reactBtn) {
+                    const msgId = reactBtn.dataset.id;
+                    try {
+                        await chatRef.doc(msgId).update({
+                            score: firebase.firestore.FieldValue.increment(1)
+                        });
+                    } catch (err) {
+                        console.error("Error reacting to message:", err);
                     }
                 }
             });
@@ -286,6 +311,19 @@ document.addEventListener("DOMContentLoaded", () => {
         const isMe = msg.uid === currentUser.uid;
         const isAI = msg.isAI === true;
 
+        if (isAI) {
+            const now = Date.now();
+            const timeToLive = (msg.timestamp + 60000) - now;
+            if (timeToLive > 0) {
+                setTimeout(() => {
+                    db.collection('jtube_group_chat').doc(msg._id).delete().catch(() => {});
+                }, timeToLive);
+            } else {
+                db.collection('jtube_group_chat').doc(msg._id).delete().catch(() => {});
+                return; // Already expired, do not render
+            }
+        }
+
         const wrapper = document.createElement('div');
         wrapper.className = `flex ${isMe ? 'justify-end' : 'justify-start'} msg-enter`;
         wrapper.id = `msg-${msg._id}`;
@@ -306,6 +344,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const ts = msg.timestamp ? new Date(msg.timestamp) : new Date();
         const timeStr = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+        const score = msg.score || 0;
+
         // Parse message text
         const contentHtml = parseMessageContent(msg.text || '');
 
@@ -318,8 +358,11 @@ document.addEventListener("DOMContentLoaded", () => {
                     </button>
                     <div class="flex items-end gap-2">
                         <span class="text-[9px] text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity mb-1 select-none">${timeStr}</span>
-                        <div class="bg-indigo-600 text-white px-3.5 py-2 rounded-2xl rounded-br-md shadow-md text-[13px] leading-relaxed break-words min-w-[40px]">
+                        <div class="relative bg-indigo-600 text-white px-3.5 py-2 rounded-2xl rounded-br-md shadow-md text-[13px] leading-relaxed break-words min-w-[40px]">
                             ${contentHtml}
+                            <div class="absolute -bottom-2 -left-2 bg-zinc-800 border border-zinc-700 text-xs px-1.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm cursor-pointer react-msg-btn transition hover:bg-zinc-700 ${score > 0 ? '' : 'opacity-0 group-hover:opacity-100'}" data-id="${msg._id}">
+                                <i class="fas fa-heart text-red-500 text-[9px]"></i> <span class="text-[9px] text-zinc-300 font-bold">${score > 0 ? score : ''}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -342,8 +385,11 @@ document.addEventListener("DOMContentLoaded", () => {
                             ${nameBadge}
                             <span class="text-[9px] text-zinc-600">${timeStr}</span>
                         </div>
-                        <div class="${bubbleClass} text-zinc-200 px-3.5 py-2 rounded-2xl rounded-bl-md shadow-sm text-[13px] leading-relaxed break-words min-w-[40px]">
+                        <div class="relative ${bubbleClass} text-zinc-200 px-3.5 py-2 rounded-2xl rounded-bl-md shadow-sm text-[13px] leading-relaxed break-words min-w-[40px]">
                             ${contentHtml}
+                            <div class="absolute -bottom-2 -right-2 bg-zinc-800 border border-zinc-700 text-xs px-1.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm cursor-pointer react-msg-btn transition hover:bg-zinc-700 ${score > 0 ? '' : 'opacity-0 group-hover:opacity-100'}" data-id="${msg._id}">
+                                <i class="fas fa-heart text-red-500 text-[9px]"></i> <span class="text-[9px] text-zinc-300 font-bold">${score > 0 ? score : ''}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -371,7 +417,7 @@ document.addEventListener("DOMContentLoaded", () => {
         let safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
         // 2. JTube video link previews
-        const watchRegex = /watch\.html\?id=([a-zA-Z0-9_-]+)/g;
+        const watchRegex = /(?:https?:\/\/[^\s<]+)?watch\.html\?id=([a-zA-Z0-9_-]+)/g;
         safe = safe.replace(watchRegex, (match, id) => {
             const video = allVideos.find(v => v.id === id);
             if (video) {

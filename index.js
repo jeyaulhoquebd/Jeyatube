@@ -293,7 +293,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     if (ytId) {
                         const previewContainer = card.querySelector('.video-preview-container');
                         if (previewContainer.innerHTML === '') {
-                            previewContainer.innerHTML = `<iframe class='w-full h-full pointer-events-none' src='https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&controls=0&modestbranding=1&showinfo=0' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe>`;
+                            previewContainer.innerHTML = `<iframe class='w-full h-full pointer-events-none' src='https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0&controls=0&modestbranding=1&showinfo=0' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe>`;
                         }
                         previewContainer.classList.remove('hidden');
                         card.querySelector('.play-icon-overlay').classList.add('hidden');
