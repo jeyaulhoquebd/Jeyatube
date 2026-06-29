@@ -25,6 +25,24 @@ document.addEventListener("DOMContentLoaded", () => {
     let isInitialLoad = true;
     let chatInitialized = false;
     let chatListenerRef = null;
+    let allUsers = [{ name: 'Jaks AI', isAI: true, email: 'bot@jtube.com' }];
+
+    const mentionDropdown = document.getElementById("mention-dropdown");
+    const scrollBottomBtn = document.getElementById("scroll-bottom-btn");
+
+    if (chatMessages && scrollBottomBtn) {
+        chatMessages.addEventListener('scroll', () => {
+            const distFromBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight;
+            if (distFromBottom > 200) {
+                scrollBottomBtn.classList.remove('hidden');
+            } else {
+                scrollBottomBtn.classList.add('hidden');
+            }
+        });
+        scrollBottomBtn.addEventListener('click', () => {
+            chatMessages.scrollTo({ top: chatMessages.scrollHeight, behavior: 'smooth' });
+        });
+    }
 
     // ===== TEXTAREA AUTO-RESIZE =====
     if (chatInput) {
@@ -32,7 +50,54 @@ document.addEventListener("DOMContentLoaded", () => {
             this.style.height = 'auto';
             this.style.height = Math.min(this.scrollHeight, 112) + 'px';
             sendBtn.disabled = this.value.trim().length === 0;
+
+            // Mention logic
+            const cursorPosition = this.selectionStart;
+            const textBeforeCursor = this.value.substring(0, cursorPosition);
+            const match = textBeforeCursor.match(/@(\w*)$/);
+            
+            if (match && mentionDropdown) {
+                const query = match[1].toLowerCase();
+                const filteredUsers = allUsers.filter(u => {
+                    const name = (u.name || u.displayName || 'User');
+                    const normalized = name.replace(/\s+/g, '');
+                    return normalized.toLowerCase().startsWith(query);
+                });
+                
+                if (filteredUsers.length > 0) {
+                    mentionDropdown.innerHTML = filteredUsers.slice(0, 8).map(u => {
+                        const name = u.name || u.displayName || 'User';
+                        return `<div class="px-4 py-2 hover:bg-zinc-700 cursor-pointer text-sm mention-item flex items-center" data-name="${name.replace(/\s+/g, '')}">${u.isAI ? '<i class="fas fa-robot text-indigo-400 mr-2 text-xs"></i>' : '<i class="fas fa-user text-zinc-400 mr-2 text-xs"></i>'}<span>${name}</span></div>`;
+                    }).join('');
+                    mentionDropdown.classList.remove('hidden');
+                    mentionDropdown.classList.add('flex');
+                } else {
+                    mentionDropdown.classList.add('hidden');
+                    mentionDropdown.classList.remove('flex');
+                }
+            } else if (mentionDropdown) {
+                mentionDropdown.classList.add('hidden');
+                mentionDropdown.classList.remove('flex');
+            }
         });
+
+        if (mentionDropdown) {
+            mentionDropdown.addEventListener('click', (e) => {
+                const item = e.target.closest('.mention-item');
+                if (item) {
+                    const name = item.dataset.name;
+                    const cursorPosition = chatInput.selectionStart;
+                    const textBeforeCursor = chatInput.value.substring(0, cursorPosition);
+                    const textAfterCursor = chatInput.value.substring(cursorPosition);
+                    const newTextBefore = textBeforeCursor.replace(/@\w*$/, `@${name} `);
+                    chatInput.value = newTextBefore + textAfterCursor;
+                    mentionDropdown.classList.add('hidden');
+                    mentionDropdown.classList.remove('flex');
+                    chatInput.focus();
+                    chatInput.dispatchEvent(new Event('input'));
+                }
+            });
+        }
 
         chatInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -99,9 +164,29 @@ document.addEventListener("DOMContentLoaded", () => {
                     const msg = change.doc.data();
                     msg._id = change.doc.id;
                     renderMessage(msg, user);
+                } else if (change.type === 'removed') {
+                    const msgId = change.doc.id;
+                    const msgElement = document.getElementById(`msg-${msgId}`);
+                    if (msgElement) msgElement.remove();
                 }
             });
         });
+
+        if (chatMessages) {
+            chatMessages.addEventListener('click', async (e) => {
+                const deleteBtn = e.target.closest('.delete-msg-btn');
+                if (deleteBtn) {
+                    const msgId = deleteBtn.dataset.id;
+                    if (confirm("Are you sure you want to delete this message?")) {
+                        try {
+                            await chatRef.doc(msgId).delete();
+                        } catch (err) {
+                            console.error("Error deleting message:", err);
+                        }
+                    }
+                }
+            });
+        }
 
         // Handle form submit
         chatForm.addEventListener('submit', async (e) => {
@@ -161,7 +246,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         title: 'JTubeGroup Community Chat',
                         channel: 'Community',
                         category: 'General',
-                        description: 'JTube community group chat — users are chatting together.'
+                        description: 'JTube community group chat. You can recommend videos by including [Title](watch.html?id=ID) in your message. Available videos: ' + allVideos.slice(0, 30).map(v => `${v.title} (id=${v.id})`).join('; ')
                     };
 
                     const aiResponse = await JAsk.askGroq(query, dummyContext);
@@ -203,6 +288,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const wrapper = document.createElement('div');
         wrapper.className = `flex ${isMe ? 'justify-end' : 'justify-start'} msg-enter`;
+        wrapper.id = `msg-${msg._id}`;
 
         // Avatar
         let avatarHtml = '';
@@ -226,7 +312,10 @@ document.addEventListener("DOMContentLoaded", () => {
         if (isMe) {
             // === MY MESSAGE (right aligned, blue bubble) ===
             wrapper.innerHTML = `
-                <div class="flex flex-col items-end max-w-[85%] sm:max-w-[70%] group">
+                <div class="flex flex-col items-end max-w-[85%] sm:max-w-[70%] group relative">
+                    <button class="delete-msg-btn absolute -left-8 top-1 opacity-0 group-hover:opacity-100 transition-opacity text-zinc-500 hover:text-red-400 p-1" data-id="${msg._id}" title="Delete Message">
+                        <i class="fas fa-trash-alt text-[10px]"></i>
+                    </button>
                     <div class="flex items-end gap-2">
                         <span class="text-[9px] text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity mb-1 select-none">${timeStr}</span>
                         <div class="bg-indigo-600 text-white px-3.5 py-2 rounded-2xl rounded-br-md shadow-md text-[13px] leading-relaxed break-words min-w-[40px]">
@@ -313,7 +402,13 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         // 4. @JaksAI mention highlight
-        safe = safe.replace(/@JaksAI/gi, '<span class="text-indigo-400 font-bold">@JaksAI</span>');
+        safe = safe.replace(/@Jaks\s?AI/gi, '<span class="text-indigo-400 font-bold">@Jaks AI</span>');
+
+        // Other users highlight (@Username)
+        safe = safe.replace(/@([a-zA-Z0-9_]+)/g, (match, username) => {
+            if (match.toLowerCase() === '@jaksai') return match; // already handled
+            return `<span class="text-indigo-300 font-semibold cursor-pointer hover:underline">${match}</span>`;
+        });
 
         // 5. /ask command highlight
         safe = safe.replace(/^\/ask/gm, '<span class="text-indigo-400 font-mono font-bold">/ask</span>');
@@ -332,6 +427,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 const data = doc.data();
                 data._id = doc.id;
                 users.push(data);
+                allUsers.push(data);
             });
 
             const totalCount = users.length + 1; // +1 for Jaks AI bot
