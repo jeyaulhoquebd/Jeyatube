@@ -487,17 +487,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         ytStatus.classList.remove("hidden");
         showProgress(2, "Starting import...");
 
-        let targetPlaylistId = ytPlaylistId;
+        let targetPlaylistId = playlistId;
         let fetchedSubscribers = 0;
         
-        if (!targetPlaylistId && ytChannelId) {
-            const cDetails = await getChannelDetails(ytChannelId);
+        if (!targetPlaylistId && channelId) {
+            const cDetails = await getChannelDetails(channelId);
             if (cDetails) {
                 targetPlaylistId = cDetails.playlistId;
                 fetchedSubscribers = cDetails.subscribers;
             }
-        } else if (ytChannelId) {
-            const cDetails = await getChannelDetails(ytChannelId);
+        } else if (channelId) {
+            const cDetails = await getChannelDetails(channelId);
             if (cDetails) {
                 fetchedSubscribers = cDetails.subscribers;
             }
@@ -558,7 +558,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const channelData = channels[targetChannel] || { subscribers: 0, subscribed: false, avatarUrl: "", coverUrl: "" };
             
             // Add sync metadata to the channel to enable future auto-syncing
-            if (ytChannelId) channelData.ytChannelId = ytChannelId;
+            if (channelId) channelData.ytChannelId = channelId;
             if (targetPlaylistId) channelData.ytPlaylistId = targetPlaylistId;
             if (category) channelData.syncCategory = category;
             
