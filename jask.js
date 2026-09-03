@@ -146,60 +146,54 @@ RULES:
             ...conversationHistory
         ];
 
+        const candidateModels = [
+            "qwen/qwen3.8-27b",
+            "openai/gpt-oss-120b",
+            "openai/gpt-oss-20b",
+            "qwen/qwen3.6-27b",
+            "groq/compound-mini"
+        ];
+
         try {
-            const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${apiKey}`
-                },
-                body: JSON.stringify({
-                    model: "llama-3.3-70b-versatile",
-                    messages: messages,
-                    temperature: 0.7,
-                    max_tokens: 800,
-                    stream: false
-                })
-            });
+            let aiText = null;
+            let lastError = null;
 
-            if (!response.ok) {
-                // Try fallback model if primary fails
-                const fallbackResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${apiKey}`
-                    },
-                    body: JSON.stringify({
-                        model: "llama-3.1-8b-instant",
-                        messages: messages,
-                        temperature: 0.7,
-                        max_tokens: 800,
-                        stream: false
-                    })
-                });
+            for (const model of candidateModels) {
+                try {
+                    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${apiKey}`
+                        },
+                        body: JSON.stringify({
+                            model: model,
+                            messages: messages,
+                            temperature: 0.7,
+                            max_tokens: 800,
+                            stream: false
+                        })
+                    });
 
-                if (!fallbackResponse.ok) {
-                    const errData = await fallbackResponse.json().catch(() => ({}));
-                    console.error("Groq API Error (fallback):", errData);
-                    return { text: "⚠️ Sorry, I'm having trouble connecting right now. Please try again in a moment.", links: [] };
+                    if (response.ok) {
+                        const data = await response.json();
+                        aiText = data.choices?.[0]?.message?.content;
+                        if (aiText) break;
+                    } else {
+                        const errData = await response.json().catch(() => ({}));
+                        console.warn(`Groq model ${model} failed (${response.status}):`, errData);
+                        lastError = errData;
+                    }
+                } catch (e) {
+                    console.warn(`Failed calling Groq model ${model}:`, e);
+                    lastError = e;
                 }
-
-                const fallbackData = await fallbackResponse.json();
-                const fallbackText = fallbackData.choices?.[0]?.message?.content || "I couldn't generate a response.";
-                conversationHistory.push({ role: "assistant", content: fallbackText });
-                const fallbackLinks = [];
-                const flinkRegex = /\[([^\]]+)\]\(watch\.html\?id=([^)]+)\)/g;
-                let fmatch;
-                while ((fmatch = flinkRegex.exec(fallbackText)) !== null) {
-                    const fv = allVideos.find(v => v.id === fmatch[2]);
-                    if (fv) fallbackLinks.push({ title: fmatch[1], id: fmatch[2], thumbnail: fv.thumbnail, channel: fv.channel, views: fv.views });
-                }
-                return { text: fallbackText, links: fallbackLinks };
             }
 
-            const data = await response.json();
-            const aiText = data.choices?.[0]?.message?.content || "I couldn't generate a response. Please try again.";
+            if (!aiText) {
+                console.error("All Groq models failed. Last error:", lastError);
+                return { text: "⚠️ Sorry, I'm having trouble connecting right now. Please try again in a moment.", links: [] };
+            }
 
             // Save AI response to history
             conversationHistory.push({ role: "assistant", content: aiText });

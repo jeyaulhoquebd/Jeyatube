@@ -30,8 +30,135 @@
     <main class="max-w-6xl mx-auto p-4 lg:py-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         <section class="lg:col-span-2 space-y-4">
-            <div class="w-full bg-black rounded-2xl overflow-hidden aspect-video shadow-lg relative">
+            <!-- Shorts Notice Banner (shows if video is a Short) -->
+            <div id="shorts-notice-banner" class="hidden p-3.5 rounded-2xl bg-gradient-to-r from-red-950/90 via-zinc-900 to-zinc-900 border border-red-500/40 flex items-center justify-between shadow-lg">
+                <div class="flex items-center space-x-3">
+                    <span class="w-8 h-8 rounded-xl bg-red-600/30 text-red-500 border border-red-500/40 flex items-center justify-center">
+                        <i class="fas fa-bolt text-sm"></i>
+                    </span>
+                    <div>
+                        <p class="text-sm font-bold text-white">This video is a JTube Short!</p>
+                        <p class="text-xs text-zinc-400">Experience in vertical fullscreen with fast scrolling reels.</p>
+                    </div>
+                </div>
+                <a id="shorts-banner-link" href="shorts.html" class="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition shadow flex items-center gap-1.5 flex-shrink-0">
+                    <i class="fas fa-play text-[10px]"></i>
+                    <span>Open in Shorts</span>
+                </a>
+            </div>
+
+            <div id="video-container" class="w-full bg-black rounded-2xl overflow-hidden aspect-video shadow-lg relative">
                 <video id="video-player" controls class="w-full h-full" autoplay src=""></video>
+            </div>
+
+            <!-- Interactive Quick Controls Deck (Sound, Resolution, Seek/Scrub) -->
+            <div id="player-controls-deck" class="bg-zinc-900/95 border border-zinc-800 rounded-2xl p-3 sm:p-4 shadow-xl backdrop-blur-md space-y-3">
+                
+                <!-- Seek Bar / Scrubbing Bar (ভিডিও টেনে দেখার বার) -->
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between text-xs text-zinc-400 font-mono">
+                        <div class="flex items-center space-x-2">
+                            <span id="player-time-current" class="text-white font-semibold">0:00</span>
+                            <span>/</span>
+                            <span id="player-time-duration">0:00</span>
+                        </div>
+                        <div class="flex items-center space-x-2 text-[11px] text-zinc-500 font-sans">
+                            <span class="hidden sm:inline"><i class="fas fa-hand-pointer mr-1"></i>Drag slider or click anywhere to seek</span>
+                        </div>
+                    </div>
+
+                    <div class="relative flex items-center group">
+                        <input type="range" id="player-seek-slider" min="0" max="100" value="0" step="0.1" 
+                               class="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-red-600 focus:outline-none transition hover:h-2.5" title="Seek video position">
+                    </div>
+                </div>
+
+                <!-- Secondary Action Buttons: Play/Pause, -10s, +10s, Sound/Volume, Resolution Selector, Speed, Fullscreen -->
+                <div class="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-zinc-800/80">
+                    
+                    <!-- Left: Play/Pause & Fast Seek -10s / +10s -->
+                    <div class="flex items-center space-x-2">
+                        <button id="ctrl-play-pause-btn" class="w-9 h-9 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white flex items-center justify-center transition" title="Play / Pause">
+                            <i id="ctrl-play-icon" class="fas fa-play text-xs"></i>
+                        </button>
+
+                        <button id="ctrl-rewind-10" class="w-8 h-8 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center text-xs transition" title="Rewind 10 seconds">
+                            <span class="font-mono text-[10px] font-bold">-10s</span>
+                        </button>
+                        <button id="ctrl-forward-10" class="w-8 h-8 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center text-xs transition" title="Forward 10 seconds">
+                            <span class="font-mono text-[10px] font-bold">+10s</span>
+                        </button>
+                    </div>
+
+                    <!-- Middle: Sound / Volume Slider -->
+                    <div class="flex items-center space-x-2 bg-zinc-800/50 rounded-xl px-2.5 py-1 border border-zinc-800">
+                        <button id="ctrl-volume-btn" class="text-zinc-300 hover:text-white transition w-5 flex items-center justify-center" title="Mute / Unmute">
+                            <i id="ctrl-volume-icon" class="fas fa-volume-up text-xs"></i>
+                        </button>
+                        <input type="range" id="ctrl-volume-slider" min="0" max="100" value="100" 
+                               class="w-16 sm:w-20 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-red-600 focus:outline-none" title="Volume">
+                        <span id="ctrl-volume-label" class="text-[10px] font-mono text-zinc-400 w-6 text-right">100%</span>
+                    </div>
+
+                    <!-- Right: Resolution Switcher & Speed & Fullscreen -->
+                    <div class="flex items-center space-x-2">
+                        
+                        <!-- Resolution Selector (রেজুলেশন) -->
+                        <div class="relative">
+                            <button id="ctrl-resolution-btn" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-zinc-700/80 transition flex items-center gap-1.5" title="Video Resolution / Quality">
+                                <i class="fas fa-sliders-h text-[10px] text-red-400"></i>
+                                <span id="ctrl-resolution-label">1080p HD</span>
+                                <i class="fas fa-chevron-down text-[8px] text-zinc-500"></i>
+                            </button>
+                            <div id="ctrl-resolution-menu" class="hidden absolute right-0 bottom-full mb-2 bg-zinc-900 border border-zinc-700/90 rounded-xl shadow-2xl py-1 w-36 z-50 backdrop-blur-xl">
+                                <p class="text-[9px] uppercase font-bold text-zinc-500 px-3 py-1 tracking-wider">Quality</p>
+                                <button class="res-opt w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800 flex items-center justify-between text-white font-medium" data-res="1080p">
+                                    <span>1080p (FHD)</span>
+                                    <span class="text-[9px] bg-red-600/30 text-red-400 px-1 rounded">1080p</span>
+                                </button>
+                                <button class="res-opt w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800 flex items-center justify-between text-zinc-300" data-res="720p">
+                                    <span>720p (HD)</span>
+                                    <span class="text-[9px] bg-zinc-800 text-zinc-400 px-1 rounded">720p</span>
+                                </button>
+                                <button class="res-opt w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800 flex items-center justify-between text-zinc-300" data-res="480p">
+                                    <span>480p</span>
+                                    <span class="text-[9px] text-zinc-500">480p</span>
+                                </button>
+                                <button class="res-opt w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800 flex items-center justify-between text-zinc-300" data-res="360p">
+                                    <span>360p</span>
+                                    <span class="text-[9px] text-zinc-500">360p</span>
+                                </button>
+                                <button class="res-opt w-full text-left px-3 py-1.5 text-xs hover:bg-zinc-800 flex items-center justify-between text-zinc-300" data-res="auto">
+                                    <span>Auto</span>
+                                    <i class="fas fa-check text-[9px] text-emerald-400"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Speed Selector -->
+                        <div class="relative">
+                            <button id="ctrl-speed-btn" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-semibold px-2 py-1.5 rounded-lg border border-zinc-700/80 transition flex items-center gap-1" title="Playback Speed">
+                                <span id="ctrl-speed-label">1x</span>
+                                <i class="fas fa-chevron-down text-[8px] text-zinc-500"></i>
+                            </button>
+                            <div id="ctrl-speed-menu" class="hidden absolute right-0 bottom-full mb-2 bg-zinc-900 border border-zinc-700/90 rounded-xl shadow-2xl py-1 w-28 z-50">
+                                <button class="speed-opt w-full text-left px-3 py-1 text-xs hover:bg-zinc-800 text-zinc-300" data-speed="0.5">0.5x</button>
+                                <button class="speed-opt w-full text-left px-3 py-1 text-xs hover:bg-zinc-800 text-zinc-300" data-speed="0.75">0.75x</button>
+                                <button class="speed-opt w-full text-left px-3 py-1 text-xs hover:bg-zinc-800 text-white font-bold" data-speed="1">1x (Normal)</button>
+                                <button class="speed-opt w-full text-left px-3 py-1 text-xs hover:bg-zinc-800 text-zinc-300" data-speed="1.25">1.25x</button>
+                                <button class="speed-opt w-full text-left px-3 py-1 text-xs hover:bg-zinc-800 text-zinc-300" data-speed="1.5">1.5x</button>
+                                <button class="speed-opt w-full text-left px-3 py-1 text-xs hover:bg-zinc-800 text-zinc-300" data-speed="2">2x</button>
+                            </div>
+                        </div>
+
+                        <!-- Fullscreen -->
+                        <button id="ctrl-fullscreen-btn" class="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center text-xs transition" title="Toggle Fullscreen">
+                            <i class="fas fa-expand"></i>
+                        </button>
+                    </div>
+
+                </div>
+
             </div>
 
             <h1 id="video-title" class="text-xl font-bold line-clamp-2 md:text-2xl">Loading video title...</h1>
@@ -188,7 +315,9 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js" defer></script>
+    <script src="https://www.youtube.com/iframe_api" defer></script>
     <script src="env.js" defer></script>
+    <script src="seed-data.js" defer></script>
     <script src="data.js" defer></script>
     <script src="jask.js" defer></script>
     <script src="watch.js" defer></script>

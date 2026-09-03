@@ -183,21 +183,42 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    // Track active category
+    let currentCategory = "all";
+
+    // Listen for background updates from Firestore to keep UI fresh
+    document.addEventListener('jtube:videosUpdated', () => {
+        if (currentCategory === "all" && searchResultsSection && searchResultsSection.classList.contains("hidden")) {
+            renderVideos("all");
+        }
+    });
+    document.addEventListener('jtube:categoriesUpdated', () => {
+        renderCategories();
+    });
+    document.addEventListener('jtube:channelsUpdated', () => {
+        renderSidebarChannels();
+    });
+
     // Render Videos Grid
     async function renderVideos(filterCategory = "all") {
+        currentCategory = filterCategory;
+        // Fetch videos and channels in parallel for maximum speed
+        const [videosData, channelsMap] = await Promise.all([
+            filterCategory === "history" ? getHistory() : getVideos(),
+            getChannels()
+        ]);
+
         let videosToRender = [];
-        const channelsMap = await getChannels();
-        
         if (filterCategory === "history") {
-            videosToRender = await getHistory();
+            videosToRender = videosData || [];
         } else if (filterCategory === "playlists") {
-            const videos = await getVideos();
-            videosToRender = videos.filter(v => v.playlist && v.playlist.trim() !== "");
+            videosToRender = (videosData || []).filter(v => v.playlist && v.playlist.trim() !== "");
+        } else if (filterCategory === "shorts") {
+            videosToRender = (videosData || []).filter(v => isShortVideo(v));
         } else {
-            const videos = await getVideos();
             videosToRender = filterCategory === "all" 
-                ? videos
-                : videos.filter(v => v.category.toLowerCase() === filterCategory.toLowerCase() && !v.playlist);
+                ? (videosData || [])
+                : (videosData || []).filter(v => v.category && v.category.toLowerCase() === filterCategory.toLowerCase() && !v.playlist);
         }
 
         videoGrid.innerHTML = "";
@@ -258,19 +279,25 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             const ytId = getYoutubeId(video.videoUrl);
+            const isShort = isShortVideo(video);
             const card = document.createElement('div');
             card.className = "cursor-pointer group relative video-card-custom bg-zinc-800 rounded-xl pb-3 h-full flex flex-col";
-            card.onclick = () => location.href = `watch.html?id=${video.id}`;
+            card.onclick = () => location.href = isShort ? `shorts.html?id=${video.id}` : `watch.html?id=${video.id}`;
+            
+            const durationBadge = isShort
+                ? `<span class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-xs font-bold z-30 bg-red-600 text-white flex items-center gap-1 shadow"><i class="fas fa-bolt text-[9px]"></i> Shorts • ${video.duration}</span>`
+                : `<span class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-xs font-semibold z-30 ${getDurationBadgeClass(video.duration)}">${video.duration}</span>`;
+
             card.innerHTML = `
                 <div class="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-3">
                     <img src="${video.thumbnail}" alt="${video.title}" loading="lazy" decoding="async" class="w-full h-full object-cover group-hover:scale-105 transition duration-200">
                     <div class="video-preview-container absolute inset-0 w-full h-full bg-black z-20 pointer-events-none hidden"></div>
                     <div class="play-icon-overlay absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-200 z-10">
-                        <div class="w-12 h-12 bg-red-600/90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 scale-75 group-hover:scale-100 shadow-lg">
-                            <i class="fas fa-play text-white text-sm ml-0.5"></i>
+                        <div class="w-12 h-12 ${isShort ? 'bg-red-600' : 'bg-red-600/90'} rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 scale-75 group-hover:scale-100 shadow-lg">
+                            <i class="fas ${isShort ? 'fa-bolt text-sm' : 'fa-play text-sm ml-0.5'} text-white"></i>
                         </div>
                     </div>
-                    <span class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-xs font-semibold z-30 ${getDurationBadgeClass(video.duration)}">${video.duration}</span>
+                    ${durationBadge}
                 </div>
                 <div class="flex space-x-3 px-3 flex-1">
                     ${avatarHtml}
@@ -356,6 +383,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function renderCategories() {
         const categories = await getCategories();
         categoryBar.innerHTML = `<button class="category-btn whitespace-nowrap bg-white text-black px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="all">All</button>`;
+        categoryBar.innerHTML += `<button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 text-red-400 hover:text-white px-4 py-1.5 rounded-lg text-sm font-bold transition flex items-center gap-1.5" data-category="shorts"><i class="fas fa-bolt text-red-500"></i> Shorts</button>`;
         categories.forEach(cat => {
             categoryBar.innerHTML += `<button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="${cat.name}">${cat.name}</button>`;
         });
@@ -561,6 +589,56 @@ document.addEventListener("DOMContentLoaded", async () => {
         allVideosCache = await getVideos();
     }
 
+    // ===== SHORTS SHELF (YouTube Style) =====
+    async function renderShortsShelf() {
+        const shelf = document.getElementById('shorts-shelf');
+        const carousel = document.getElementById('shorts-carousel');
+        if (!shelf || !carousel) return;
+
+        const videos = await getVideos();
+        const shorts = videos.filter(v => isShortVideo(v)).slice(0, 6);
+
+        if (shorts.length === 0) {
+            shelf.classList.add('hidden');
+            return;
+        }
+
+        shelf.classList.remove('hidden');
+        carousel.innerHTML = shorts.map(v => `
+            <div onclick="location.href='shorts.html?id=${v.id}'" 
+                 class="group relative aspect-[9/16] rounded-2xl overflow-hidden cursor-pointer bg-zinc-900 border border-zinc-800/80 shadow-md hover:shadow-red-600/20 hover:border-red-500/40 transition-all duration-300 flex flex-col justify-end">
+                <img src="${v.thumbnail}" alt="${v.title.replace(/"/g, '&quot;')}" loading="lazy" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                
+                <!-- Red Shorts Badge -->
+                <div class="absolute top-2.5 left-2.5 z-20">
+                    <span class="bg-black/70 backdrop-blur-md text-red-500 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 border border-white/10">
+                        <i class="fas fa-bolt text-[9px]"></i> Shorts
+                    </span>
+                </div>
+
+                <!-- Hover Play Icon -->
+                <div class="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors flex items-center justify-center z-10">
+                    <div class="w-10 h-10 rounded-full bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 transition-all shadow-lg">
+                        <i class="fas fa-play text-xs ml-0.5"></i>
+                    </div>
+                </div>
+
+                <!-- Bottom Gradient Scrim -->
+                <div class="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black via-black/70 to-transparent z-20 pointer-events-none"></div>
+
+                <!-- Title & Views -->
+                <div class="relative p-2.5 sm:p-3 z-30 pointer-events-none">
+                    <h3 class="text-xs font-bold text-white line-clamp-2 leading-snug drop-shadow mb-1 group-hover:text-red-400 transition-colors">
+                        ${v.title}
+                    </h3>
+                    <p class="text-[10px] text-zinc-400 font-medium">
+                        ${formatCompactNumber(v.views || 0)} views
+                    </p>
+                </div>
+            </div>
+        `).join("");
+    }
+
     // ===== TRENDING SECTION =====
     async function renderTrendingStrip() {
         const trendingContainer = document.getElementById('trending-section');
@@ -614,10 +692,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         main.appendChild(footer);
     }
 
-    await renderCategories();
-    await renderSidebarChannels();
-    await renderVideos();
-    renderTrendingStrip(); // non-blocking
-    preloadVideosForSearch(); // non-blocking preload for instant search
+    // Render videos immediately without blocking on other elements
+    renderVideos("all");
+    renderCategories();
+    renderSidebarChannels();
+    renderShortsShelf();
+    renderTrendingStrip();
+    preloadVideosForSearch();
     renderFooter();
 });

@@ -56,21 +56,49 @@
 <body class="bg-zinc-950 text-white min-h-screen">
 
     <!-- Admin Login Overlay -->
-    <div id="admin-login-overlay" class="fixed inset-0 z-[200] bg-zinc-950 flex items-center justify-center">
-        <div class="glass-card p-10 w-full max-w-sm shadow-2xl text-center">
-            <div class="inline-flex bg-gradient-to-br from-red-500 to-red-700 text-white w-16 h-16 items-center justify-center rounded-2xl text-2xl mb-5 shadow-lg">
+    <div id="admin-login-overlay" class="fixed inset-0 z-[200] bg-zinc-950/95 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="glass-card p-8 sm:p-10 w-full max-w-md shadow-2xl text-center border border-red-500/20">
+            <div class="inline-flex bg-gradient-to-br from-red-500 to-red-700 text-white w-16 h-16 items-center justify-center rounded-2xl text-2xl mb-4 shadow-lg shadow-red-600/30">
                 <i class="fas fa-shield-alt"></i>
             </div>
-            <h2 class="text-2xl font-bold mb-1">Studio Access</h2>
-            <p class="text-xs text-zinc-500 mb-7">Enter master password to access JTube Studio.</p>
-            <form id="admin-login-form" class="space-y-4">
-                <input type="password" id="admin-password" placeholder="Master Password" required
-                       class="input-field text-center tracking-widest text-lg">
-                <button type="submit" class="btn-primary w-full text-sm">
-                    <i class="fas fa-unlock mr-2"></i>Unlock Studio
+            <h2 class="text-2xl font-bold mb-1 tracking-tight text-white">Studio Admin Access</h2>
+            <p class="text-xs text-zinc-400 mb-6">Enter your Firebase Admin credentials to access JTube Studio.</p>
+
+            <div id="admin-login-error" class="hidden mb-4 p-3.5 rounded-xl bg-red-950/70 border border-red-700/60 text-red-200 text-xs text-left flex items-start gap-2.5 transition-all">
+                <i class="fas fa-exclamation-circle text-red-400 mt-0.5 flex-shrink-0"></i>
+                <span id="admin-login-error-text" class="flex-1 leading-snug">Authentication failed</span>
+            </div>
+
+            <form id="admin-login-form" class="space-y-4 text-left">
+                <div>
+                    <label class="label">Admin Email</label>
+                    <div class="relative">
+                        <i class="fas fa-envelope absolute left-3.5 top-3.5 text-zinc-500 text-xs"></i>
+                        <input type="email" id="admin-email" value="admin@jtube.com" required
+                               class="input-field pl-9 text-sm" placeholder="admin@jtube.com">
+                    </div>
+                </div>
+                <div>
+                    <label class="label">Password</label>
+                    <div class="relative">
+                        <i class="fas fa-lock absolute left-3.5 top-3.5 text-zinc-500 text-xs"></i>
+                        <input type="password" id="admin-password" placeholder="Enter password" required
+                               class="input-field pl-9 pr-10 text-sm">
+                        <button type="button" id="toggle-admin-password" class="absolute right-3.5 top-3 text-zinc-500 hover:text-zinc-300 text-xs">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <button type="submit" id="admin-login-submit-btn" class="btn-primary w-full text-sm py-3 mt-2 flex items-center justify-center gap-2">
+                    <i class="fas fa-sign-in-alt"></i>
+                    <span>Sign In to Studio</span>
                 </button>
             </form>
-            <a href="index.html" class="block mt-5 text-xs text-zinc-600 hover:text-zinc-400 transition">← Return to Home</a>
+
+            <div class="mt-6 pt-4 border-t border-zinc-800 flex items-center justify-between text-xs text-zinc-500">
+                <span class="flex items-center gap-1.5"><i class="fas fa-lock text-emerald-500 text-[10px]"></i> Firebase Protected</span>
+                <a href="index.html" class="hover:text-zinc-300 transition flex items-center gap-1">← Return to Home</a>
+            </div>
         </div>
     </div>
 
@@ -84,10 +112,18 @@
             <span class="hidden sm:inline-block bg-zinc-800 text-red-400 text-[10px] font-bold px-2 py-0.5 rounded-full tracking-widest uppercase">Studio</span>
         </div>
         <div class="flex items-center space-x-3">
+            <div id="admin-user-badge" class="hidden sm:flex items-center space-x-2 bg-zinc-900 border border-zinc-800 rounded-full px-3 py-1.5 text-xs">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span id="admin-email-display" class="text-zinc-300 font-mono text-[11px]">admin@jtube.com</span>
+            </div>
             <a href="index.html" class="text-sm bg-zinc-800 hover:bg-zinc-700 px-4 py-2 rounded-full transition font-medium text-zinc-300">
                 <i class="fas fa-eye mr-1.5"></i>View Site
             </a>
-            <div class="bg-gradient-to-br from-red-500 to-red-700 w-9 h-9 rounded-full flex items-center justify-center font-black text-sm shadow">A</div>
+            <button id="admin-logout-btn" title="Sign Out Admin" class="text-xs bg-zinc-800/80 hover:bg-red-950/80 hover:text-red-300 border border-zinc-700/80 hover:border-red-600/50 px-3 py-2 rounded-full text-zinc-300 transition flex items-center space-x-1.5">
+                <i class="fas fa-sign-out-alt"></i>
+                <span class="hidden sm:inline">Logout</span>
+            </button>
+            <div id="admin-avatar-initial" class="bg-gradient-to-br from-red-500 to-red-700 w-9 h-9 rounded-full flex items-center justify-center font-black text-sm shadow">A</div>
         </div>
     </header>
 
@@ -123,7 +159,11 @@
                     <span>Import from YouTube</span>
                 </button>
 
-                <p class="text-[10px] font-bold uppercase tracking-widest text-zinc-600 px-3 mt-5 mb-3">Settings</p>
+                <p class="text-[10px] font-bold uppercase tracking-widest text-zinc-600 px-3 mt-5 mb-3">System &amp; Users</p>
+                <button class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold text-left text-zinc-400" data-tab="users">
+                    <i class="fas fa-users-cog w-5 text-center"></i>
+                    <span>Users &amp; Auth</span>
+                </button>
                 <button class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold text-left text-zinc-400" data-tab="categories">
                     <i class="fas fa-tags w-5 text-center"></i>
                     <span>Manage Categories</span>
@@ -211,16 +251,55 @@
                 <div class="mb-6 flex items-center justify-between flex-wrap gap-3">
                     <div>
                         <h1 class="text-2xl font-black text-white">Manage Videos</h1>
-                        <p class="text-sm text-zinc-500 mt-1">Overview of all active videos in the database.</p>
+                        <p class="text-sm text-zinc-500 mt-1">Select and delete videos individually or in bulk from Firestore.</p>
                     </div>
-                    <div class="bg-zinc-800 border border-zinc-700 px-4 py-2 rounded-xl text-sm font-bold text-zinc-300">
-                        Total: <span id="video-count" class="text-white">0</span>
+                    <div class="flex items-center space-x-3">
+                        <div class="bg-zinc-800 border border-zinc-700 px-4 py-2 rounded-xl text-sm font-bold text-zinc-300">
+                            Total: <span id="video-count" class="text-white">0</span>
+                        </div>
                     </div>
                 </div>
+
+                <!-- Controls & Filter Toolbar -->
+                <div class="glass-card p-4 mb-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1 max-w-xl">
+                        <div class="relative flex-1">
+                            <i class="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 text-xs"></i>
+                            <input type="text" id="admin-video-search" placeholder="Search by video title or channel..." 
+                                   class="input-field pl-9 py-2 text-xs">
+                        </div>
+                        <select id="admin-category-filter" class="input-field py-2 text-xs w-full sm:w-44">
+                            <option value="all">All Categories</option>
+                        </select>
+                    </div>
+
+                    <!-- Bulk Actions Bar (Shown when 1 or more videos are selected) -->
+                    <div id="bulk-actions-bar" class="hidden items-center justify-between sm:justify-end gap-3 bg-red-950/40 border border-red-700/50 px-4 py-2 rounded-xl">
+                        <span id="selected-count-label" class="text-xs font-bold text-red-200">0 selected</span>
+                        <div class="h-4 w-px bg-red-800/80 hidden sm:block"></div>
+                        <button id="btn-delete-selected" type="button" 
+                                class="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-lg shadow-red-900/40 flex items-center space-x-2 transition cursor-pointer">
+                            <i class="fas fa-trash-alt text-[11px]"></i>
+                            <span>Delete Selected</span>
+                        </button>
+                        <button id="btn-deselect-all" type="button" 
+                                class="text-zinc-400 hover:text-white text-xs px-2.5 py-1.5 rounded-md hover:bg-zinc-800 transition">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Action Status Message Banner -->
+                <div id="admin-action-status" class="hidden mb-4 p-3.5 rounded-xl text-xs font-semibold flex items-center justify-between transition-all"></div>
+
                 <div class="glass-card overflow-x-auto">
                     <table class="w-full text-left text-sm text-zinc-300">
-                        <thead class="text-xs uppercase bg-zinc-900/60 text-zinc-500 border-b border-zinc-800">
+                        <thead class="text-xs uppercase bg-zinc-900/70 text-zinc-400 border-b border-zinc-800">
                             <tr>
+                                <th class="w-12 px-4 py-3.5 text-center">
+                                    <input type="checkbox" id="select-all-videos" title="Select / Deselect all" 
+                                           class="w-4 h-4 rounded border-zinc-700 accent-red-600 bg-zinc-900 cursor-pointer">
+                                </th>
                                 <th class="px-5 py-3.5">Video</th>
                                 <th class="px-5 py-3.5 hidden sm:table-cell">Channel</th>
                                 <th class="px-5 py-3.5">Category</th>
@@ -426,6 +505,54 @@
                 </div>
             </div>
 
+            <!-- ===== USERS & AUTH TAB ===== -->
+            <div id="tab-users" class="tab-panel">
+                <div class="mb-6 flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                        <h1 class="text-2xl font-black text-white">Users &amp; Authentication</h1>
+                        <p class="text-sm text-zinc-500 mt-1">Firebase Authentication users and admin access control.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs px-3 py-1.5 rounded-full font-medium flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            Firebase Auth Active
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Search box matching user specification -->
+                <div class="glass-card p-4 mb-6 flex items-center gap-3">
+                    <div class="relative flex-1">
+                        <i class="fas fa-search absolute left-3.5 top-3.5 text-zinc-500 text-xs"></i>
+                        <input type="text" id="admin-user-search" 
+                               placeholder="Search by email address, phone number, or user UID" 
+                               class="input-field pl-9 text-sm">
+                    </div>
+                    <button id="admin-refresh-users-btn" class="text-xs bg-zinc-800 hover:bg-zinc-700 px-4 py-2.5 rounded-xl text-zinc-300 font-semibold transition flex items-center gap-1.5">
+                        <i class="fas fa-sync-alt"></i>
+                        <span>Refresh</span>
+                    </button>
+                </div>
+
+                <div class="glass-card overflow-x-auto">
+                    <table class="w-full text-left text-xs text-zinc-300">
+                        <thead class="bg-zinc-900/90 text-zinc-400 uppercase text-[10px] tracking-wider border-b border-zinc-800">
+                            <tr>
+                                <th class="p-4 font-bold">Identifier</th>
+                                <th class="p-4 font-bold">Providers</th>
+                                <th class="p-4 font-bold">Created</th>
+                                <th class="p-4 font-bold">Signed In</th>
+                                <th class="p-4 font-bold">User UID</th>
+                                <th class="p-4 font-bold text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-users-table-body" class="divide-y divide-zinc-800/60">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
         </main>
     </div>
 
@@ -434,6 +561,7 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js" defer></script>
     <script src="env.js" defer></script>
+    <script src="seed-data.js" defer></script>
     <script src="data.js" defer></script>
     <script src="admin.js" defer></script>
 

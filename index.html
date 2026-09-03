@@ -4,7 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JTube</title>
-    <meta name="description" content="JTube – Watch curated videos on Islam, Science, AI, Machine Learning and more.">
+    <meta name="description" content="Watch curated videos on Islam, Science, AI, Machine Learning and more.">
+    <meta property="og:title" content="JTube">
+    <meta property="og:description" content="Watch curated videos on Islam, Science, AI, Machine Learning and more.">
     <link rel="shortcut icon" href="img/jtubeimg.png" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -50,6 +52,13 @@
         <aside id="sidebar" class="fixed md:sticky top-[61px] h-[calc(100vh-61px)] bg-zinc-900 w-64 border-r border-zinc-800 transition-transform -translate-x-full md:translate-x-0 z-40 overflow-y-auto">
             <nav class="p-4 space-y-1">
                 <a href="#" class="flex items-center space-x-4 p-3 bg-zinc-800 rounded-xl font-medium"><i class="fas fa-home text-lg w-6"></i> <span>Home</span></a>
+                <a href="shorts.html" id="sidebar-shorts-btn" class="flex items-center space-x-4 p-3 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-white transition group">
+                    <span class="w-6 flex items-center justify-center text-red-500 group-hover:scale-110 transition-transform">
+                        <i class="fas fa-bolt text-lg"></i>
+                    </span>
+                    <span class="font-medium">Shorts</span>
+                    <span class="ml-auto bg-red-600/20 text-red-400 text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider">New</span>
+                </a>
                 <a href="#" id="sidebar-playlists-btn" class="flex items-center space-x-4 p-3 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-white transition"><i class="fas fa-layer-group text-lg w-6"></i> <span>Playlists</span></a>
                 <a href="#" id="history-btn" class="flex items-center space-x-4 p-3 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-white transition"><i class="fas fa-history text-lg w-6"></i> <span>History</span></a>
                 <a href="channels.html" id="all-channels-btn" class="flex items-center space-x-4 p-3 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-white transition"><i class="fas fa-users text-lg w-6"></i> <span>All Channels</span></a>
@@ -93,6 +102,23 @@
             <div id="category-bar" class="flex items-center space-x-3 overflow-x-auto pb-4 mb-4" style="-ms-overflow-style:none;scrollbar-width:none;">
                 <!-- Categories will be injected here dynamically -->
             </div>
+            <!-- Shorts Shelf (YouTube-style) -->
+            <div id="shorts-shelf" class="mb-8 hidden">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center space-x-2.5">
+                        <span class="w-8 h-8 rounded-xl bg-red-600/20 text-red-500 border border-red-500/30 flex items-center justify-center text-sm shadow-lg shadow-red-600/20">
+                            <i class="fas fa-bolt"></i>
+                        </span>
+                        <h2 class="text-xl font-black text-white tracking-tight">Shorts</h2>
+                    </div>
+                    <a href="shorts.html" class="text-xs font-semibold text-red-400 hover:text-red-300 flex items-center gap-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 px-3 py-1.5 rounded-full transition">
+                        <span>View all Shorts</span>
+                        <i class="fas fa-chevron-right text-[10px]"></i>
+                    </a>
+                </div>
+                <div id="shorts-carousel" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4"></div>
+            </div>
+
             <!-- Trending Section -->
             <div id="trending-section" class="mb-6"></div>
             <div id="video-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-8"></div>
@@ -142,6 +168,7 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js" defer></script>
     <script src="env.js" defer></script>
+    <script src="seed-data.js" defer></script>
     <script src="data.js" defer></script>
     <script src="index.js" defer></script>
 </body>

@@ -1,6 +1,7 @@
 const firebaseConfig = {
     apiKey: "AIzaSyBgLd_OmawpDrDxOkm8msclKUqoI5nPZMw",
     authDomain: "jeyatube.firebaseapp.com",
+    databaseURL: "https://jeyatube-default-rtdb.firebaseio.com",
     projectId: "jeyatube",
     storageBucket: "jeyatube.firebasestorage.app",
     messagingSenderId: "89347367792",
@@ -27,15 +28,73 @@ db.enablePersistence({ synchronizeTabs: true }).catch(err => {
     }
 });
 
-// In-memory cache for ultra-fast repeat reads within same session
+// In-memory cache & persistent localStorage helper for instant loading
+function loadFromStorage(key, fallback) {
+    try {
+        if (typeof localStorage !== 'undefined') {
+            const stored = localStorage.getItem('jtube_' + key);
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                if (parsed && (Array.isArray(parsed) ? parsed.length > 0 : Object.keys(parsed).length > 0)) {
+                    return parsed;
+                }
+            }
+        }
+    } catch (e) {}
+    return fallback;
+}
+
+function saveToStorage(key, data) {
+    try {
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('jtube_' + key, JSON.stringify(data));
+        }
+    } catch (e) {}
+}
+
+const seedData = (typeof window !== 'undefined' && window.JEYA_INITIAL_DATA) ? window.JEYA_INITIAL_DATA : {};
+const initialVideos = seedData.videos || [
+    {
+        id: "1",
+        title: "The Future of Artificial Intelligence in 2026",
+        channel: "AI Frontier",
+        category: "AI",
+        playlist: "AI Masterclass 2026",
+        views: 125000,
+        time: "2 days ago",
+        duration: "10:15",
+        thumbnail: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=60",
+        videoUrl: "https://www.youtube.com/watch?v=60Yo63VFt-M", 
+        description: "An in-depth look into how AI and Machine Learning are transforming our daily lives in 2026.",
+        likes: 4500,
+        liked: false,
+        comments: [
+            { username: "Rahat", text: "Brilliant explanation! Looking forward to more ML content." }
+        ],
+        timestamp: Date.now()
+    }
+];
+
+const initialChannels = seedData.channels || {
+    "AI Frontier": { subscribers: 50000, subscribed: false, coverUrl: "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=1200&h=300&fit=crop", avatarUrl: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop" }
+};
+
+const defaultCats = seedData.categories || [
+    { id: "islam", name: "Islam", order: 1 },
+    { id: "science", name: "Science", order: 2 },
+    { id: "ai", name: "AI", order: 3 },
+    { id: "machine-learning", name: "Machine Learning", order: 4 },
+    { id: "entertainment", name: "Entertainment", order: 5 }
+];
+
 const _cache = {
-    videos: null,
-    videosTimestamp: 0,
-    channels: null,
-    channelsTimestamp: 0,
-    categories: null,
-    categoriesTimestamp: 0,
-    TTL: 120000 // 2 minutes cache TTL for snappy repeat reads
+    videos: loadFromStorage('videos', initialVideos),
+    videosTimestamp: Date.now(),
+    channels: loadFromStorage('channels', initialChannels),
+    channelsTimestamp: Date.now(),
+    categories: loadFromStorage('categories', defaultCats),
+    categoriesTimestamp: Date.now(),
+    TTL: 180000 // 3 minutes cache TTL
 };
 
 function isCacheValid(key) {
@@ -45,13 +104,23 @@ function isCacheValid(key) {
 function invalidateCache(key) {
     _cache[key] = null;
     _cache[key + 'Timestamp'] = 0;
+    try {
+        if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem('jtube_' + key);
+        }
+    } catch (e) {}
 }
 
 let currentUser = null;
 auth.onAuthStateChanged(user => {
     currentUser = user;
+    if (typeof window !== 'undefined') window.currentUser = user;
     document.dispatchEvent(new CustomEvent('authStateChanged', { detail: user }));
 });
+
+function getCurrentUser() {
+    return currentUser || (typeof window !== 'undefined' ? window.currentUser : null);
+}
 
 async function loginWithEmail(email, password) {
     return await auth.signInWithEmailAndPassword(email, password);
@@ -76,75 +145,104 @@ async function logoutUser() {
     return await auth.signOut();
 }
 
-// ===== VIDEO FUNCTIONS (Firestore + RTDB, cached) =====
+// ===== VIDEO FUNCTIONS (Instant Cache-First + Background Firestore Sync) =====
 
-async function getVideos() {
-    if (isCacheValid('videos')) return _cache.videos;
-    
+let _isFetchingVideos = false;
+async function fetchVideosFromFirestore() {
+    if (_isFetchingVideos) return;
+    _isFetchingVideos = true;
     try {
-        // Try RTDB first for ultra-fast loading
-        const snapshot = await rtdb.ref('videos').once('value');
-        if (snapshot.exists()) {
-            let videos = [];
-            snapshot.forEach(child => {
-                videos.push(child.val());
-            });
-            videos.sort((a, b) => b.timestamp - a.timestamp);
-            _cache.videos = videos;
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000));
+        const fetchPromise = db.collection("videos").orderBy("timestamp", "desc").get();
+        const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
+        
+        let freshVideos = [];
+        snapshot.forEach(doc => {
+            freshVideos.push(doc.data());
+        });
+        if (freshVideos.length > 0) {
+            _cache.videos = freshVideos;
             _cache.videosTimestamp = Date.now();
-            return videos;
+            saveToStorage('videos', freshVideos);
+            if (typeof document !== 'undefined') {
+                document.dispatchEvent(new CustomEvent('jtube:videosUpdated', { detail: freshVideos }));
+            }
         }
     } catch (err) {
-        console.warn("RTDB read failed, falling back to Firestore", err);
+        console.warn("Background Firestore videos fetch:", err.message || err);
+    } finally {
+        _isFetchingVideos = false;
+    }
+}
+
+async function getVideos() {
+    // 1. In-memory cache: return INSTANTLY (0ms)
+    if (_cache.videos && _cache.videos.length > 0) {
+        fetchVideosFromFirestore(); // background sync
+        return _cache.videos;
+    }
+    
+    // 2. LocalStorage cache
+    const stored = loadFromStorage('videos', null);
+    if (stored && stored.length > 0) {
+        _cache.videos = stored;
+        _cache.videosTimestamp = Date.now();
+        fetchVideosFromFirestore();
+        return stored;
     }
 
-    const snapshot = await db.collection("videos").orderBy("timestamp", "desc").get();
-    let videos = [];
-    snapshot.forEach(doc => {
-        videos.push(doc.data());
-    });
-    _cache.videos = videos;
-    _cache.videosTimestamp = Date.now();
-    return videos;
+    // 3. First-run fallback: seed data
+    if (initialVideos && initialVideos.length > 0) {
+        _cache.videos = initialVideos;
+        _cache.videosTimestamp = Date.now();
+        fetchVideosFromFirestore();
+        return initialVideos;
+    }
+
+    // 4. Await fresh fetch if no cache available
+    await fetchVideosFromFirestore();
+    return (_cache.videos && _cache.videos.length > 0) ? _cache.videos : initialVideos;
 }
 
 async function getVideoById(videoId) {
-    // Try cache first
-    if (isCacheValid('videos')) {
+    if (!videoId) return null;
+    // 1. Try cache
+    if (_cache.videos && _cache.videos.length > 0) {
         const cached = _cache.videos.find(v => v.id === videoId);
         if (cached) return cached;
     }
-    
+    const stored = loadFromStorage('videos', []);
+    const local = stored.find(v => v.id === videoId);
+    if (local) return local;
+
+    // 2. Direct Firestore lookup with fast timeout
     try {
-        // Try RTDB first for ultra-fast loading
-        const snapshot = await rtdb.ref(`videos/${videoId}`).once('value');
-        if (snapshot.exists()) {
-            return snapshot.val();
-        }
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
+        const doc = await Promise.race([db.collection("videos").doc(videoId).get(), timeoutPromise]);
+        if (doc && doc.exists) return doc.data();
     } catch (err) {
-        console.warn("RTDB read failed, falling back to Firestore", err);
+        console.warn("Firestore video lookup failed", err);
     }
-    
-    // Direct Firestore lookup — much faster than fetching ALL videos
-    const doc = await db.collection("videos").doc(videoId).get();
-    return doc.exists ? doc.data() : null;
+    return initialVideos.find(v => v.id === videoId) || null;
 }
 
 async function saveVideo(video) {
     if (!video.timestamp) video.timestamp = Date.now();
-    // Write to both Firestore and RTDB in parallel
-    await Promise.all([
-        db.collection("videos").doc(video.id).set(video),
-        rtdb.ref(`videos/${video.id}`).set(video)
-    ]);
+    await db.collection("videos").doc(video.id).set(video);
+    try { rtdb.ref(`videos/${video.id}`).set(video); } catch (e) {}
+    
+    // Update local cache immediately
+    if (_cache.videos) {
+        const idx = _cache.videos.findIndex(v => v.id === video.id);
+        if (idx >= 0) _cache.videos[idx] = video;
+        else _cache.videos.unshift(video);
+        saveToStorage('videos', _cache.videos);
+    }
     invalidateCache('videos');
 }
 
 async function saveBatchVideos(videosArray) {
-    // Firestore batch writes — up to 500 per batch, much faster than individual writes
     const batchSize = 450;
-    const rtdbUpdates = {}; // RTDB batch updates
-
     for (let i = 0; i < videosArray.length; i += batchSize) {
         const batch = db.batch();
         const chunk = videosArray.slice(i, i + batchSize);
@@ -152,85 +250,149 @@ async function saveBatchVideos(videosArray) {
             if (!video.timestamp) video.timestamp = Date.now();
             const ref = db.collection("videos").doc(video.id);
             batch.set(ref, video);
-            
-            // Collect RTDB updates
-            rtdbUpdates[`videos/${video.id}`] = video;
         });
         await batch.commit();
     }
-    
-    // Save to RTDB for faster subsequent reads
-    if (Object.keys(rtdbUpdates).length > 0) {
-        await rtdb.ref().update(rtdbUpdates);
-    }
-    
     invalidateCache('videos');
 }
 
 async function deleteVideo(id) {
-    // Delete from both in parallel
-    await Promise.all([
-        db.collection("videos").doc(id).delete(),
-        rtdb.ref(`videos/${id}`).remove()
-    ]);
+    if (!id) return;
+    // 1. Delete from Firestore
+    await db.collection("videos").doc(id).delete();
+    // 2. Delete from RTDB
+    try { rtdb.ref(`videos/${id}`).remove(); } catch (e) {}
+    // 3. Update memory and local persistent storage
+    if (_cache.videos) {
+        _cache.videos = _cache.videos.filter(v => v.id !== id);
+        saveToStorage('videos', _cache.videos);
+    }
     invalidateCache('videos');
+    if (typeof document !== 'undefined') {
+        document.dispatchEvent(new CustomEvent('jtube:videosUpdated', { detail: _cache.videos || [] }));
+    }
 }
 
-// ===== CHANNEL FUNCTIONS (Firestore + RTDB, cached) =====
-
-async function getChannels() {
-    if (isCacheValid('channels')) return _cache.channels;
+async function deleteBatchVideos(idsArray) {
+    if (!Array.isArray(idsArray) || idsArray.length === 0) return { success: true, count: 0 };
     
+    // 1. Batch delete from Firestore in chunks of up to 450 (Firestore batch limit is 500)
+    const batchSize = 450;
+    for (let i = 0; i < idsArray.length; i += batchSize) {
+        const batch = db.batch();
+        const chunk = idsArray.slice(i, i + batchSize);
+        chunk.forEach(id => {
+            if (id) {
+                const ref = db.collection("videos").doc(id);
+                batch.delete(ref);
+            }
+        });
+        await batch.commit();
+    }
+
+    // 2. Delete from RTDB
     try {
-        // Try RTDB first for ultra-fast loading
-        const snapshot = await rtdb.ref('channels').once('value');
-        if (snapshot.exists()) {
-            const channels = snapshot.val();
-            _cache.channels = channels;
+        const rtdbRemovals = {};
+        idsArray.forEach(id => {
+            if (id) rtdbRemovals[`videos/${id}`] = null;
+        });
+        if (Object.keys(rtdbRemovals).length > 0) {
+            await rtdb.ref().update(rtdbRemovals);
+        }
+    } catch (e) {}
+
+    // 3. Update memory and local persistent storage
+    const idSet = new Set(idsArray);
+    if (_cache.videos) {
+        _cache.videos = _cache.videos.filter(v => !idSet.has(v.id));
+        saveToStorage('videos', _cache.videos);
+    }
+    invalidateCache('videos');
+
+    if (typeof document !== 'undefined') {
+        document.dispatchEvent(new CustomEvent('jtube:videosUpdated', { detail: _cache.videos || [] }));
+    }
+
+    return { success: true, count: idsArray.length };
+}
+
+// ===== CHANNEL FUNCTIONS (Instant Cache-First + Background Firestore Sync) =====
+
+let _isFetchingChannels = false;
+async function fetchChannelsFromFirestore() {
+    if (_isFetchingChannels) return;
+    _isFetchingChannels = true;
+    try {
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000));
+        const fetchPromise = db.collection("channels").get();
+        const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
+        
+        let freshChannels = {};
+        snapshot.forEach(doc => {
+            freshChannels[doc.id] = doc.data();
+        });
+        if (Object.keys(freshChannels).length > 0) {
+            _cache.channels = freshChannels;
             _cache.channelsTimestamp = Date.now();
-            return channels;
+            saveToStorage('channels', freshChannels);
+            if (typeof document !== 'undefined') {
+                document.dispatchEvent(new CustomEvent('jtube:channelsUpdated', { detail: freshChannels }));
+            }
         }
     } catch (err) {
-        console.warn("RTDB channels read failed, falling back to Firestore", err);
+        console.warn("Background Firestore channels fetch:", err.message || err);
+    } finally {
+        _isFetchingChannels = false;
     }
-    
-    const snapshot = await db.collection("channels").get();
-    let channels = {};
-    snapshot.forEach(doc => {
-        channels[doc.id] = doc.data();
-    });
-    _cache.channels = channels;
-    _cache.channelsTimestamp = Date.now();
-    return channels;
+}
+
+async function getChannels() {
+    if (_cache.channels && Object.keys(_cache.channels).length > 0) {
+        fetchChannelsFromFirestore();
+        return _cache.channels;
+    }
+    const stored = loadFromStorage('channels', null);
+    if (stored && Object.keys(stored).length > 0) {
+        _cache.channels = stored;
+        _cache.channelsTimestamp = Date.now();
+        fetchChannelsFromFirestore();
+        return stored;
+    }
+    if (initialChannels && Object.keys(initialChannels).length > 0) {
+        _cache.channels = initialChannels;
+        _cache.channelsTimestamp = Date.now();
+        fetchChannelsFromFirestore();
+        return initialChannels;
+    }
+    await fetchChannelsFromFirestore();
+    return (_cache.channels && Object.keys(_cache.channels).length > 0) ? _cache.channels : initialChannels;
 }
 
 async function saveChannel(channelName, channelData) {
-    // Write to both Firestore and RTDB in parallel for fast reads
-    await Promise.all([
-        db.collection("channels").doc(channelName).set(channelData, { merge: true }),
-        rtdb.ref(`channels/${channelName}`).update(channelData)
-    ]);
+    await db.collection("channels").doc(channelName).set(channelData, { merge: true });
+    try { rtdb.ref(`channels/${channelName}`).update(channelData); } catch (e) {}
+    if (_cache.channels) {
+        _cache.channels[channelName] = { ...(_cache.channels[channelName] || {}), ...channelData };
+        saveToStorage('channels', _cache.channels);
+    }
     invalidateCache('channels');
 }
 
 async function getChannel(channelName) {
-    // Try cache first
-    if (isCacheValid('channels') && _cache.channels[channelName]) {
+    if (_cache.channels && _cache.channels[channelName]) {
         return _cache.channels[channelName];
     }
+    const stored = loadFromStorage('channels', {});
+    if (stored[channelName]) return stored[channelName];
     
     try {
-        // Try RTDB first
-        const snapshot = await rtdb.ref(`channels/${channelName}`).once('value');
-        if (snapshot.exists()) {
-            return snapshot.val();
-        }
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
+        const doc = await Promise.race([db.collection("channels").doc(channelName).get(), timeoutPromise]);
+        return doc && doc.exists ? doc.data() : null;
     } catch (err) {
-        console.warn("RTDB channel read failed, falling back to Firestore", err);
+        console.warn("Firestore channel lookup failed", err);
     }
-    
-    const doc = await db.collection("channels").doc(channelName).get();
-    return doc.exists ? doc.data() : null;
+    return null;
 }
 
 async function getVideosByChannel(channelName) {
@@ -325,17 +487,53 @@ async function getPlaylists() {
 
 // ===== CATEGORIES =====
 
-async function getCategories() {
-    if (isCacheValid('categories')) return _cache.categories;
+let _isFetchingCategories = false;
+async function fetchCategoriesFromFirestore() {
+    if (_isFetchingCategories) return;
+    _isFetchingCategories = true;
+    try {
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000));
+        const fetchPromise = db.collection("categories").orderBy("order").get();
+        const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
+        let categories = [];
+        snapshot.forEach(doc => {
+            categories.push({ id: doc.id, ...doc.data() });
+        });
+        if (categories.length > 0) {
+            _cache.categories = categories;
+            _cache.categoriesTimestamp = Date.now();
+            saveToStorage('categories', categories);
+            if (typeof document !== 'undefined') {
+                document.dispatchEvent(new CustomEvent('jtube:categoriesUpdated', { detail: categories }));
+            }
+        }
+    } catch (err) {
+        console.warn("Background Firestore categories fetch:", err.message || err);
+    } finally {
+        _isFetchingCategories = false;
+    }
+}
 
-    const snapshot = await db.collection("categories").orderBy("order").get();
-    let categories = [];
-    snapshot.forEach(doc => {
-        categories.push({ id: doc.id, ...doc.data() });
-    });
-    _cache.categories = categories;
-    _cache.categoriesTimestamp = Date.now();
-    return categories;
+async function getCategories() {
+    if (_cache.categories && _cache.categories.length > 0) {
+        fetchCategoriesFromFirestore();
+        return _cache.categories;
+    }
+    const stored = loadFromStorage('categories', null);
+    if (stored && stored.length > 0) {
+        _cache.categories = stored;
+        _cache.categoriesTimestamp = Date.now();
+        fetchCategoriesFromFirestore();
+        return stored;
+    }
+    if (defaultCats && defaultCats.length > 0) {
+        _cache.categories = defaultCats;
+        _cache.categoriesTimestamp = Date.now();
+        fetchCategoriesFromFirestore();
+        return defaultCats;
+    }
+    await fetchCategoriesFromFirestore();
+    return (_cache.categories && _cache.categories.length > 0) ? _cache.categories : defaultCats;
 }
 
 async function saveCategory(category) {
@@ -508,20 +706,21 @@ if (!sessionStorage.getItem('jtube_db_init')) {
 }
 
 // ===== AUTO-SYNC YOUTUBE CHANNELS & STATS =====
-async function autoSyncYouTubeChannels() {
+async function autoSyncYouTubeChannels(force = false) {
     const apiKey = typeof ENV !== 'undefined' ? ENV.YOUTUBE_API_KEY : null;
     if (!apiKey) return;
 
     try {
         const channels = await getChannels();
         const now = Date.now();
-        const SYNC_INTERVAL = 12 * 60 * 60 * 1000; // 12 hours between syncs
+        const SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes between background checks
         let hasUpdates = false;
         const allVideos = await getVideos(); // Fetch all once for fast lookup
 
         for (const [channelName, data] of Object.entries(channels)) {
-            // Only sync if configured and past the interval
-            if ((data.ytChannelId || data.ytPlaylistId) && (!data.lastSyncTime || (now - data.lastSyncTime > SYNC_INTERVAL))) {
+            // Sync if channel has YouTube ID or playlist configured
+            const shouldSync = force || (!data.lastSyncTime || (now - data.lastSyncTime > SYNC_INTERVAL));
+            if ((data.ytChannelId || data.ytPlaylistId) && shouldSync) {
                 console.log(`Auto-syncing YouTube channel & stats: ${channelName}`);
                 
                 let playlistId = data.ytPlaylistId;
@@ -546,11 +745,11 @@ async function autoSyncYouTubeChannels() {
                     } catch (e) { console.warn("Error syncing channel stats", e); }
                 }
 
-                // 2. Fetch new videos from Playlist
+                // 2. Fetch new videos & shorts from Channel's uploads Playlist
                 if (playlistId) {
                     try {
-                        // Fetch latest 15 videos to save quota
-                        const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=15&playlistId=${playlistId}&key=${apiKey}`;
+                        // Fetch latest 25 items so new videos and shorts are always caught
+                        const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=25&playlistId=${playlistId}&key=${apiKey}`;
                         const res = await fetch(url);
                         const pData = await res.json();
                         
@@ -589,13 +788,14 @@ async function autoSyncYouTubeChannels() {
                                 if (match) {
                                     totalSeconds = (parseInt(match[1] || 0) * 3600) + (parseInt(match[2] || 0) * 60) + parseInt(match[3] || 0);
                                 }
-                                if (totalSeconds < 60) continue; // Skip shorts < 1m
 
-                                // Format duration
+                                // Format duration (including shorts <= 60 seconds)
                                 const h = Math.floor(totalSeconds / 3600);
                                 const m = Math.floor((totalSeconds % 3600) / 60);
                                 const s = totalSeconds % 60;
-                                const durationText = h > 0 ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}` : `${m}:${s.toString().padStart(2, '0')}`;
+                                const durationText = h > 0 
+                                    ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}` 
+                                    : `${m}:${s.toString().padStart(2, '0')}`;
 
                                 const stats = statsMap[videoId] || {};
 
@@ -608,7 +808,7 @@ async function autoSyncYouTubeChannels() {
                                     views: parseInt(stats.viewCount || 0),
                                     time: "Just now",
                                     duration: durationText,
-                                    thumbnail: snippet.thumbnails?.high?.url || snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url || "",
+                                    thumbnail: snippet.thumbnails?.maxres?.url || snippet.thumbnails?.high?.url || snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url || "",
                                     videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
                                     description: snippet.description || "Imported automatically from YouTube",
                                     likes: parseInt(stats.likeCount || 0),
@@ -620,9 +820,9 @@ async function autoSyncYouTubeChannels() {
 
                             if (newVideos.length > 0) {
                                 await saveBatchVideos(newVideos);
-                                console.log(`Auto-synced ${newVideos.length} new videos for ${channelName}!`);
+                                console.log(`Auto-synced ${newVideos.length} new videos & shorts for ${channelName}!`);
                                 hasUpdates = true;
-                                allVideos.push(...newVideos); // Add to local array so stats sync sees them if needed
+                                allVideos.push(...newVideos);
                             }
                         }
                     } catch (e) { console.warn("Error during auto-sync fetch for " + channelName, e); }
@@ -631,7 +831,6 @@ async function autoSyncYouTubeChannels() {
                 // 3. Sync stats for existing videos belonging to this channel
                 const channelVideos = allVideos.filter(v => v.channel === channelName && v.id.startsWith("yt_"));
                 if (channelVideos.length > 0) {
-                    console.log(`Syncing YouTube stats for ${channelVideos.length} existing videos of ${channelName}...`);
                     const chunkedVideos = [];
                     for(let i=0; i < channelVideos.length; i+=50) {
                         chunkedVideos.push(channelVideos.slice(i, i+50));
@@ -682,13 +881,10 @@ async function autoSyncYouTubeChannels() {
 
 // Fetch and append country code to logo — fully non-blocking
 document.addEventListener('DOMContentLoaded', () => {
-    // Start YouTube background sync 5 seconds after page load (only once per session)
-    if (!sessionStorage.getItem('jtube_yt_sync')) {
-        sessionStorage.setItem('jtube_yt_sync', '1');
-        setTimeout(() => {
-            autoSyncYouTubeChannels();
-        }, 5000); 
-    }
+    // Start YouTube background sync 1.5 seconds after page load
+    setTimeout(() => {
+        autoSyncYouTubeChannels();
+    }, 1500);
 
     setTimeout(() => {
         fetch('https://api.country.is')
@@ -759,13 +955,173 @@ function showToast(message, type = 'info', duration = 3500) {
 }
 
 // ===== DURATION BADGE CLASS HELPER =====
+function parseDurationInSeconds(durationStr) {
+    if (!durationStr) return 0;
+    const parts = String(durationStr).trim().split(':').map(Number);
+    if (parts.length === 3) return (parts[0] * 3600) + (parts[1] * 60) + (parts[2] || 0);
+    if (parts.length === 2) return (parts[0] * 60) + (parts[1] || 0);
+    if (parts.length === 1) return parts[0] || 0;
+    return 0;
+}
+
+function isShortVideo(video) {
+    if (!video) return false;
+    if (video.isShort === true) return true;
+    if (video.category && video.category.toLowerCase() === 'shorts') return true;
+    if (video.videoUrl && /youtube\.com\/shorts\//i.test(video.videoUrl)) return true;
+    if (video.title && /#shorts?\b/i.test(video.title)) return true;
+    const secs = parseDurationInSeconds(video.duration);
+    return secs > 0 && secs <= 120; // 2 minutes or less
+}
+
+async function getShortVideos() {
+    const all = await getVideos();
+    return all.filter(v => isShortVideo(v));
+}
+
 function getDurationBadgeClass(durationStr) {
     if (!durationStr) return '';
-    const parts = durationStr.split(':').map(Number);
-    let totalMinutes = 0;
-    if (parts.length === 3) totalMinutes = parts[0] * 60 + parts[1];
-    else if (parts.length === 2) totalMinutes = parts[0];
+    const secs = parseDurationInSeconds(durationStr);
+    if (secs > 0 && secs <= 120) return 'duration-short bg-red-600/90 text-white';
+    const totalMinutes = Math.floor(secs / 60);
     if (totalMinutes < 5) return 'duration-short';
     if (totalMinutes >= 30) return 'duration-long';
     return 'duration-medium';
+}
+
+// ===== COMMENTS & INTERACTIONS HELPERS =====
+async function getComments(videoId) {
+    if (!videoId) return [];
+    try {
+        const video = await getVideoById(videoId);
+        if (video && Array.isArray(video.comments)) {
+            return video.comments;
+        }
+        // Direct Firestore fallback
+        try {
+            const doc = await db.collection("videos").doc(videoId).get();
+            if (doc.exists && Array.isArray(doc.data().comments)) {
+                return doc.data().comments;
+            }
+        } catch (e) {}
+    } catch (err) {
+        console.warn("getComments error:", err);
+    }
+    return [];
+}
+
+async function addComment(videoId, commentData) {
+    if (!videoId || !commentData) return null;
+    try {
+        let video = await getVideoById(videoId);
+        if (!video) {
+            try {
+                const doc = await db.collection("videos").doc(videoId).get();
+                if (doc.exists) {
+                    video = { id: doc.id, ...doc.data() };
+                }
+            } catch (e) {}
+        }
+        if (!video) return null;
+        if (!Array.isArray(video.comments)) {
+            video.comments = [];
+        }
+
+        const user = typeof currentUser !== 'undefined' && currentUser ? currentUser : (typeof getCurrentUser === 'function' ? getCurrentUser() : null);
+        const username = commentData.username || commentData.userName || commentData.author || (user && (user.displayName || user.email.split('@')[0])) || "User";
+        const email = commentData.email || (user ? user.email : "");
+        const text = (commentData.text || "").trim();
+        if (!text) return null;
+
+        const newComment = {
+            id: 'c_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+            username: username,
+            userName: username,
+            author: username,
+            email: email,
+            text: text,
+            timestamp: commentData.timestamp || Date.now(),
+            replies: commentData.replies || []
+        };
+
+        video.comments.unshift(newComment);
+        video.commentsCount = video.comments.length;
+        await saveVideo(video);
+        return newComment;
+    } catch (err) {
+        console.error("addComment error:", err);
+        throw err;
+    }
+}
+
+async function likeVideo(videoId, userEmail) {
+    if (!videoId) return 0;
+    try {
+        let video = await getVideoById(videoId);
+        if (!video) return 0;
+
+        const user = typeof currentUser !== 'undefined' && currentUser ? currentUser : (typeof getCurrentUser === 'function' ? getCurrentUser() : null);
+        const email = userEmail || (user ? user.email : null);
+        if (!Array.isArray(video.likedBy)) {
+            video.likedBy = [];
+        }
+
+        if (email) {
+            const idx = video.likedBy.indexOf(email);
+            if (idx > -1) {
+                video.likedBy.splice(idx, 1);
+            } else {
+                video.likedBy.push(email);
+            }
+            video.likes = video.likedBy.length;
+        } else {
+            video.likes = (video.likes || 0) + 1;
+        }
+
+        await saveVideo(video);
+        return video.likes;
+    } catch (err) {
+        console.error("likeVideo error:", err);
+        return 0;
+    }
+}
+
+async function toggleSubscription(channelName, userEmail) {
+    if (!channelName) return false;
+    try {
+        const channels = await getChannels();
+        const chData = channels[channelName] || { subscribers: 0, subscribedBy: [] };
+        if (!Array.isArray(chData.subscribedBy)) {
+            chData.subscribedBy = [];
+        }
+
+        const user = typeof currentUser !== 'undefined' && currentUser ? currentUser : (typeof getCurrentUser === 'function' ? getCurrentUser() : null);
+        const email = userEmail || (user ? user.email : null);
+        if (!email) return false;
+
+        const idx = chData.subscribedBy.indexOf(email);
+        let isSubbed = false;
+        if (idx > -1) {
+            chData.subscribedBy.splice(idx, 1);
+            isSubbed = false;
+        } else {
+            chData.subscribedBy.push(email);
+            isSubbed = true;
+        }
+        chData.subscribers = chData.subscribedBy.length;
+
+        await saveChannel(channelName, chData);
+        return isSubbed;
+    } catch (err) {
+        console.error("toggleSubscription error:", err);
+        return false;
+    }
+}
+
+// Global Browser Exports
+if (typeof window !== 'undefined') {
+    window.getComments = getComments;
+    window.addComment = addComment;
+    window.likeVideo = likeVideo;
+    window.toggleSubscription = toggleSubscription;
 }

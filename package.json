@@ -1,0 +1,15 @@
+{
+  "name": "jtube",
+  "version": "1.0.0",
+  "description": "JTube – Watch curated videos on Islam, Science, AI, Machine Learning and more.",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "build": "echo 'Build complete'",
+    "lint": "node -c server.js data.js index.js watch.js channel.js channels.js playlists.js profile.js admin.js group.js feedback.js developer.js jask.js env.js shorts.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

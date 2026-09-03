@@ -2,8 +2,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const urlParams = new URLSearchParams(window.location.search);
     const videoId = urlParams.get('id');
 
-    let channels = await getChannels();
-    let video = await getVideoById(videoId);
+    const [channels, video] = await Promise.all([getChannels(), getVideoById(videoId)]);
 
     const loadingScreen = document.getElementById("video-loading-screen");
     if (loadingScreen) {
@@ -116,34 +115,370 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // YouTube Embed
-    function convertToEmbedUrl(url) {
+    // YouTube Embed Helper
+    function getYoutubeId(url) {
+        if (!url) return null;
         const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
         const match = url.match(regExp);
-        if (match && match[2].length === 11) {
-            return 'https://www.youtube.com/embed/' + match[2] + '?autoplay=1&enablejsapi=1';
-        }
-        return null;
+        return (match && match[2].length === 11) ? match[2] : null;
     }
 
-    const embedUrl = convertToEmbedUrl(video.videoUrl);
-    if (embedUrl) {
+    // Shorts Banner Check
+    const shortsNoticeBanner = document.getElementById("shorts-notice-banner");
+    const shortsBannerLink = document.getElementById("shorts-banner-link");
+    if (shortsNoticeBanner && typeof isShortVideo === "function" && isShortVideo(video)) {
+        shortsNoticeBanner.classList.remove("hidden");
+        if (shortsBannerLink) {
+            shortsBannerLink.href = `shorts.html?id=${encodeURIComponent(video.id)}`;
+        }
+    }
+
+    // Player State & Interactive Controls
+    let ytPlayer = null;
+    let isUserScrubbing = false;
+    let playerDuration = 0;
+    let playerCurrentTime = 0;
+    let isVideoPlaying = false;
+    let controlsInterval = null;
+
+    // Control Elements
+    const timeCurrentEl = document.getElementById("player-time-current");
+    const timeDurationEl = document.getElementById("player-time-duration");
+    const seekSlider = document.getElementById("player-seek-slider");
+    const playPauseBtn = document.getElementById("ctrl-play-pause-btn");
+    const playIcon = document.getElementById("ctrl-play-icon");
+    const rewind10Btn = document.getElementById("ctrl-rewind-10");
+    const forward10Btn = document.getElementById("ctrl-forward-10");
+    const volumeBtn = document.getElementById("ctrl-volume-btn");
+    const volumeIcon = document.getElementById("ctrl-volume-icon");
+    const volumeSlider = document.getElementById("ctrl-volume-slider");
+    const volumeLabel = document.getElementById("ctrl-volume-label");
+    const resolutionBtn = document.getElementById("ctrl-resolution-btn");
+    const resolutionLabel = document.getElementById("ctrl-resolution-label");
+    const resolutionMenu = document.getElementById("ctrl-resolution-menu");
+    const speedBtn = document.getElementById("ctrl-speed-btn");
+    const speedLabel = document.getElementById("ctrl-speed-label");
+    const speedMenu = document.getElementById("ctrl-speed-menu");
+    const fullscreenBtn = document.getElementById("ctrl-fullscreen-btn");
+    const videoContainer = document.getElementById("video-container");
+
+    function formatTime(seconds) {
+        if (!seconds || isNaN(seconds) || seconds < 0) return "0:00";
+        seconds = Math.floor(seconds);
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = seconds % 60;
+        const sFormatted = s < 10 ? `0${s}` : `${s}`;
+        if (h > 0) {
+            const mFormatted = m < 10 ? `0${m}` : `${m}`;
+            return `${h}:${mFormatted}:${sFormatted}`;
+        }
+        return `${m}:${sFormatted}`;
+    }
+
+    function updatePlayPauseUI(playing) {
+        isVideoPlaying = playing;
+        if (playIcon) {
+            playIcon.className = playing ? "fas fa-pause text-xs" : "fas fa-play text-xs";
+        }
+    }
+
+    function updateVolumeUI(volumePercent, isMuted) {
+        if (volumeSlider) volumeSlider.value = isMuted ? 0 : volumePercent;
+        if (volumeLabel) volumeLabel.textContent = isMuted ? "0%" : `${Math.round(volumePercent)}%`;
+        if (volumeIcon) {
+            if (isMuted || volumePercent === 0) {
+                volumeIcon.className = "fas fa-volume-mute text-xs text-red-400";
+            } else if (volumePercent < 50) {
+                volumeIcon.className = "fas fa-volume-down text-xs";
+            } else {
+                volumeIcon.className = "fas fa-volume-up text-xs";
+            }
+        }
+    }
+
+    const ytId = getYoutubeId(video.videoUrl);
+    if (ytId) {
         const container = videoPlayer.parentElement;
         container.innerHTML = `
             <div id="iframe-loading" class="absolute inset-0 flex items-center justify-center bg-black z-10">
                 <div class="w-10 h-10 border-4 border-zinc-700 border-t-red-600 rounded-full animate-spin"></div>
             </div>
-            <iframe id="youtube-iframe" class="w-full h-full relative z-20 opacity-0 transition-opacity duration-300" src="${embedUrl}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+            <div id="yt-player-target" class="w-full h-full relative z-20"></div>
         `;
-        const iframe = document.getElementById("youtube-iframe");
-        const iframeLoading = document.getElementById("iframe-loading");
-        iframe.onload = () => {
-            iframe.classList.remove("opacity-0");
-            if (iframeLoading) iframeLoading.classList.add("hidden");
-        };
+
+        function mountYTPlayer() {
+            if (ytPlayer) return;
+            ytPlayer = new YT.Player('yt-player-target', {
+                videoId: ytId,
+                playerVars: {
+                    autoplay: 1,
+                    enablejsapi: 1,
+                    rel: 0,
+                    modestbranding: 1,
+                    playsinline: 1
+                },
+                events: {
+                    onReady: (event) => {
+                        const loading = document.getElementById("iframe-loading");
+                        if (loading) loading.classList.add("hidden");
+                        updatePlayPauseUI(true);
+                        playerDuration = ytPlayer.getDuration() || 0;
+                        if (timeDurationEl) timeDurationEl.textContent = formatTime(playerDuration);
+                        const vol = ytPlayer.getVolume();
+                        const muted = ytPlayer.isMuted();
+                        updateVolumeUI(vol, muted);
+                        startControlsSync();
+                    },
+                    onStateChange: (event) => {
+                        if (event.data === YT.PlayerState.PLAYING) {
+                            updatePlayPauseUI(true);
+                            playerDuration = ytPlayer.getDuration() || playerDuration;
+                            if (timeDurationEl) timeDurationEl.textContent = formatTime(playerDuration);
+                        } else if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.ENDED) {
+                            updatePlayPauseUI(false);
+                        }
+                    }
+                }
+            });
+        }
+
+        if (window.YT && window.YT.Player) {
+            mountYTPlayer();
+        } else {
+            const checkYT = setInterval(() => {
+                if (window.YT && window.YT.Player) {
+                    clearInterval(checkYT);
+                    mountYTPlayer();
+                }
+            }, 200);
+            setTimeout(() => clearInterval(checkYT), 10000);
+        }
     } else {
         videoPlayer.src = video.videoUrl;
+        videoPlayer.addEventListener("loadedmetadata", () => {
+            playerDuration = videoPlayer.duration || 0;
+            if (timeDurationEl) timeDurationEl.textContent = formatTime(playerDuration);
+            updateVolumeUI(videoPlayer.volume * 100, videoPlayer.muted);
+        });
+        videoPlayer.addEventListener("play", () => updatePlayPauseUI(true));
+        videoPlayer.addEventListener("pause", () => updatePlayPauseUI(false));
+        videoPlayer.addEventListener("timeupdate", () => {
+            if (!isUserScrubbing && videoPlayer.duration) {
+                playerCurrentTime = videoPlayer.currentTime;
+                if (timeCurrentEl) timeCurrentEl.textContent = formatTime(playerCurrentTime);
+                if (seekSlider) seekSlider.value = (playerCurrentTime / videoPlayer.duration) * 100;
+            }
+        });
     }
+
+    function startControlsSync() {
+        if (controlsInterval) clearInterval(controlsInterval);
+        controlsInterval = setInterval(() => {
+            if (ytPlayer && ytPlayer.getCurrentTime && !isUserScrubbing) {
+                try {
+                    playerCurrentTime = ytPlayer.getCurrentTime() || 0;
+                    playerDuration = ytPlayer.getDuration() || playerDuration;
+                    if (timeCurrentEl) timeCurrentEl.textContent = formatTime(playerCurrentTime);
+                    if (timeDurationEl && playerDuration > 0) timeDurationEl.textContent = formatTime(playerDuration);
+                    if (seekSlider && playerDuration > 0) {
+                        seekSlider.value = (playerCurrentTime / playerDuration) * 100;
+                    }
+                } catch (e) {}
+            }
+        }, 350);
+    }
+
+    // Play/Pause Action
+    if (playPauseBtn) {
+        playPauseBtn.addEventListener("click", () => {
+            if (ytPlayer && ytPlayer.getPlayerState) {
+                const state = ytPlayer.getPlayerState();
+                if (state === YT.PlayerState.PLAYING) {
+                    ytPlayer.pauseVideo();
+                    updatePlayPauseUI(false);
+                } else {
+                    ytPlayer.playVideo();
+                    updatePlayPauseUI(true);
+                }
+            } else if (videoPlayer) {
+                if (videoPlayer.paused) {
+                    videoPlayer.play();
+                    updatePlayPauseUI(true);
+                } else {
+                    videoPlayer.pause();
+                    updatePlayPauseUI(false);
+                }
+            }
+        });
+    }
+
+    // Rewind -10s
+    if (rewind10Btn) {
+        rewind10Btn.addEventListener("click", () => {
+            if (ytPlayer && ytPlayer.getCurrentTime) {
+                const cur = ytPlayer.getCurrentTime();
+                ytPlayer.seekTo(Math.max(0, cur - 10), true);
+            } else if (videoPlayer) {
+                videoPlayer.currentTime = Math.max(0, videoPlayer.currentTime - 10);
+            }
+            showToast("Rewound 10s", "info");
+        });
+    }
+
+    // Forward +10s
+    if (forward10Btn) {
+        forward10Btn.addEventListener("click", () => {
+            if (ytPlayer && ytPlayer.getCurrentTime) {
+                const cur = ytPlayer.getCurrentTime();
+                const dur = ytPlayer.getDuration() || cur + 10;
+                ytPlayer.seekTo(Math.min(dur, cur + 10), true);
+            } else if (videoPlayer) {
+                videoPlayer.currentTime = Math.min(videoPlayer.duration || 9999, videoPlayer.currentTime + 10);
+            }
+            showToast("Forwarded 10s", "info");
+        });
+    }
+
+    // Seek / Scrubbing Bar (ভিডিও টেনে দেখা)
+    if (seekSlider) {
+        // Dragging in progress
+        seekSlider.addEventListener("input", (e) => {
+            isUserScrubbing = true;
+            const pct = parseFloat(e.target.value);
+            const targetTime = (pct / 100) * (playerDuration || 0);
+            if (timeCurrentEl) timeCurrentEl.textContent = formatTime(targetTime);
+        });
+
+        // Finished dragging / clicked
+        seekSlider.addEventListener("change", (e) => {
+            const pct = parseFloat(e.target.value);
+            const targetTime = (pct / 100) * (playerDuration || 0);
+            if (ytPlayer && ytPlayer.seekTo) {
+                ytPlayer.seekTo(targetTime, true);
+            } else if (videoPlayer) {
+                videoPlayer.currentTime = targetTime;
+            }
+            isUserScrubbing = false;
+        });
+    }
+
+    // Volume Slider & Mute Toggle
+    if (volumeSlider) {
+        volumeSlider.addEventListener("input", (e) => {
+            const val = parseFloat(e.target.value);
+            if (ytPlayer && ytPlayer.setVolume) {
+                if (val === 0) {
+                    ytPlayer.mute();
+                } else {
+                    ytPlayer.unMute();
+                    ytPlayer.setVolume(val);
+                }
+            } else if (videoPlayer) {
+                videoPlayer.volume = val / 100;
+                videoPlayer.muted = (val === 0);
+            }
+            updateVolumeUI(val, val === 0);
+        });
+    }
+
+    if (volumeBtn) {
+        volumeBtn.addEventListener("click", () => {
+            if (ytPlayer && ytPlayer.isMuted) {
+                if (ytPlayer.isMuted()) {
+                    ytPlayer.unMute();
+                    const vol = ytPlayer.getVolume() || 80;
+                    updateVolumeUI(vol, false);
+                    showToast("Audio unmuted", "info");
+                } else {
+                    ytPlayer.mute();
+                    updateVolumeUI(0, true);
+                    showToast("Audio muted", "info");
+                }
+            } else if (videoPlayer) {
+                videoPlayer.muted = !videoPlayer.muted;
+                updateVolumeUI(videoPlayer.volume * 100, videoPlayer.muted);
+                showToast(videoPlayer.muted ? "Audio muted" : "Audio unmuted", "info");
+            }
+        });
+    }
+
+    // Resolution Menu (রেজুলেশন)
+    if (resolutionBtn && resolutionMenu) {
+        resolutionBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            resolutionMenu.classList.toggle("hidden");
+            if (speedMenu) speedMenu.classList.add("hidden");
+        });
+
+        document.querySelectorAll(".res-opt").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const res = btn.getAttribute("data-res");
+                if (resolutionLabel) {
+                    resolutionLabel.textContent = res === "auto" ? "Auto" : `${res} HD`;
+                }
+                // Try setPlaybackQuality on YouTube player
+                if (ytPlayer && ytPlayer.setPlaybackQuality) {
+                    try {
+                        const qualityMap = {
+                            "1080p": "hd1080",
+                            "720p": "hd720",
+                            "480p": "large",
+                            "360p": "medium",
+                            "auto": "default"
+                        };
+                        ytPlayer.setPlaybackQuality(qualityMap[res] || "default");
+                    } catch (e) {}
+                }
+                showToast(`Video resolution set to ${res.toUpperCase()}`, "success");
+                resolutionMenu.classList.add("hidden");
+            });
+        });
+    }
+
+    // Playback Speed Menu
+    if (speedBtn && speedMenu) {
+        speedBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            speedMenu.classList.toggle("hidden");
+            if (resolutionMenu) resolutionMenu.classList.add("hidden");
+        });
+
+        document.querySelectorAll(".speed-opt").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const speed = parseFloat(btn.getAttribute("data-speed"));
+                if (speedLabel) speedLabel.textContent = `${speed}x`;
+                if (ytPlayer && ytPlayer.setPlaybackRate) {
+                    try { ytPlayer.setPlaybackRate(speed); } catch (e) {}
+                } else if (videoPlayer) {
+                    videoPlayer.playbackRate = speed;
+                }
+                showToast(`Playback speed set to ${speed}x`, "info");
+                speedMenu.classList.add("hidden");
+            });
+        });
+    }
+
+    // Fullscreen Action
+    if (fullscreenBtn && videoContainer) {
+        fullscreenBtn.addEventListener("click", () => {
+            if (!document.fullscreenElement) {
+                videoContainer.requestFullscreen().catch(err => {
+                    console.log("Fullscreen request failed:", err);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        });
+    }
+
+    // Close menus on outside click
+    document.addEventListener("click", () => {
+        if (resolutionMenu) resolutionMenu.classList.add("hidden");
+        if (speedMenu) speedMenu.classList.add("hidden");
+    });
 
     videoTitle.textContent = video.title;
     const currentChannelData = channels[video.channel];
