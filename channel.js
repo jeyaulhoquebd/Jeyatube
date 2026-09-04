@@ -134,7 +134,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // ===== SUBSCRIBE LOGIC =====
     function updateSubscribeUI() {
-        const isSubscribed = currentChannelData.subscribedBy && currentUser && currentChannelData.subscribedBy.includes(currentUser.email);
+        const userIdent = typeof getSiteUserIdentifier === 'function' ? getSiteUserIdentifier() : (currentUser ? currentUser.email : null);
+        const isSubscribed = currentChannelData.subscribedBy && userIdent && currentChannelData.subscribedBy.includes(userIdent);
         
         if (isSubscribed) {
             subscribeBtn.textContent = "Subscribed";
@@ -144,7 +145,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             subscribeBtn.className = "mt-4 sm:mt-0 sm:mb-2 bg-white text-black px-6 py-2 rounded-full font-semibold transition text-sm hover:bg-zinc-200 flex-shrink-0";
         }
         
-        const subCount = currentChannelData.subscribedBy ? currentChannelData.subscribedBy.length : (currentChannelData.subscribers || 0);
+        const subCount = typeof getEffectiveSubscribers === 'function' ? getEffectiveSubscribers(currentChannelData) : (currentChannelData.subscribers || 0);
         channelSubs.textContent = `${formatCompactNumber(subCount)} subscribers`;
     }
     updateSubscribeUI();
@@ -154,18 +155,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     subscribeBtn.addEventListener("click", async () => {
-        if (!currentUser) return authModal.classList.remove("hidden");
-        
-        if (!currentChannelData.subscribedBy) currentChannelData.subscribedBy = [];
-        
-        const index = currentChannelData.subscribedBy.indexOf(currentUser.email);
-        if (index > -1) {
-            currentChannelData.subscribedBy.splice(index, 1);
-        } else {
-            currentChannelData.subscribedBy.push(currentUser.email);
+        const updatedChannel = await toggleSubscription(channelNameParam);
+        if (updatedChannel) {
+            currentChannelData = updatedChannel;
+            updateSubscribeUI();
         }
-        await saveChannel(channelNameParam, currentChannelData);
-        updateSubscribeUI();
     });
 
     // ===== VIDEOS TAB =====
@@ -179,23 +173,38 @@ document.addEventListener("DOMContentLoaded", async () => {
         const fragment = document.createDocumentFragment();
         videos.forEach(video => {
             const ytId = getYoutubeId(video.videoUrl);
+            const isShort = isShortVideo(video);
+            const effectiveLikes = typeof getEffectiveLikes === 'function' ? getEffectiveLikes(video) : (video.likes || 0);
+            const subCount = typeof getEffectiveSubscribers === 'function' ? getEffectiveSubscribers(currentChannelData) : (currentChannelData.subscribers || 0);
+
             const card = document.createElement('div');
             card.className = "cursor-pointer group relative video-card-custom bg-zinc-800 rounded-xl pb-3 h-full flex flex-col";
-            card.onclick = () => location.href = `watch.html?id=${video.id}`;
+            card.onclick = () => location.href = isShort ? `shorts.html?id=${video.id}` : `watch.html?id=${video.id}`;
+
+            const durationBadge = isShort
+                ? `<span class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-xs font-bold z-30 bg-red-600 text-white flex items-center gap-1 shadow"><i class="fas fa-bolt text-[9px]"></i> Shorts • ${video.duration}</span>`
+                : `<span class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-xs font-semibold z-30 ${getDurationBadgeClass(video.duration)}">${video.duration}</span>`;
+
             card.innerHTML = `
                 <div class="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-2">
-                    <img src="${video.thumbnail}" alt="${video.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-200" loading="lazy" decoding="async">
+                    <img src="${video.thumbnail}" alt="${video.title.replace(/"/g, '&quot;')}" class="w-full h-full object-cover group-hover:scale-105 transition duration-200" loading="lazy" decoding="async">
                     <div class="video-preview-container absolute inset-0 w-full h-full bg-black z-20 pointer-events-none hidden"></div>
                     <div class="play-icon-overlay absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-200 z-10">
-                        <div class="w-12 h-12 bg-red-600/90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 scale-75 group-hover:scale-100 shadow-lg">
-                            <i class="fas fa-play text-white text-sm ml-0.5"></i>
+                        <div class="w-12 h-12 ${isShort ? 'bg-red-600' : 'bg-red-600/90'} rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 scale-75 group-hover:scale-100 shadow-lg">
+                            <i class="fas ${isShort ? 'fa-bolt text-sm' : 'fa-play text-sm ml-0.5'} text-white"></i>
                         </div>
                     </div>
-                    <span class="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-xs font-semibold z-30">${video.duration}</span>
+                    ${durationBadge}
                 </div>
-                <div class="px-3 flex-1">
+                <div class="px-3 flex-1 flex flex-col justify-between">
                     <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
-                    <p class="text-xs text-zinc-400 mt-1">${formatCompactNumber(video.views)} views • ${timeAgo(video.timestamp)}</p>
+                    <div class="flex items-center flex-wrap gap-x-2 gap-y-0.5 text-xs text-zinc-400 mt-1.5">
+                        <span>${formatCompactNumber(video.views || 0)} views</span>
+                        <span>•</span>
+                        <span class="inline-flex items-center gap-1 text-zinc-300 font-medium"><i class="far fa-thumbs-up text-[10px] text-red-400"></i> ${formatCompactNumber(effectiveLikes)}</span>
+                        <span>•</span>
+                        <span>${timeAgo(video.timestamp)}</span>
+                    </div>
                 </div>
             `;
             

@@ -288,9 +288,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                 ? `<span class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-xs font-bold z-30 bg-red-600 text-white flex items-center gap-1 shadow"><i class="fas fa-bolt text-[9px]"></i> Shorts • ${video.duration}</span>`
                 : `<span class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-xs font-semibold z-30 ${getDurationBadgeClass(video.duration)}">${video.duration}</span>`;
 
+            const channelData = channelsMap[video.channel];
+            const subsCount = typeof getEffectiveSubscribers === 'function' ? getEffectiveSubscribers(channelData) : (channelData ? (channelData.subscribers || 0) : 0);
+            const effectiveLikes = typeof getEffectiveLikes === 'function' ? getEffectiveLikes(video) : (video.likes || 0);
+
             card.innerHTML = `
                 <div class="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-3">
-                    <img src="${video.thumbnail}" alt="${video.title}" loading="lazy" decoding="async" class="w-full h-full object-cover group-hover:scale-105 transition duration-200">
+                    <img src="${video.thumbnail}" alt="${video.title.replace(/"/g, '&quot;')}" loading="lazy" decoding="async" class="w-full h-full object-cover group-hover:scale-105 transition duration-200">
                     <div class="video-preview-container absolute inset-0 w-full h-full bg-black z-20 pointer-events-none hidden"></div>
                     <div class="play-icon-overlay absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-200 z-10">
                         <div class="w-12 h-12 ${isShort ? 'bg-red-600' : 'bg-red-600/90'} rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 scale-75 group-hover:scale-100 shadow-lg">
@@ -304,11 +308,18 @@ document.addEventListener("DOMContentLoaded", async () => {
                     <div class="flex-1 min-w-0">
                         ${qualityBadgeHtml}
                         <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
-                        <div class="flex items-center space-x-1 mt-1 text-zinc-400 hover:text-zinc-200 cursor-pointer w-fit" onclick="event.stopPropagation(); location.href='channel.html?name=${encodeURIComponent(video.channel)}'">
-                            <p class="text-xs truncate">${video.channel}</p>
+                        <div class="flex items-center space-x-1.5 mt-1 text-zinc-400 hover:text-zinc-200 cursor-pointer w-fit" onclick="event.stopPropagation(); location.href='channel.html?name=${encodeURIComponent(video.channel)}'">
+                            <p class="text-xs truncate font-medium text-zinc-300">${video.channel}</p>
                             <img src="img/icons.svg" class="w-3 h-3 flex-shrink-0" alt="Verified" title="Verified">
+                            <span class="text-[11px] text-zinc-400 font-normal">(${formatCompactNumber(subsCount)} subs)</span>
                         </div>
-                        <p class="text-xs text-zinc-400 mt-0.5">${formatCompactNumber(video.views)} views • ${timeAgo(video.timestamp)}</p>
+                        <div class="flex items-center flex-wrap gap-x-2 gap-y-0.5 text-xs text-zinc-400 mt-1">
+                            <span>${formatCompactNumber(video.views || 0)} views</span>
+                            <span>•</span>
+                            <span class="inline-flex items-center gap-1 text-zinc-300 font-medium"><i class="far fa-thumbs-up text-[10px] text-red-400"></i> ${formatCompactNumber(effectiveLikes)}</span>
+                            <span>•</span>
+                            <span>${timeAgo(video.timestamp)}</span>
+                        </div>
                     </div>
                 </div>
             `;
@@ -412,33 +423,50 @@ document.addEventListener("DOMContentLoaded", async () => {
     // ===== POWERFUL SEARCH LOGIC =====
     function buildVideoCard(video, channelsMap) {
         const ytId = getYoutubeId(video.videoUrl);
-        const channelData = channelsMap ? channelsMap[video.channel] : null;
+        const cMap = channelsMap || allChannelsCache || {};
+        const channelData = cMap[video.channel];
+        const subsCount = typeof getEffectiveSubscribers === 'function' ? getEffectiveSubscribers(channelData) : (channelData ? (channelData.subscribers || 0) : 0);
+        const effectiveLikes = typeof getEffectiveLikes === 'function' ? getEffectiveLikes(video) : (video.likes || 0);
+        const isShort = isShortVideo(video);
+
         const avatarHtml = channelData && channelData.avatarUrl
             ? `<img src="${channelData.avatarUrl}" class="flex-shrink-0 w-9 h-9 rounded-full object-cover mt-0.5" alt="${video.channel}" loading="lazy">`
             : `<div class="flex-shrink-0 bg-zinc-700 w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm mt-0.5">${video.channel[0]}</div>`;
         
         const card = document.createElement('div');
         card.className = "cursor-pointer group relative video-card-custom bg-zinc-800 rounded-xl pb-3 h-full flex flex-col";
-        card.onclick = () => location.href = `watch.html?id=${video.id}`;
+        card.onclick = () => location.href = isShort ? `shorts.html?id=${video.id}` : `watch.html?id=${video.id}`;
+        
+        const durationBadge = isShort
+            ? `<span class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-xs font-bold z-30 bg-red-600 text-white flex items-center gap-1 shadow"><i class="fas fa-bolt text-[9px]"></i> Shorts • ${video.duration}</span>`
+            : `<span class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-xs font-semibold z-30 ${getDurationBadgeClass(video.duration)}">${video.duration}</span>`;
+
         card.innerHTML = `
             <div class="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-3">
-                <img src="${video.thumbnail}" alt="${video.title}" loading="lazy" decoding="async" class="w-full h-full object-cover group-hover:scale-105 transition duration-200">
+                <img src="${video.thumbnail}" alt="${video.title.replace(/"/g, '&quot;')}" loading="lazy" decoding="async" class="w-full h-full object-cover group-hover:scale-105 transition duration-200">
                 <div class="play-icon-overlay absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-200 z-10">
-                    <div class="w-12 h-12 bg-red-600/90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 scale-75 group-hover:scale-100 shadow-lg">
-                        <i class="fas fa-play text-white text-sm ml-0.5"></i>
+                    <div class="w-12 h-12 ${isShort ? 'bg-red-600' : 'bg-red-600/90'} rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 scale-75 group-hover:scale-100 shadow-lg">
+                        <i class="fas ${isShort ? 'fa-bolt text-sm' : 'fa-play text-sm ml-0.5'} text-white"></i>
                     </div>
                 </div>
-                <span class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-xs font-semibold z-30 ${getDurationBadgeClass(video.duration)}">${video.duration}</span>
+                ${durationBadge}
             </div>
             <div class="flex space-x-3 px-3 flex-1">
                 ${avatarHtml}
                 <div class="flex-1 min-w-0">
                     <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
-                    <div class="flex items-center space-x-1 mt-1 text-zinc-400 hover:text-zinc-200 cursor-pointer w-fit" onclick="event.stopPropagation(); location.href='channel.html?name=${encodeURIComponent(video.channel)}'">
-                        <p class="text-xs truncate">${video.channel}</p>
+                    <div class="flex items-center space-x-1.5 mt-1 text-zinc-400 hover:text-zinc-200 cursor-pointer w-fit" onclick="event.stopPropagation(); location.href='channel.html?name=${encodeURIComponent(video.channel)}'">
+                        <p class="text-xs truncate font-medium text-zinc-300">${video.channel}</p>
                         <img src="img/icons.svg" class="w-3 h-3 flex-shrink-0" alt="Verified" title="Verified">
+                        <span class="text-[11px] text-zinc-400 font-normal">(${formatCompactNumber(subsCount)} subs)</span>
                     </div>
-                    <p class="text-xs text-zinc-400 mt-0.5">${formatCompactNumber(video.views)} views • ${timeAgo(video.timestamp)}</p>
+                    <div class="flex items-center flex-wrap gap-x-2 gap-y-0.5 text-xs text-zinc-400 mt-1">
+                        <span>${formatCompactNumber(video.views || 0)} views</span>
+                        <span>•</span>
+                        <span class="inline-flex items-center gap-1 text-zinc-300 font-medium"><i class="far fa-thumbs-up text-[10px] text-red-400"></i> ${formatCompactNumber(effectiveLikes)}</span>
+                        <span>•</span>
+                        <span>${timeAgo(video.timestamp)}</span>
+                    </div>
                 </div>
             </div>
         `;
@@ -584,9 +612,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // Pre-load all videos into cache for instant search
+    // Pre-load all videos and channels into cache for instant search
     async function preloadVideosForSearch() {
         allVideosCache = await getVideos();
+        allChannelsCache = await getChannels();
     }
 
     // ===== SHORTS SHELF (YouTube Style) =====
@@ -639,46 +668,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         `).join("");
     }
 
-    // ===== TRENDING SECTION =====
-    async function renderTrendingStrip() {
-        const trendingContainer = document.getElementById('trending-section');
-        if (!trendingContainer) return;
-        const videos = await getVideos();
-        const channelsMap = await getChannels();
-        const trending = [...videos].sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, 8);
-        if (trending.length === 0) {
-            trendingContainer.classList.add('hidden');
-            return;
-        }
-        let html = `<div class="flex items-center space-x-2 mb-3">
-            <i class="fas fa-fire text-red-500"></i>
-            <h2 class="text-base font-bold text-white">Trending Now</h2>
-        </div><div class="trending-strip">`;
-        trending.forEach(v => {
-            const cData = channelsMap[v.channel];
-            const avatarHtml = cData && cData.avatarUrl
-                ? `<img src="${cData.avatarUrl}" class="w-6 h-6 rounded-full object-cover" loading="lazy">`
-                : `<div class="w-6 h-6 bg-zinc-600 rounded-full flex items-center justify-center text-[10px] font-bold">${v.channel[0]}</div>`;
-            html += `
-            <div class="trending-card" onclick="location.href='watch.html?id=${v.id}'">
-                <div class="relative aspect-video">
-                    <img src="${v.thumbnail}" class="w-full h-full object-cover" loading="lazy">
-                    <span class="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold ${getDurationBadgeClass(v.duration)}">${v.duration}</span>
-                </div>
-                <div class="p-3">
-                    <h4 class="text-xs font-semibold line-clamp-2 leading-snug text-zinc-100 mb-1.5">${v.title}</h4>
-                    <div class="flex items-center space-x-1.5">
-                        ${avatarHtml}
-                        <span class="text-[11px] text-zinc-400 truncate">${v.channel}</span>
-                        <span class="text-[10px] text-zinc-500">• ${formatCompactNumber(v.views)} views</span>
-                    </div>
-                </div>
-            </div>`;
-        });
-        html += '</div>';
-        trendingContainer.innerHTML = html;
-    }
-
     // ===== FOOTER =====
     function renderFooter() {
         const main = document.querySelector('main');
@@ -697,7 +686,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     renderCategories();
     renderSidebarChannels();
     renderShortsShelf();
-    renderTrendingStrip();
     preloadVideosForSearch();
     renderFooter();
 });

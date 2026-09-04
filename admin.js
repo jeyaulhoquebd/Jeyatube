@@ -755,17 +755,15 @@ document.addEventListener("DOMContentLoaded", async () => {
                             });
                         }
 
-                        // FILTER: Only keep videos LONGER than 1 minute (60 seconds)
+                        // Include ALL videos and shorts from the YouTube channel/playlist
                         const filtered = data.items.filter(item => {
                             const dStr = durationMap[item.contentDetails.videoId];
                             if (!dStr) return false;
                             const totalSeconds = parseDurationToSeconds(dStr);
                             
-                            // Skip videos shorter than 1 minute
-                            if (totalSeconds < 60) return false;
-                            
                             item._durationText = formatDuration(totalSeconds);
                             item._durationSeconds = totalSeconds;
+                            item._isShort = totalSeconds <= 60;
                             item._views = statsMap[item.contentDetails.videoId]?.views || 0;
                             item._likes = statsMap[item.contentDetails.videoId]?.likes || 0;
                             return true;
@@ -885,7 +883,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                     videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
                     description: snippet.description || "Imported from YouTube",
                     likes: item._likes || 0,
+                    baseLikes: item._likes || 0,
                     liked: false,
+                    likedBy: [],
+                    isShort: item._isShort || (item._durationSeconds <= 60),
                     comments: [],
                     timestamp: new Date(snippet.publishedAt).getTime()
                 });
@@ -893,7 +894,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (newVideos.length > 0) {
                 // Use batch writes for massive speed improvement
-                showProgress(70, `Writing ${newVideos.length} new videos in batches...`);
+                showProgress(70, `Writing ${newVideos.length} new videos & shorts in batches...`);
                 await saveBatchVideos(newVideos);
                 showProgress(90, "Finalizing...");
             }
@@ -910,6 +911,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             // Only update subscribers if they grew (don't overwrite with 0 if API failed)
             if (fetchedSubscribers > (channelData.subscribers || 0)) {
                 channelData.subscribers = fetchedSubscribers;
+                channelData.baseSubscribers = fetchedSubscribers;
             }
             
             channelData.lastSyncTime = Date.now(); // We just synced it manually
@@ -917,7 +919,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             await saveChannel(targetChannel, channelData);
 
             const skipped = videos.length - newVideos.length;
-            let statusMsg = `✓ Successfully imported ${newVideos.length} videos to "${targetChannel}"!`;
+            let statusMsg = `✓ Successfully imported ${newVideos.length} videos & shorts to "${targetChannel}"!`;
             if (skipped > 0) statusMsg += ` (${skipped} duplicates skipped)`;
             
             showProgress(100, "Complete!");
@@ -928,7 +930,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             setTimeout(hideProgress, 3000);
         } else if (videos && videos.length === 0) {
-            ytStatus.textContent = "No videos found longer than 1 minute.";
+            ytStatus.textContent = "No videos or shorts found.";
             ytStatus.className = "text-xs font-bold text-yellow-400";
             hideProgress();
         }

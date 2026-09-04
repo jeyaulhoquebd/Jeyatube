@@ -200,47 +200,53 @@ document.addEventListener("DOMContentLoaded", async () => {
     const ytId = getYoutubeId(video.videoUrl);
     if (ytId) {
         const container = videoPlayer.parentElement;
+        // Instantly mount high-performance eager iframe for instant mobile playback
         container.innerHTML = `
-            <div id="iframe-loading" class="absolute inset-0 flex items-center justify-center bg-black z-10">
-                <div class="w-10 h-10 border-4 border-zinc-700 border-t-red-600 rounded-full animate-spin"></div>
+            <div id="iframe-loading" class="absolute inset-0 flex items-center justify-center bg-black/70 z-10 pointer-events-none transition-opacity duration-200">
+                <div class="w-9 h-9 border-3 border-zinc-700 border-t-red-600 rounded-full animate-spin"></div>
             </div>
-            <div id="yt-player-target" class="w-full h-full relative z-20"></div>
+            <iframe id="yt-player-target" class="w-full h-full border-0 absolute inset-0 z-20"
+                src="https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&enablejsapi=1&playsinline=1&modestbranding=1&rel=0&iv_load_policy=3"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowfullscreen
+                loading="eager"
+                fetchpriority="high">
+            </iframe>
         `;
 
         function mountYTPlayer() {
             if (ytPlayer) return;
-            ytPlayer = new YT.Player('yt-player-target', {
-                videoId: ytId,
-                playerVars: {
-                    autoplay: 1,
-                    enablejsapi: 1,
-                    rel: 0,
-                    modestbranding: 1,
-                    playsinline: 1
-                },
-                events: {
-                    onReady: (event) => {
-                        const loading = document.getElementById("iframe-loading");
-                        if (loading) loading.classList.add("hidden");
-                        updatePlayPauseUI(true);
-                        playerDuration = ytPlayer.getDuration() || 0;
-                        if (timeDurationEl) timeDurationEl.textContent = formatTime(playerDuration);
-                        const vol = ytPlayer.getVolume();
-                        const muted = ytPlayer.isMuted();
-                        updateVolumeUI(vol, muted);
-                        startControlsSync();
-                    },
-                    onStateChange: (event) => {
-                        if (event.data === YT.PlayerState.PLAYING) {
+            try {
+                ytPlayer = new YT.Player('yt-player-target', {
+                    events: {
+                        onReady: (event) => {
+                            const loading = document.getElementById("iframe-loading");
+                            if (loading) {
+                                loading.style.opacity = '0';
+                                setTimeout(() => loading.remove(), 200);
+                            }
                             updatePlayPauseUI(true);
-                            playerDuration = ytPlayer.getDuration() || playerDuration;
+                            playerDuration = ytPlayer.getDuration() || 0;
                             if (timeDurationEl) timeDurationEl.textContent = formatTime(playerDuration);
-                        } else if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.ENDED) {
-                            updatePlayPauseUI(false);
+                            const vol = ytPlayer.getVolume();
+                            const muted = ytPlayer.isMuted();
+                            updateVolumeUI(vol, muted);
+                            startControlsSync();
+                        },
+                        onStateChange: (event) => {
+                            if (event.data === YT.PlayerState.PLAYING) {
+                                updatePlayPauseUI(true);
+                                playerDuration = ytPlayer.getDuration() || playerDuration;
+                                if (timeDurationEl) timeDurationEl.textContent = formatTime(playerDuration);
+                            } else if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.ENDED) {
+                                updatePlayPauseUI(false);
+                            }
                         }
                     }
-                }
-            });
+                });
+            } catch (err) {
+                console.warn("YT player hook error:", err);
+            }
         }
 
         if (window.YT && window.YT.Player) {
@@ -251,7 +257,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     clearInterval(checkYT);
                     mountYTPlayer();
                 }
-            }, 200);
+            }, 100);
             setTimeout(() => clearInterval(checkYT), 10000);
         }
     } else {
@@ -340,8 +346,23 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // Seek / Scrubbing Bar (ভিডিও টেনে দেখা)
+    // Seek / Scrubbing Bar (ভিডিও টেনে দেখা - Drag slider or click anywhere to seek)
     if (seekSlider) {
+        const applySeek = (targetSeconds) => {
+            const safeSeconds = Math.max(0, Math.min(playerDuration || 0, targetSeconds));
+            if (ytPlayer && ytPlayer.seekTo) {
+                ytPlayer.seekTo(safeSeconds, true);
+            } else if (videoPlayer) {
+                videoPlayer.currentTime = safeSeconds;
+            }
+            if (timeCurrentEl) timeCurrentEl.textContent = formatTime(safeSeconds);
+        };
+
+        // Pointer down anywhere on the slider track
+        seekSlider.addEventListener("pointerdown", () => {
+            isUserScrubbing = true;
+        });
+
         // Dragging in progress
         seekSlider.addEventListener("input", (e) => {
             isUserScrubbing = true;
@@ -350,16 +371,24 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (timeCurrentEl) timeCurrentEl.textContent = formatTime(targetTime);
         });
 
-        // Finished dragging / clicked
+        // Finished dragging / clicked anywhere
         seekSlider.addEventListener("change", (e) => {
             const pct = parseFloat(e.target.value);
             const targetTime = (pct / 100) * (playerDuration || 0);
-            if (ytPlayer && ytPlayer.seekTo) {
-                ytPlayer.seekTo(targetTime, true);
-            } else if (videoPlayer) {
-                videoPlayer.currentTime = targetTime;
-            }
+            applySeek(targetTime);
             isUserScrubbing = false;
+        });
+
+        // Direct click anywhere on the bar
+        seekSlider.addEventListener("click", (e) => {
+            const rect = seekSlider.getBoundingClientRect();
+            if (rect.width > 0) {
+                const clickPos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                seekSlider.value = clickPos * 100;
+                const targetTime = clickPos * (playerDuration || 0);
+                applySeek(targetTime);
+                isUserScrubbing = false;
+            }
         });
     }
 
@@ -488,7 +517,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         channelAvatar.textContent = video.channel[0];
     }
     channelName.textContent = video.channel;
-    videoMeta.textContent = `${formatCompactNumber(video.views)} views • ${timeAgo(video.timestamp)}`;
+    const initialLikes = typeof getEffectiveLikes === 'function' ? getEffectiveLikes(video) : (video.likes || 0);
+    videoMeta.innerHTML = `<span class="font-bold text-white">${formatCompactNumber(video.views || 0)} views</span> • <span>Uploaded ${timeAgo(video.timestamp)}</span> • <span class="inline-flex items-center gap-1 text-zinc-300 font-medium"><i class="far fa-thumbs-up text-red-400"></i> ${formatCompactNumber(initialLikes)} likes</span>`;
 
     // Update OG meta tags dynamically
     const ogTitle = document.getElementById("og-title");
@@ -522,7 +552,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     function updateInteractionsUI() {
         const currentChannel = channels[video.channel];
-        const isSubscribed = currentChannel && currentChannel.subscribedBy && currentUser && currentChannel.subscribedBy.includes(currentUser.email);
+        const userIdent = typeof getSiteUserIdentifier === 'function' ? getSiteUserIdentifier() : (currentUser ? currentUser.email : null);
+        const isSubscribed = currentChannel && currentChannel.subscribedBy && userIdent && currentChannel.subscribedBy.includes(userIdent);
         
         if (isSubscribed) {
             subscribeBtn.textContent = "Subscribed";
@@ -533,16 +564,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         
         // Calculate subscribers safely
-        const subCount = currentChannel && currentChannel.subscribedBy ? currentChannel.subscribedBy.length : (currentChannel ? currentChannel.subscribers : 0);
+        const subCount = typeof getEffectiveSubscribers === 'function' ? getEffectiveSubscribers(currentChannel) : (currentChannel ? (currentChannel.subscribers || 0) : 0);
         channelSubs.textContent = `${formatCompactNumber(subCount)} subscribers`;
 
-        const likeCountNum = video.likedBy ? video.likedBy.length : (video.likes || 0);
+        const likeCountNum = typeof getEffectiveLikes === 'function' ? getEffectiveLikes(video) : (video.likes || 0);
         likeCount.textContent = formatCompactNumber(likeCountNum);
         
-        const isLiked = video.likedBy && currentUser && video.likedBy.includes(currentUser.email);
+        videoMeta.innerHTML = `<span class="font-bold text-white">${formatCompactNumber(video.views || 0)} views</span> • <span>Uploaded ${timeAgo(video.timestamp)}</span> • <span class="inline-flex items-center gap-1 text-zinc-300 font-medium"><i class="far fa-thumbs-up text-red-400"></i> ${formatCompactNumber(likeCountNum)} likes</span>`;
+        
+        const isLiked = video.likedBy && userIdent && video.likedBy.includes(userIdent);
         const icon = likeBtn.querySelector("i");
         if (isLiked) {
-            icon.className = "fas fa-thumbs-up text-blue-500";
+            icon.className = "fas fa-thumbs-up text-red-500";
         } else {
             icon.className = "far fa-thumbs-up";
         }
@@ -564,6 +597,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     function renderComments() {
         commentsList.innerHTML = "";
         if (!video.comments) video.comments = [];
+        
+        // Auto-clean any abusive comments that violate community standards
+        if (typeof AIModeration !== 'undefined') {
+            const initialCount = video.comments.length;
+            video.comments = video.comments.filter(c => !AIModeration.isAbusive(c.text));
+            if (video.comments.length !== initialCount) {
+                saveVideo(video);
+            }
+        }
+
         video.comments.forEach((comment, idx) => {
             const avatarLetter = comment.username ? comment.username[0].toUpperCase() : 'U';
             const profileLink = `profile.html?user=${encodeURIComponent(comment.email || comment.username)}`;
@@ -635,6 +678,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const input = btn.closest('.reply-form').querySelector('.reply-input');
                 const text = input.value.trim();
                 if (!text) return;
+
+                // AI Shield Auto-Moderation Check
+                if (typeof AIModeration !== 'undefined' && AIModeration.isAbusive(text)) {
+                    input.value = '';
+                    showToast("⚠️ Reply deleted by AI Shield: Abusive language is strictly prohibited.", "error");
+                    return;
+                }
+
                 if (!video.comments[idx].replies) video.comments[idx].replies = [];
                 video.comments[idx].replies.push({
                     username: currentUser.displayName || 'User',
@@ -684,17 +735,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     likeBtn.addEventListener("click", async () => {
-        if (!currentUser) return openAuthModal();
-        if (!video.likedBy) video.likedBy = [];
-        
-        const index = video.likedBy.indexOf(currentUser.email);
-        if (index > -1) {
-            video.likedBy.splice(index, 1);
-        } else {
-            video.likedBy.push(currentUser.email);
+        const updated = await likeVideo(video.id);
+        if (updated) {
+            Object.assign(video, updated);
+            updateInteractionsUI();
+            showToast(video.liked ? "Video liked!" : "Like removed", "info");
         }
-        await saveVideo(video);
-        updateInteractionsUI();
     });
 
     saveBtn.addEventListener("click", async () => {
@@ -953,23 +999,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     subscribeBtn.addEventListener("click", async (e) => {
         e.stopPropagation();
-        if (!currentUser) return openAuthModal();
-        let currentChannel = channels[video.channel];
-        if (!currentChannel) {
-            currentChannel = { subscribers: 0, subscribedBy: [] };
+        const updatedChannel = await toggleSubscription(video.channel);
+        if (updatedChannel) {
+            channels[video.channel] = updatedChannel;
+            updateInteractionsUI();
         }
-        if (!currentChannel.subscribedBy) currentChannel.subscribedBy = [];
-
-        const index = currentChannel.subscribedBy.indexOf(currentUser.email);
-        if (index > -1) {
-            currentChannel.subscribedBy.splice(index, 1);
-        } else {
-            currentChannel.subscribedBy.push(currentUser.email);
-        }
-        
-        channels[video.channel] = currentChannel;
-        await saveChannel(video.channel, currentChannel);
-        updateInteractionsUI();
     });
 
     commentForm.addEventListener("submit", async (e) => {
@@ -977,6 +1011,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!currentUser) return openAuthModal();
         const text = commentInput.value.trim();
         if (!text) return;
+
+        // AI Shield Auto-Moderation Check (rejects and deletes abusive comments)
+        if (typeof AIModeration !== 'undefined' && AIModeration.isAbusive(text)) {
+            commentInput.value = "";
+            showToast("⚠️ Comment deleted by AI Shield: Abusive or offensive language is strictly prohibited.", "error");
+            return;
+        }
 
         if (!video.comments) video.comments = [];
         video.comments.unshift({
@@ -991,7 +1032,103 @@ document.addEventListener("DOMContentLoaded", async () => {
         await saveVideo(video);
         commentCount.textContent = video.comments.length;
         renderComments();
+        showToast("Comment posted!", "success");
     });
+
+    // ===== WHAT KIND OF VIDEO IS THIS? (AI BRAIN DIAGNOSIS) =====
+    const btnVideoTypeAi = document.getElementById("btn-video-type-ai");
+    const videoTypeModal = document.getElementById("video-type-modal");
+    const closeVideoTypeModal = document.getElementById("close-video-type-modal");
+    const videoTypeContent = document.getElementById("video-type-content");
+    const askJaskMoreBtn = document.getElementById("ask-jask-more-btn");
+
+    if (btnVideoTypeAi && videoTypeModal) {
+        btnVideoTypeAi.addEventListener("click", async () => {
+            videoTypeModal.classList.remove("hidden");
+            videoTypeContent.innerHTML = `
+                <div class="flex flex-col items-center justify-center py-10 text-center">
+                    <div class="w-10 h-10 border-4 border-zinc-700 border-t-indigo-500 rounded-full animate-spin mb-3"></div>
+                    <p class="text-sm font-semibold text-zinc-200">AI Brain analyzing video content & genre...</p>
+                    <p class="text-xs text-zinc-500 mt-1">Cross-referencing 5-minute continuous knowledge base</p>
+                </div>
+            `;
+
+            try {
+                const diagnosis = await (typeof AIVideoBrain !== 'undefined'
+                    ? AIVideoBrain.findVideoType(video)
+                    : { explanation: "Analyzing...", brainData: {} });
+
+                const data = diagnosis.brainData || {};
+                const tagsList = (data.tags && data.tags.length > 0) ? data.tags : ['Knowledge', 'Tutorial', 'Discussion'];
+
+                videoTypeContent.innerHTML = `
+                    <div class="bg-gradient-to-r from-indigo-950/60 via-purple-950/40 to-zinc-900 border border-indigo-500/30 p-4 rounded-xl space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] uppercase tracking-wider font-bold text-indigo-300 bg-indigo-500/20 px-2.5 py-0.5 rounded-full border border-indigo-500/30">${data.genre || 'Categorized Video'}</span>
+                            <span class="text-[10px] text-zinc-400 font-mono"><i class="fas fa-bolt text-amber-400 mr-1"></i>${data.isShort ? 'Short Reel' : 'Standard Video'}</span>
+                        </div>
+                        <h4 class="text-base font-bold text-white leading-snug">${video.title}</h4>
+                        <p class="text-xs text-zinc-300">Channel: <strong class="text-white">${video.channel}</strong> • Category: <strong class="text-white">${video.category || data.category || 'General'}</strong></p>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div class="bg-zinc-800/70 border border-zinc-700/60 p-3.5 rounded-xl">
+                            <div class="flex items-center gap-2 mb-1.5 text-indigo-400 text-xs font-bold uppercase tracking-wider">
+                                <i class="fas fa-users"></i>
+                                <span>Target Audience</span>
+                            </div>
+                            <p class="text-xs text-zinc-300 leading-relaxed">${data.targetAudience || 'General audience interested in learning and educational discovery.'}</p>
+                        </div>
+
+                        <div class="bg-zinc-800/70 border border-zinc-700/60 p-3.5 rounded-xl">
+                            <div class="flex items-center gap-2 mb-1.5 text-purple-400 text-xs font-bold uppercase tracking-wider">
+                                <i class="fas fa-layer-group"></i>
+                                <span>Presentation Depth</span>
+                            </div>
+                            <p class="text-xs text-zinc-300 leading-relaxed">${data.depth || 'Accessible, conceptual analysis and engaging instruction.'}</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-zinc-800/70 border border-zinc-700/60 p-3.5 rounded-xl">
+                        <div class="flex items-center gap-2 mb-2 text-emerald-400 text-xs font-bold uppercase tracking-wider">
+                            <i class="fas fa-tags"></i>
+                            <span>Key Themes & Topics</span>
+                        </div>
+                        <div class="flex flex-wrap gap-1.5">
+                            ${tagsList.map(tag => `<span class="text-[11px] bg-zinc-700/80 text-zinc-200 px-2 py-0.5 rounded-md border border-zinc-600/50">${tag}</span>`).join('')}
+                        </div>
+                    </div>
+
+                    <div class="p-3.5 rounded-xl bg-zinc-800/50 border border-zinc-700/50 text-xs text-zinc-300 leading-relaxed">
+                        <h5 class="text-xs font-bold text-white mb-1.5 flex items-center gap-1.5">
+                            <i class="fas fa-lightbulb text-amber-400"></i> AI Summary & Value
+                        </h5>
+                        <div class="text-xs text-zinc-300 whitespace-pre-line leading-relaxed">${diagnosis.explanation ? diagnosis.explanation.replace(/###.*?\n/g, '') : data.summary}</div>
+                    </div>
+                `;
+            } catch (err) {
+                console.error("AI diagnosis error:", err);
+                videoTypeContent.innerHTML = `<p class="text-xs text-red-400">Failed to analyze video. Please try again.</p>`;
+            }
+        });
+
+        if (closeVideoTypeModal) {
+            closeVideoTypeModal.addEventListener("click", () => videoTypeModal.classList.add("hidden"));
+        }
+        videoTypeModal.addEventListener("click", (e) => {
+            if (e.target === videoTypeModal) videoTypeModal.classList.add("hidden");
+        });
+
+        if (askJaskMoreBtn) {
+            askJaskMoreBtn.addEventListener("click", () => {
+                videoTypeModal.classList.add("hidden");
+                if (jaskPanel) {
+                    jaskPanel.classList.remove("hidden");
+                    sendJAskMessage("What kind of video is this?");
+                }
+            });
+        }
+    }
 
     document.getElementById("cancel-comment").addEventListener("click", () => {
         commentInput.value = "";

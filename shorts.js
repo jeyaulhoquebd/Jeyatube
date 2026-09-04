@@ -133,15 +133,24 @@ document.addEventListener("DOMContentLoaded", async () => {
         updateSubscribeButton(video.channel);
 
         // Likes and Comments
+        const effectiveLikes = typeof getEffectiveLikes === 'function' ? getEffectiveLikes(video) : (video.likes || 0);
         if (likeCountLabel) {
-            likeCountLabel.textContent = formatCompactNumber(video.likes || 0);
+            likeCountLabel.textContent = formatCompactNumber(effectiveLikes);
         }
         if (commentCountLabel) {
             commentCountLabel.textContent = formatCompactNumber(video.commentsCount || 0);
         }
 
-        // Reset like/dislike buttons
-        if (likeBtn) likeBtn.classList.remove("!bg-red-600", "!border-red-500");
+        // Reset or set like/dislike buttons
+        const userIdent = typeof getSiteUserIdentifier === 'function' ? getSiteUserIdentifier() : (currentUser ? currentUser.email : null);
+        const isLikedAlready = video.likedBy && userIdent && video.likedBy.includes(userIdent);
+        if (likeBtn) {
+            if (isLikedAlready) {
+                likeBtn.classList.add("!bg-red-600", "!border-red-500");
+            } else {
+                likeBtn.classList.remove("!bg-red-600", "!border-red-500");
+            }
+        }
         if (dislikeBtn) dislikeBtn.classList.remove("!bg-red-600", "!border-red-500");
 
         // Load comments count from Firestore
@@ -403,22 +412,27 @@ document.addEventListener("DOMContentLoaded", async () => {
             const video = shortsList[currentIndex];
             if (!video) return;
 
-            const isLiked = likeBtn.classList.contains("!bg-red-600");
-            if (!isLiked) {
-                likeBtn.classList.add("!bg-red-600", "!border-red-500");
-                dislikeBtn.classList.remove("!bg-red-600", "!border-red-500");
-                video.likes = (video.likes || 0) + 1;
-                likeCountLabel.textContent = formatCompactNumber(video.likes);
-                showToast("Liked Short!", "success");
-                try {
-                    await likeVideo(video.id);
-                } catch (e) {
-                    console.log("Like error:", e);
+            try {
+                const updated = await likeVideo(video.id);
+                if (updated) {
+                    Object.assign(video, updated);
+                    const userIdent = typeof getSiteUserIdentifier === 'function' ? getSiteUserIdentifier() : (currentUser ? currentUser.email : null);
+                    const isLiked = video.likedBy && userIdent && video.likedBy.includes(userIdent);
+                    if (isLiked) {
+                        likeBtn.classList.add("!bg-red-600", "!border-red-500");
+                        if (dislikeBtn) dislikeBtn.classList.remove("!bg-red-600", "!border-red-500");
+                        showToast("Liked Short!", "success");
+                    } else {
+                        likeBtn.classList.remove("!bg-red-600", "!border-red-500");
+                        showToast("Like removed", "info");
+                    }
+                    const effectiveLikes = typeof getEffectiveLikes === 'function' ? getEffectiveLikes(video) : (video.likes || 0);
+                    if (likeCountLabel) {
+                        likeCountLabel.textContent = formatCompactNumber(effectiveLikes);
+                    }
                 }
-            } else {
-                likeBtn.classList.remove("!bg-red-600", "!border-red-500");
-                video.likes = Math.max(0, (video.likes || 1) - 1);
-                likeCountLabel.textContent = formatCompactNumber(video.likes);
+            } catch (e) {
+                console.log("Like error:", e);
             }
         });
     }
@@ -470,7 +484,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!subscribeBtn) return;
         const channels = await getChannels();
         const chData = channels[chName] || {};
-        const isSubscribed = currentUser && chData.subscribedBy && chData.subscribedBy.includes(currentUser.email);
+        const userIdent = typeof getSiteUserIdentifier === 'function' ? getSiteUserIdentifier() : (currentUser ? currentUser.email : null);
+        const isSubscribed = userIdent && chData.subscribedBy && chData.subscribedBy.includes(userIdent);
 
         if (isSubscribed) {
             subscribeBtn.textContent = "Subscribed";
@@ -485,14 +500,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         subscribeBtn.addEventListener("click", async () => {
             const video = shortsList[currentIndex];
             if (!video) return;
-            if (!currentUser) {
-                showToast("Please sign in from the home page to subscribe!", "error");
-                return;
-            }
             try {
-                const subbed = await toggleSubscription(video.channel);
+                const updatedChannel = await toggleSubscription(video.channel);
                 updateSubscribeButton(video.channel);
-                showToast(subbed ? `Subscribed to ${video.channel}!` : `Unsubscribed from ${video.channel}`, "success");
+                const userIdent = typeof getSiteUserIdentifier === 'function' ? getSiteUserIdentifier() : (currentUser ? currentUser.email : null);
+                const isSub = updatedChannel && updatedChannel.subscribedBy && updatedChannel.subscribedBy.includes(userIdent);
+                showToast(isSub ? `Subscribed to ${video.channel}!` : `Unsubscribed from ${video.channel}`, "success");
             } catch (err) {
                 showToast("Subscription update failed", "error");
             }

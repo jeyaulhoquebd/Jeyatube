@@ -318,31 +318,33 @@ header {
 .duration-medium { background: rgba(59,130,246,0.75) !important; }
 .duration-long { background: rgba(139,92,246,0.75) !important; }
 
-/* ===== TRENDING STRIP ===== */
-.trending-strip {
-    display: flex;
-    gap: 16px;
-    overflow-x: auto;
-    padding-bottom: 8px;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-}
-.trending-strip::-webkit-scrollbar { display: none; }
-.trending-card {
-    min-width: 280px;
-    max-width: 320px;
-    flex-shrink: 0;
-    border-radius: 1rem;
-    overflow: hidden;
-    background: rgba(39,39,42,0.4);
-    border: 1px solid rgba(255,255,255,0.05);
-    cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-.trending-card:hover {
-    transform: translateY(-4px);
-    border-color: rgba(239, 68, 68, 0.3);
-    box-shadow: 0 12px 24px rgba(239, 68, 68, 0.2);
+/* ===== MOBILE VIDEO CARD OPTIMIZATIONS (APPEAR LARGER ON MOBILE) ===== */
+@media (max-width: 640px) {
+    #video-grid, #search-results-grid {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 1.5rem !important;
+        width: 100% !important;
+    }
+    .video-card-custom {
+        width: 100% !important;
+        border-radius: 14px !important;
+        background: rgba(24, 24, 27, 0.75) !important;
+        padding-bottom: 12px !important;
+        margin-bottom: 0 !important;
+    }
+    .video-card-custom .aspect-video {
+        border-radius: 12px !important;
+        margin-bottom: 10px !important;
+        width: 100% !important;
+    }
+    .video-card-custom:hover {
+        transform: none !important;
+    }
+    .video-card-custom h3 {
+        font-size: 0.95rem !important;
+        line-height: 1.35 !important;
+    }
 }
 
 /* ===== FOOTER ===== */

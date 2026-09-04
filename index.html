@@ -82,7 +82,7 @@
             </nav>
         </aside>
 
-        <main class="flex-1 p-4 md:p-6 overflow-x-hidden">
+        <main class="flex-1 px-2.5 py-3 sm:p-4 md:p-6 overflow-x-hidden">
             <!-- Mobile Search Bar -->
             <div id="mobile-search-bar" class="hidden sm:hidden mb-4">
                 <div class="flex bg-zinc-800/80 border border-zinc-700 rounded-full overflow-hidden focus-within:border-red-500/60 transition-all duration-300">
@@ -97,7 +97,7 @@
                     <h2 class="text-lg font-bold">Search results for: <span id="search-query-label" class="text-red-400"></span></h2>
                     <button id="clear-search-btn" class="text-xs text-zinc-400 hover:text-white flex items-center gap-2 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-full transition"><i class="fas fa-times"></i> Clear</button>
                 </div>
-                <div id="search-results-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-8"></div>
+                <div id="search-results-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-6 sm:gap-x-4 sm:gap-y-8"></div>
             </div>
             <div id="category-bar" class="flex items-center space-x-3 overflow-x-auto pb-4 mb-4" style="-ms-overflow-style:none;scrollbar-width:none;">
                 <!-- Categories will be injected here dynamically -->
@@ -119,9 +119,7 @@
                 <div id="shorts-carousel" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4"></div>
             </div>
 
-            <!-- Trending Section -->
-            <div id="trending-section" class="mb-6"></div>
-            <div id="video-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-8"></div>
+            <div id="video-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-6 sm:gap-x-4 sm:gap-y-8"></div>
         </main>
     </div>
 

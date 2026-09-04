@@ -66,8 +66,9 @@ const JAsk = (() => {
         const title = video.title || '';
         const channel = video.channel || '';
         const questions = [
+            "What kind of video is this?",
             "Summarize this video",
-            "Recommend related content",
+            "Recommend related content"
         ];
 
         // Add context-specific questions based on title keywords
@@ -113,6 +114,19 @@ const JAsk = (() => {
         
         const videoKB = buildRelevantVideoKnowledgeBase(relevantVideos);
 
+        // Extract 5-minute AI trained video brain insights
+        let brainContext = "";
+        if (typeof AIVideoBrain !== 'undefined' && currentVideo) {
+            const brainData = (AIVideoBrain.catalog && AIVideoBrain.catalog[currentVideo.id]) || AIVideoBrain.classify(currentVideo);
+            brainContext = `
+5-MINUTE TRAINED AI BRAIN CLASSIFICATION:
+- Genre & Video Type: ${brainData.genre} (${brainData.isShort ? 'Short Reel' : 'Standard Video'})
+- Platform Category: ${brainData.category}
+- Target Audience: ${brainData.targetAudience}
+- Presentation Depth: ${brainData.depth}
+- Core Themes: ${brainData.tags.join(', ') || 'General'}`;
+        }
+
         // Build system prompt with relevant video knowledge
         const systemPrompt = `You are JAsk, the AI assistant for JTube video platform. Be friendly, concise, use emojis.
 
@@ -121,16 +135,18 @@ Title: "${currentVideo.title}"
 Channel: "${currentVideo.channel}"
 Category: "${currentVideo.category || 'General'}"
 Description: "${(currentVideo.description || '').substring(0, 300)}"
+${brainContext}
 
 RELEVANT JTUBE VIDEOS (format: ID|Title|Channel|Category|Views|Description):
 ${videoKB}
 
 RULES:
-1. Answer about current video using its title/description.
-2. When user asks for a video, find matching ones from the RELEVANT JTUBE VIDEOS list and link them as: [Title](watch.html?id=ID)
-3. Always use that exact link format for JTube videos.
-4. Never invent video IDs that don't exist above.
-5. You can answer general questions but relate to JTube content when possible.`;
+1. When asked "what kind of video is this" or to find out what kind of video it is, provide an authoritative breakdown covering: Genre & Format, Main Topics, Target Audience, and Key Value.
+2. Answer about current video using its title/description and AI Brain Classification.
+3. When user asks for a video, find matching ones from the RELEVANT JTUBE VIDEOS list and link them as: [Title](watch.html?id=ID)
+4. Always use that exact link format for JTube videos.
+5. Never invent video IDs that don't exist above.
+6. You can answer general questions but relate to JTube content when possible.`;
 
         // Add user message without duplicating the relevant videos hint
         let enrichedMessage = userMessage;
