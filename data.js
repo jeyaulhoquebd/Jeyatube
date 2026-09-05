@@ -180,7 +180,16 @@ function saveWatchStats(stats) {
 }
 
 let _statsSyncTimeout = null;
-function recordWatchTime(video, secondsIncrement = 1) {
+function recordWatchTime(videoOrSec, secondsIncrement = 1) {
+    let video = null;
+    let sec = 1;
+    if (typeof videoOrSec === 'number') {
+        sec = videoOrSec || 1;
+        video = { id: arguments[1], title: arguments[2], channel: arguments[3] };
+    } else {
+        video = videoOrSec;
+        sec = secondsIncrement || 1;
+    }
     if (!video || !video.id) return;
     const stats = getWatchStats();
     
@@ -190,8 +199,8 @@ function recordWatchTime(video, secondsIncrement = 1) {
         stats.todaySeconds = 0;
     }
 
-    stats.totalSeconds = (stats.totalSeconds || 0) + secondsIncrement;
-    stats.todaySeconds = (stats.todaySeconds || 0) + secondsIncrement;
+    stats.totalSeconds = (stats.totalSeconds || 0) + sec;
+    stats.todaySeconds = (stats.todaySeconds || 0) + sec;
 
     if (!stats.videos) stats.videos = {};
     if (!stats.videos[video.id]) {
@@ -269,6 +278,193 @@ function parseDurationToSeconds(dStr) {
         return parts[0] * 3600 + parts[1] * 60 + parts[2];
     }
     return 0;
+}
+
+// ===== CONTINUE WATCHING (Firestore & Local Hybrid Persistence) =====
+const CONTINUE_WATCHING_STORAGE_KEY = 'jtube_continue_watching';
+
+function getLocalContinueWatching() {
+    try {
+        if (typeof localStorage !== 'undefined') {
+            const raw = localStorage.getItem(CONTINUE_WATCHING_STORAGE_KEY);
+            if (raw) {
+                const list = JSON.parse(raw);
+                if (Array.isArray(list)) return list;
+            }
+        }
+    } catch (e) {}
+    return [];
+}
+
+function saveLocalContinueWatching(list) {
+    try {
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem(CONTINUE_WATCHING_STORAGE_KEY, JSON.stringify(list.slice(0, 25)));
+        }
+    } catch (e) {}
+}
+
+async function getContinueWatching() {
+    let localList = getLocalContinueWatching();
+    
+    // If authenticated, sync with Firebase Firestore
+    if (currentUser && currentUser.uid) {
+        try {
+            const snapshot = await db.collection("users")
+                .doc(currentUser.uid)
+                .collection("continueWatching")
+                .orderBy("timestamp", "desc")
+                .limit(20)
+                .get();
+
+            if (!snapshot.empty) {
+                const firestoreList = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    if (data && data.videoId) firestoreList.push(data);
+                });
+
+                // Merge with local list (prefer newest timestamp)
+                const mergedMap = new Map();
+                localList.forEach(item => { if (item.videoId) mergedMap.set(item.videoId, item); });
+                firestoreList.forEach(item => {
+                    const existing = mergedMap.get(item.videoId);
+                    if (!existing || (item.timestamp || 0) >= (existing.timestamp || 0)) {
+                        mergedMap.set(item.videoId, item);
+                    }
+                });
+
+                localList = Array.from(mergedMap.values())
+                    .filter(item => {
+                        // Exclude finished videos
+                        const percent = item.progressPercent || 0;
+                        const remaining = (item.duration || 0) - (item.currentTime || 0);
+                        return percent >= 2 && percent < 95 && remaining > 5;
+                    })
+                    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+                saveLocalContinueWatching(localList);
+            }
+        } catch (err) {
+            console.warn("Error getting continue watching from Firestore:", err);
+        }
+    }
+
+    // Filter out invalid or finished videos
+    return localList.filter(item => {
+        const percent = item.progressPercent || 0;
+        const remaining = (item.duration || 0) - (item.currentTime || 0);
+        return percent >= 1 && percent < 95 && (item.duration <= 0 || remaining > 5);
+    });
+}
+
+let _saveProgressDebounce = null;
+async function saveWatchProgress(video, currentTime, duration) {
+    if (!video || !video.id) return;
+    currentTime = Math.floor(currentTime || 0);
+    duration = Math.floor(duration || 0);
+
+    // Don't record under 4 seconds
+    if (currentTime < 4) return;
+
+    const progressPercent = duration > 0 ? Math.min(100, Math.round((currentTime / duration) * 100)) : 0;
+
+    // If video is virtually finished (>= 93%), remove it from Continue Watching
+    if (duration > 0 && progressPercent >= 93) {
+        await removeContinueWatching(video.id);
+        return;
+    }
+
+    const entry = {
+        id: video.id,
+        videoId: video.id,
+        title: video.title || "Video",
+        channel: video.channel || "",
+        thumbnail: video.thumbnail || "",
+        videoUrl: video.videoUrl || "",
+        currentTime: currentTime,
+        duration: duration,
+        durationStr: video.duration || formatTime(duration),
+        progressPercent: progressPercent,
+        timestamp: Date.now()
+    };
+
+    // 1. Update local cache immediately
+    let list = getLocalContinueWatching();
+    list = list.filter(item => item.videoId !== video.id);
+    list.unshift(entry);
+    saveLocalContinueWatching(list);
+
+    if (typeof document !== 'undefined') {
+        document.dispatchEvent(new CustomEvent('jtube:continueWatchingUpdated', { detail: list }));
+    }
+
+    // 2. Debounced save to Firebase Firestore
+    if (currentUser && currentUser.uid) {
+        if (_saveProgressDebounce) clearTimeout(_saveProgressDebounce);
+        _saveProgressDebounce = setTimeout(async () => {
+            try {
+                await db.collection("users")
+                    .doc(currentUser.uid)
+                    .collection("continueWatching")
+                    .doc(video.id)
+                    .set(entry, { merge: true });
+            } catch (e) {
+                console.warn("Failed to persist watch progress to Firestore:", e);
+            }
+        }, 2000);
+    }
+}
+
+async function removeContinueWatching(videoId) {
+    if (!videoId) return;
+
+    // 1. Remove from local storage
+    let list = getLocalContinueWatching();
+    list = list.filter(item => item.videoId !== videoId && item.id !== videoId);
+    saveLocalContinueWatching(list);
+
+    if (typeof document !== 'undefined') {
+        document.dispatchEvent(new CustomEvent('jtube:continueWatchingUpdated', { detail: list }));
+    }
+
+    // 2. Remove from Firebase Firestore
+    if (currentUser && currentUser.uid) {
+        try {
+            await db.collection("users")
+                .doc(currentUser.uid)
+                .collection("continueWatching")
+                .doc(videoId)
+                .delete();
+        } catch (e) {
+            console.warn("Failed to delete continue watching item in Firestore:", e);
+        }
+    }
+}
+
+async function clearAllContinueWatching() {
+    saveLocalContinueWatching([]);
+    if (typeof document !== 'undefined') {
+        document.dispatchEvent(new CustomEvent('jtube:continueWatchingUpdated', { detail: [] }));
+    }
+
+    if (currentUser && currentUser.uid) {
+        try {
+            const snapshot = await db.collection("users")
+                .doc(currentUser.uid)
+                .collection("continueWatching")
+                .limit(50)
+                .get();
+
+            const batch = db.batch();
+            snapshot.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+            await batch.commit();
+        } catch (e) {
+            console.warn("Failed to clear continue watching in Firestore:", e);
+        }
+    }
 }
 
 // In-memory cache & persistent localStorage helper for instant loading
@@ -388,21 +584,78 @@ async function logoutUser() {
     return await auth.signOut();
 }
 
-// ===== VIDEO FUNCTIONS (Instant Cache-First + Background Firestore Sync) =====
+// ===== VIDEO FUNCTIONS (Instant Cache-First + Robust Firestore Sync) =====
+
+let _isSyncingAllVideos = false;
+async function syncAllWebsiteVideosToFirestore() {
+    if (_isSyncingAllVideos) return;
+    _isSyncingAllVideos = true;
+    try {
+        const catalog = Array.isArray(seedData.videos) && seedData.videos.length > 0 
+            ? seedData.videos 
+            : initialVideos;
+        
+        // Check existing videos in Firestore
+        const existingSnapshot = await db.collection("videos").get().catch(() => null);
+        const existingIds = new Set();
+        if (existingSnapshot && !existingSnapshot.empty) {
+            existingSnapshot.forEach(doc => existingIds.add(doc.id));
+        }
+
+        const missingVideos = catalog.filter(v => v && v.id && !existingIds.has(v.id));
+        if (missingVideos.length > 0) {
+            console.log(`[Firestore Link Sync] Uploading ${missingVideos.length} videos as links into Firestore...`);
+            const prepared = missingVideos.map(v => {
+                const cleanYt = v.id.startsWith('yt_') ? v.id.replace('yt_', '') : v.id;
+                return {
+                    id: v.id,
+                    title: v.title || 'Untitled',
+                    videoUrl: v.videoUrl || `https://www.youtube.com/watch?v=${cleanYt}`,
+                    thumbnail: v.thumbnail || `https://i.ytimg.com/vi/${cleanYt}/hqdefault.jpg`,
+                    channel: v.channel || 'JTube',
+                    category: v.category || 'General',
+                    playlist: v.playlist || '',
+                    views: typeof v.views === 'number' ? v.views : 0,
+                    duration: v.duration || '0:00',
+                    time: v.time || 'Recently added',
+                    description: v.description || '',
+                    likes: typeof v.likes === 'number' ? v.likes : 0,
+                    baseLikes: typeof v.baseLikes === 'number' ? v.baseLikes : (v.likes || 0),
+                    liked: Boolean(v.liked),
+                    likedBy: Array.isArray(v.likedBy) ? v.likedBy : [],
+                    isShort: isShortVideo(v),
+                    comments: Array.isArray(v.comments) ? v.comments : [],
+                    timestamp: v.timestamp || Date.now()
+                };
+            });
+
+            await saveBatchVideos(prepared);
+            console.log(`[Firestore Link Sync] Successfully saved ${prepared.length} videos to Firestore.`);
+        }
+    } catch (e) {
+        console.warn("[Firestore Link Sync] Error checking/saving videos to Firestore:", e);
+    } finally {
+        _isSyncingAllVideos = false;
+    }
+}
 
 let _isFetchingVideos = false;
 async function fetchVideosFromFirestore() {
     if (_isFetchingVideos) return;
     _isFetchingVideos = true;
     try {
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000));
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000));
         const fetchPromise = db.collection("videos").orderBy("timestamp", "desc").get();
         const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
         
         let freshVideos = [];
-        snapshot.forEach(doc => {
-            freshVideos.push(doc.data());
-        });
+        if (snapshot && !snapshot.empty) {
+            snapshot.forEach(doc => {
+                const d = doc.data();
+                if (d && d.id) freshVideos.push(d);
+            });
+        }
+
         if (freshVideos.length > 0) {
             _cache.videos = freshVideos;
             _cache.videosTimestamp = Date.now();
@@ -410,6 +663,9 @@ async function fetchVideosFromFirestore() {
             if (typeof document !== 'undefined') {
                 document.dispatchEvent(new CustomEvent('jtube:videosUpdated', { detail: freshVideos }));
             }
+        } else {
+            // Firestore was empty or missing videos: populate all website videos into Firestore
+            await syncAllWebsiteVideosToFirestore();
         }
     } catch (err) {
         console.warn("Background Firestore videos fetch:", err.message || err);
@@ -421,7 +677,7 @@ async function fetchVideosFromFirestore() {
 async function getVideos() {
     // 1. In-memory cache: return INSTANTLY (0ms)
     if (_cache.videos && _cache.videos.length > 0) {
-        fetchVideosFromFirestore(); // background sync
+        fetchVideosFromFirestore(); // background sync with Firestore
         return _cache.videos;
     }
     
@@ -434,15 +690,17 @@ async function getVideos() {
         return stored;
     }
 
-    // 3. First-run fallback: seed data
-    if (initialVideos && initialVideos.length > 0) {
-        _cache.videos = initialVideos;
+    // 3. Fallback to catalog and sync to Firestore
+    const fallback = (seedData.videos && seedData.videos.length > 0) ? seedData.videos : initialVideos;
+    if (fallback && fallback.length > 0) {
+        _cache.videos = fallback;
         _cache.videosTimestamp = Date.now();
-        fetchVideosFromFirestore();
-        return initialVideos;
+        saveToStorage('videos', fallback);
+        syncAllWebsiteVideosToFirestore();
+        return fallback;
     }
 
-    // 4. Await fresh fetch if no cache available
+    // 4. Fresh fetch from Firestore
     await fetchVideosFromFirestore();
     return (_cache.videos && _cache.videos.length > 0) ? _cache.videos : initialVideos;
 }
@@ -466,6 +724,56 @@ async function getVideoById(videoId) {
     } catch (err) {
         console.warn("Firestore video lookup failed", err);
     }
+
+    // 3. Fallback: If it's a YouTube ID, fetch from YouTube and save to Firebase FIRST!
+    const cleanYtId = videoId.startsWith("yt_") ? videoId.substring(3) : (videoId.length === 11 ? videoId : null);
+    if (cleanYtId && typeof ENV !== 'undefined' && ENV.YOUTUBE_API_KEY) {
+        try {
+            const ytRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${cleanYtId}&key=${ENV.YOUTUBE_API_KEY}`);
+            const ytData = await ytRes.json();
+            if (ytData.items && ytData.items.length > 0) {
+                const item = ytData.items[0];
+                const snippet = item.snippet;
+                const dIso = item.contentDetails?.duration || "";
+                const totalSeconds = parseDurationToSeconds(dIso);
+                const h = Math.floor(totalSeconds / 3600);
+                const m = Math.floor((totalSeconds % 3600) / 60);
+                const s = totalSeconds % 60;
+                const durationText = h > 0 
+                    ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}` 
+                    : `${m}:${s.toString().padStart(2, '0')}`;
+
+                const freshYtVideo = {
+                    id: videoId.startsWith("yt_") ? videoId : `yt_${cleanYtId}`,
+                    title: snippet.title,
+                    channel: snippet.channelTitle || "YouTube Creator",
+                    category: "General",
+                    playlist: "",
+                    views: parseInt(item.statistics?.viewCount || 0),
+                    time: "Just now",
+                    duration: durationText,
+                    thumbnail: snippet.thumbnails?.maxres?.url || snippet.thumbnails?.high?.url || snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url || "",
+                    videoUrl: `https://www.youtube.com/watch?v=${cleanYtId}`,
+                    description: snippet.description || "Saved from YouTube",
+                    likes: parseInt(item.statistics?.likeCount || 0),
+                    baseLikes: parseInt(item.statistics?.likeCount || 0),
+                    liked: false,
+                    likedBy: [],
+                    isShort: totalSeconds <= 60,
+                    comments: [],
+                    timestamp: Date.now()
+                };
+
+                // Save to Firebase first, then return
+                await saveVideo(freshYtVideo);
+                console.log(`Saved YouTube video ${cleanYtId} to Firebase first.`);
+                return freshYtVideo;
+            }
+        } catch (e) {
+            console.warn("Could not auto-fetch YouTube video to save in Firebase:", e);
+        }
+    }
+
     return initialVideos.find(v => v.id === videoId) || null;
 }
 
@@ -991,6 +1299,130 @@ if (!sessionStorage.getItem('jtube_db_init')) {
 }
 
 // ===== AUTO-SYNC YOUTUBE CHANNELS & STATS =====
+async function syncChannelByName(channelName, force = true) {
+    const apiKey = typeof ENV !== 'undefined' ? ENV.YOUTUBE_API_KEY : null;
+    if (!apiKey || !channelName) return false;
+
+    try {
+        const channels = await getChannels();
+        const data = channels[channelName];
+        if (!data) return false;
+
+        let playlistId = data.ytPlaylistId;
+        let ytChannelId = data.ytChannelId;
+
+        // Auto-resolve channel ID if missing
+        if (!ytChannelId && !playlistId) {
+            try {
+                const searchRes = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q=${encodeURIComponent(channelName)}&key=${apiKey}`);
+                const searchData = await searchRes.json();
+                if (searchData.items && searchData.items.length > 0) {
+                    ytChannelId = searchData.items[0].snippet.channelId;
+                    data.ytChannelId = ytChannelId;
+                }
+            } catch (e) {
+                console.warn(`Could not resolve YouTube ID for ${channelName}:`, e);
+            }
+        }
+
+        if (!ytChannelId && !playlistId) return false;
+
+        if (ytChannelId && !playlistId) {
+            try {
+                const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=contentDetails,statistics&id=${ytChannelId}&key=${apiKey}`);
+                const cData = await res.json();
+                if (cData.items && cData.items.length > 0) {
+                    const item = cData.items[0];
+                    playlistId = item.contentDetails.relatedPlaylists.uploads;
+                    data.ytPlaylistId = playlistId;
+                    if (item.statistics && item.statistics.subscriberCount) {
+                        data.subscribers = parseInt(item.statistics.subscriberCount);
+                    }
+                }
+            } catch (e) {}
+        }
+
+        if (!playlistId) return false;
+
+        const allVideos = await getVideos();
+        const existingIds = new Set(allVideos.map(v => v.id));
+
+        const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=30&playlistId=${playlistId}&key=${apiKey}`;
+        const res = await fetch(url);
+        const pData = await res.json();
+
+        if (pData.items && pData.items.length > 0) {
+            const videoIds = pData.items.map(item => item.contentDetails.videoId).filter(Boolean).join(',');
+            const vidRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails,statistics&id=${videoIds}&key=${apiKey}`);
+            const vidData = await vidRes.json();
+
+            const durationMap = {};
+            const statsMap = {};
+            if (vidData.items) {
+                vidData.items.forEach(v => {
+                    durationMap[v.id] = v.contentDetails.duration;
+                    statsMap[v.id] = v.statistics || {};
+                });
+            }
+
+            const newVideos = [];
+            for (const item of pData.items) {
+                const snippet = item.snippet;
+                const videoId = snippet.resourceId ? snippet.resourceId.videoId : (item.contentDetails ? item.contentDetails.videoId : '');
+                if (!videoId) continue;
+
+                const docId = "yt_" + videoId;
+                if (existingIds.has(docId)) continue;
+
+                const dStr = durationMap[videoId];
+                if (!dStr) continue;
+
+                const totalSeconds = parseDurationToSeconds(dStr);
+                const h = Math.floor(totalSeconds / 3600);
+                const m = Math.floor((totalSeconds % 3600) / 60);
+                const s = totalSeconds % 60;
+                const durationText = h > 0 
+                    ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}` 
+                    : `${m}:${s.toString().padStart(2, '0')}`;
+
+                const stats = statsMap[videoId] || {};
+                const rawLikes = parseInt(stats.likeCount || 0);
+
+                newVideos.push({
+                    id: docId,
+                    title: snippet.title,
+                    channel: channelName,
+                    category: data.syncCategory || "General",
+                    playlist: "",
+                    views: parseInt(stats.viewCount || 0),
+                    time: "Just now",
+                    duration: durationText,
+                    thumbnail: snippet.thumbnails?.maxres?.url || snippet.thumbnails?.high?.url || snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url || "",
+                    videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
+                    description: snippet.description || "Imported automatically from YouTube",
+                    likes: rawLikes,
+                    baseLikes: rawLikes,
+                    liked: false,
+                    likedBy: [],
+                    isShort: totalSeconds <= 60,
+                    comments: [],
+                    timestamp: new Date(snippet.publishedAt).getTime()
+                });
+            }
+
+            if (newVideos.length > 0) {
+                await saveBatchVideos(newVideos);
+                console.log(`Saved ${newVideos.length} new YouTube videos to Firebase first for ${channelName}!`);
+                await saveChannel(channelName, { ...data, lastSyncTime: Date.now() });
+                return true;
+            }
+        }
+    } catch (e) {
+        console.warn(`Error syncing channel ${channelName}:`, e);
+    }
+    return false;
+}
+
 async function autoSyncYouTubeChannels(force = false) {
     const apiKey = typeof ENV !== 'undefined' ? ENV.YOUTUBE_API_KEY : null;
     if (!apiKey) return;
@@ -1205,10 +1637,10 @@ document.addEventListener('DOMContentLoaded', () => {
         autoSyncYouTubeChannels();
     }, 1500);
 
-    // Keep checking every 2.5 minutes for new YouTube videos to save to Firebase automatically
+    // Keep checking every 10 minutes for new YouTube videos to save to Firebase automatically
     setInterval(() => {
         autoSyncYouTubeChannels(false);
-    }, 150000);
+    }, 10 * 60 * 1000);
 
     setTimeout(() => {
         fetch('https://api.country.is')
@@ -1385,13 +1817,14 @@ const AIModeration = {
     }
 };
 
-// ===== 5-MINUTE CONTINUOUS AI VIDEO BRAIN =====
+// ===== 10-MINUTE CONTINUOUS AI VIDEO BRAIN =====
 const AIVideoBrain = {
     lastTrained: 0,
-    intervalMs: 5 * 60 * 1000, // 5 minutes
+    intervalMs: 10 * 60 * 1000, // 10 minutes (600,000 ms)
     timerId: null,
     catalog: {},
     videoCount: 0,
+    isTraining: false,
 
     // Classify a single video into category, genre, target audience, themes
     classify(v) {
@@ -1434,9 +1867,7 @@ const AIVideoBrain = {
             tags.push('Leadership', 'Productivity', 'Personal Growth');
         }
 
-        const isShort = (v.duration && (v.duration.includes('0:') || parseInt(v.duration, 10) <= 90)) ||
-                        Boolean(v.isShort) ||
-                        /shorts|#shorts|short/i.test(text);
+        const isShort = isShortVideo(v);
 
         return {
             id: v.id,
@@ -1453,16 +1884,35 @@ const AIVideoBrain = {
         };
     },
 
-    // Train AI by reading all videos on the entire website
+    // Train AI by reading all videos on the entire website every 10 minutes and saving insights
     async train() {
+        if (this.isTraining) return null;
+        this.isTraining = true;
         try {
+            console.log('[AIVideoBrain] Beginning 10-minute AI audit of all website videos...');
             const videos = await getVideos();
             if (!Array.isArray(videos) || videos.length === 0) return null;
 
             const catalog = {};
+            const insightsToSave = [];
+
             videos.forEach(v => {
                 if (v && v.id) {
-                    catalog[v.id] = this.classify(v);
+                    const classified = this.classify(v);
+                    catalog[v.id] = classified;
+                    insightsToSave.push({
+                        videoId: v.id,
+                        title: v.title || 'Untitled',
+                        channel: v.channel || 'Unknown',
+                        category: classified.category,
+                        genre: classified.genre,
+                        targetAudience: classified.targetAudience,
+                        depth: classified.depth,
+                        isShort: classified.isShort,
+                        tags: classified.tags,
+                        summary: classified.summary,
+                        lastLearned: Date.now()
+                    });
                 }
             });
 
@@ -1470,7 +1920,7 @@ const AIVideoBrain = {
             this.videoCount = Object.keys(catalog).length;
             this.lastTrained = Date.now();
 
-            // Cache locally
+            // 1. Cache locally for instant retrieval
             try {
                 localStorage.setItem('jtube_ai_brain_cache', JSON.stringify({
                     lastTrained: this.lastTrained,
@@ -1479,14 +1929,58 @@ const AIVideoBrain = {
                 }));
             } catch (e) {}
 
-            // Send to server-side AI Brain endpoint
+            // 2. Persist AI learned info to Firestore in 'ai_video_insights' collection
+            try {
+                const batch = db.batch();
+                let batchCount = 0;
+                // Save up to 200 video insights per cycle to stay comfortably within limits
+                for (const insight of insightsToSave.slice(0, 200)) {
+                    const ref = db.collection("ai_video_insights").doc(insight.videoId);
+                    batch.set(ref, insight, { merge: true });
+                    batchCount++;
+                }
+                if (batchCount > 0) {
+                    await batch.commit().catch(err => console.warn('[AIVideoBrain] Error writing ai_video_insights:', err));
+                }
+            } catch (e) {
+                console.warn('[AIVideoBrain] Error preparing Firestore insights batch:', e);
+            }
+
+            // 3. Save AI audit to Firestore in 'ai_system_audits' collection
+            try {
+                const auditId = 'audit_' + Date.now();
+                const shortsCount = Object.values(catalog).filter(c => c.isShort).length;
+                const categoryCounts = {};
+                Object.values(catalog).forEach(c => {
+                    categoryCounts[c.category] = (categoryCounts[c.category] || 0) + 1;
+                });
+
+                await db.collection("ai_system_audits").doc(auditId).set({
+                    auditId,
+                    timestamp: Date.now(),
+                    totalVideosChecked: this.videoCount,
+                    totalShorts: shortsCount,
+                    categories: categoryCounts,
+                    intervalMinutes: 10,
+                    status: 'completed'
+                }).catch(err => console.warn('[AIVideoBrain] Audit log error:', err));
+            } catch (e) {}
+
+            // 4. Check YouTube channels for any brand-new videos or shorts, saving new ones automatically
+            if (typeof autoSyncYouTubeChannels === 'function') {
+                try {
+                    await autoSyncYouTubeChannels(true);
+                } catch (e) {}
+            }
+
+            // 5. Send to server-side AI Brain endpoint
             fetch('/api/ai/train', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ videos })
             }).catch(() => {});
 
-            // Dispatch event for UI badges
+            // 6. Dispatch events for UI badges & shorts refresh
             if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('aiBrainUpdated', {
                     detail: {
@@ -1496,15 +1990,17 @@ const AIVideoBrain = {
                 }));
             }
 
-            console.log(`[AIVideoBrain] Successfully learned ${this.videoCount} videos across website at ${new Date(this.lastTrained).toLocaleTimeString()}`);
+            console.log(`[AIVideoBrain] Completed 10-minute training: learned ${this.videoCount} videos (${Object.values(catalog).filter(c => c.isShort).length} Shorts) across website at ${new Date(this.lastTrained).toLocaleTimeString()}`);
             return this.catalog;
         } catch (err) {
             console.warn('[AIVideoBrain] Training cycle encountered an error:', err);
             return null;
+        } finally {
+            this.isTraining = false;
         }
     },
 
-    // Start 5-minute automated learning cycle
+    // Start 10-minute automated learning cycle
     startPeriodicTraining() {
         // Load cache first if available
         try {
@@ -1520,10 +2016,10 @@ const AIVideoBrain = {
         // Immediate training
         this.train();
 
-        // Repeat every 5 minutes (300,000 ms)
+        // Repeat every 10 minutes (600,000 ms)
         if (this.timerId) clearInterval(this.timerId);
         this.timerId = setInterval(() => {
-            console.log('[AIVideoBrain] Scheduled 5-minute learning cycle triggered...');
+            console.log('[AIVideoBrain] Scheduled 10-minute learning cycle triggered...');
             this.train();
         }, this.intervalMs);
     },

@@ -132,8 +132,14 @@
         <!-- Sidebar Navigation -->
         <aside class="w-64 flex-shrink-0 p-4 pt-6">
             <div class="sidebar-nav space-y-1.5">
-                <p class="text-[10px] font-bold uppercase tracking-widest text-zinc-600 px-3 mb-3">Content</p>
-                <button class="tab-btn active w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold text-left" data-tab="upload">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-zinc-600 px-3 mb-2">Analytics &amp; Intelligence</p>
+                <button class="tab-btn active w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold text-left" data-tab="overview">
+                    <i class="fas fa-chart-pie w-5 text-center text-red-500"></i>
+                    <span>Studio Overview</span>
+                </button>
+
+                <p class="text-[10px] font-bold uppercase tracking-widest text-zinc-600 px-3 mt-4 mb-2">Content</p>
+                <button class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold text-left text-zinc-400" data-tab="upload">
                     <i class="fas fa-cloud-upload-alt w-5 text-center"></i>
                     <span>Upload New Video</span>
                 </button>
@@ -174,8 +180,201 @@
         <!-- Main Content Area -->
         <main class="flex-1 p-6 pt-6 min-w-0">
 
+            <!-- ===== STUDIO OVERVIEW & INTELLIGENCE TAB ===== -->
+            <div id="tab-overview" class="tab-panel active">
+                <div class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h1 class="text-2xl font-black text-white tracking-tight">Studio Command Center</h1>
+                            <span class="bg-red-500/20 text-red-400 border border-red-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Live</span>
+                        </div>
+                        <p class="text-sm text-zinc-400 mt-1">Real-time catalog metrics, content performance, and automated system intelligence.</p>
+                    </div>
+
+                    <!-- Quick Command Action Bar -->
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <button id="btn-trigger-ai-audit" type="button" 
+                                class="bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-lg shadow-amber-900/30 flex items-center gap-1.5 transition cursor-pointer">
+                            <i class="fas fa-brain"></i>
+                            <span>Run AI Audit</span>
+                        </button>
+                        <button id="btn-force-yt-sync" type="button" 
+                                class="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition cursor-pointer">
+                            <i class="fas fa-sync-alt"></i>
+                            <span>Sync YT Channels</span>
+                        </button>
+                        <button id="btn-export-backup" type="button" 
+                                class="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition cursor-pointer">
+                            <i class="fas fa-file-download"></i>
+                            <span>Backup Catalog</span>
+                        </button>
+                        <button onclick="document.querySelector('[data-tab=upload]').click()" type="button" 
+                                class="btn-primary text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-md cursor-pointer">
+                            <i class="fas fa-plus"></i>
+                            <span>Add Video</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Global Action Status in Overview -->
+                <div id="overview-status-banner" class="hidden mb-6 p-3.5 rounded-xl text-xs font-semibold flex items-center justify-between transition-all"></div>
+
+                <!-- 5 Key Metric Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+                    <!-- Total Catalog Card -->
+                    <div class="glass-card p-4 relative overflow-hidden group hover:border-zinc-700 transition">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-zinc-400">Total Videos</span>
+                            <div class="w-8 h-8 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center text-sm border border-red-500/20">
+                                <i class="fas fa-film"></i>
+                            </div>
+                        </div>
+                        <div class="text-2xl font-black text-white mb-1" id="kpi-total-videos">0</div>
+                        <div class="text-[11px] text-zinc-500 flex items-center gap-1.5">
+                            <span class="text-zinc-300 font-medium" id="kpi-longform-count">0</span> Longform • 
+                            <span class="text-red-400 font-medium" id="kpi-shorts-count">0</span> Shorts
+                        </div>
+                    </div>
+
+                    <!-- Platform Lifetime Views -->
+                    <div class="glass-card p-4 relative overflow-hidden group hover:border-zinc-700 transition">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-zinc-400">Platform Views</span>
+                            <div class="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center text-sm border border-blue-500/20">
+                                <i class="fas fa-eye"></i>
+                            </div>
+                        </div>
+                        <div class="text-2xl font-black text-white mb-1" id="kpi-total-views">0</div>
+                        <div class="text-[11px] text-zinc-500">Across entire catalog</div>
+                    </div>
+
+                    <!-- Active Channels -->
+                    <div class="glass-card p-4 relative overflow-hidden group hover:border-zinc-700 transition">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-zinc-400">Channels Hosted</span>
+                            <div class="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center text-sm border border-purple-500/20">
+                                <i class="fas fa-tv"></i>
+                            </div>
+                        </div>
+                        <div class="text-2xl font-black text-white mb-1" id="kpi-total-channels">0</div>
+                        <div class="text-[11px] text-zinc-500">
+                            <span class="text-zinc-300 font-medium" id="kpi-total-subscribers">0</span> Total reach
+                        </div>
+                    </div>
+
+                    <!-- Registered Users -->
+                    <div class="glass-card p-4 relative overflow-hidden group hover:border-zinc-700 transition">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-zinc-400">Users &amp; Members</span>
+                            <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-sm border border-emerald-500/20">
+                                <i class="fas fa-users"></i>
+                            </div>
+                        </div>
+                        <div class="text-2xl font-black text-white mb-1" id="kpi-total-users">0</div>
+                        <div class="text-[11px] text-zinc-500">Auth &amp; Firestore records</div>
+                    </div>
+
+                    <!-- 10-Minute AI Engine -->
+                    <div class="glass-card p-4 relative overflow-hidden group hover:border-zinc-700 transition">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-zinc-400">10-Min AI Brain</span>
+                            <div class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center text-sm border border-amber-500/20">
+                                <i class="fas fa-microchip"></i>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1.5 mb-1">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span class="text-sm font-bold text-emerald-400">Active</span>
+                        </div>
+                        <div class="text-[11px] text-zinc-500 truncate" id="kpi-ai-audit-time">Every 10 min</div>
+                    </div>
+                </div>
+
+                <!-- Two Column Dashboard: Content Distribution & Top Performers -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
+                    <!-- Left: Category Distribution -->
+                    <div class="lg:col-span-5 glass-card p-5 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-4 pb-3 border-b border-zinc-800">
+                                <h3 class="font-bold text-sm text-white flex items-center gap-2">
+                                    <i class="fas fa-layer-group text-red-500 text-xs"></i>
+                                    <span>Content Category Balance</span>
+                                </h3>
+                                <span class="text-[11px] text-zinc-500 font-mono" id="overview-category-count">0 categories</span>
+                            </div>
+                            <div id="overview-category-bars" class="space-y-3">
+                                <!-- Populated dynamically with percentage bars -->
+                                <div class="text-xs text-zinc-500 text-center py-6">Loading distribution...</div>
+                            </div>
+                        </div>
+                        <div class="mt-4 pt-3 border-t border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-500">
+                            <span>Shorts density: <strong id="overview-shorts-density" class="text-zinc-300">0%</strong></span>
+                            <a href="#" onclick="document.querySelector('[data-tab=categories]').click(); return false;" class="text-red-400 hover:text-red-300 transition">Manage categories →</a>
+                        </div>
+                    </div>
+
+                    <!-- Right: Top 5 Performing Videos -->
+                    <div class="lg:col-span-7 glass-card p-5">
+                        <div class="flex items-center justify-between mb-4 pb-3 border-b border-zinc-800">
+                            <h3 class="font-bold text-sm text-white flex items-center gap-2">
+                                <i class="fas fa-fire-alt text-amber-500 text-xs"></i>
+                                <span>Top Performing Content</span>
+                            </h3>
+                            <button onclick="document.querySelector('[data-tab=manage]').click()" class="text-xs text-zinc-400 hover:text-white transition cursor-pointer">
+                                View all videos →
+                            </button>
+                        </div>
+                        <div id="overview-top-videos" class="space-y-2.5">
+                            <!-- Populated dynamically -->
+                            <div class="text-xs text-zinc-500 text-center py-6">Loading top videos...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Automated Systems & Health Panel -->
+                <div class="glass-card p-5">
+                    <h3 class="font-bold text-sm text-white flex items-center gap-2 mb-4 pb-3 border-b border-zinc-800">
+                        <i class="fas fa-shield-alt text-emerald-500 text-xs"></i>
+                        <span>System Architecture &amp; Auto-Sync Services</span>
+                    </h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="p-3 bg-zinc-900/60 rounded-xl border border-zinc-800 flex items-start gap-3">
+                            <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 mt-1.5 flex-shrink-0 animate-pulse"></div>
+                            <div>
+                                <h4 class="text-xs font-bold text-white">Cloud Firestore</h4>
+                                <p class="text-[11px] text-zinc-400 mt-0.5">Database online &amp; real-time listener active</p>
+                            </div>
+                        </div>
+
+                        <div class="p-3 bg-zinc-900/60 rounded-xl border border-zinc-800 flex items-start gap-3">
+                            <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 mt-1.5 flex-shrink-0 animate-pulse"></div>
+                            <div>
+                                <h4 class="text-xs font-bold text-white">10-Min AI Auditor</h4>
+                                <p class="text-[11px] text-zinc-400 mt-0.5">Autonomous content review &amp; insight writer</p>
+                            </div>
+                        </div>
+
+                        <div class="p-3 bg-zinc-900/60 rounded-xl border border-zinc-800 flex items-start gap-3">
+                            <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 mt-1.5 flex-shrink-0 animate-pulse"></div>
+                            <div>
+                                <h4 class="text-xs font-bold text-white">YouTube Sync Agent</h4>
+                                <p class="text-[11px] text-zinc-400 mt-0.5">Continuous poll every 10m for new uploads</p>
+                            </div>
+                        </div>
+
+                        <div class="p-3 bg-zinc-900/60 rounded-xl border border-zinc-800 flex items-start gap-3">
+                            <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 mt-1.5 flex-shrink-0 animate-pulse"></div>
+                            <div>
+                                <h4 class="text-xs font-bold text-white">Continue Watching</h4>
+                                <p class="text-[11px] text-zinc-400 mt-0.5">User playback second persistence active</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- ===== UPLOAD VIDEO TAB ===== -->
-            <div id="tab-upload" class="tab-panel active">
+            <div id="tab-upload" class="tab-panel">
                 <div class="mb-6">
                     <h1 class="text-2xl font-black text-white">Upload New Video</h1>
                     <p class="text-sm text-zinc-500 mt-1">Add curated video content directly to the JTube platform.</p>
@@ -208,13 +407,27 @@
                                 <input type="url" id="v-thumbnail" placeholder="Paste image link or leave empty" class="input-field">
                             </div>
                             <div>
-                                <label class="label">Video Source URL (YouTube) *</label>
+                                <div class="flex items-center justify-between mb-1">
+                                    <label class="label mb-0">Video Source URL (YouTube) *</label>
+                                    <button type="button" id="btn-autofill-upload" class="text-[11px] text-red-400 hover:text-red-300 font-semibold flex items-center gap-1 transition cursor-pointer">
+                                        <i class="fas fa-magic text-[10px]"></i> Auto-Fill Details
+                                    </button>
+                                </div>
                                 <input type="url" id="v-url" placeholder="https://www.youtube.com/watch?v=..." class="input-field">
                             </div>
                         </div>
-                        <div>
-                            <label class="label">Playlist Name (Optional)</label>
-                            <input type="text" id="v-playlist" placeholder="e.g., Deep Learning Masterclass" class="input-field">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="label">Playlist Name (Optional)</label>
+                                <input type="text" id="v-playlist" placeholder="e.g., Deep Learning Masterclass" class="input-field">
+                            </div>
+                            <div>
+                                <label class="label">Content Type *</label>
+                                <select id="v-is-short" class="input-field">
+                                    <option value="false">Standard Longform Video</option>
+                                    <option value="true">⚡ YouTube Short (&le; 60s)</option>
+                                </select>
+                            </div>
                         </div>
                         <div>
                             <label class="label">Video Description</label>
@@ -262,14 +475,19 @@
 
                 <!-- Controls & Filter Toolbar -->
                 <div class="glass-card p-4 mb-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1 max-w-xl">
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1 max-w-2xl">
                         <div class="relative flex-1">
                             <i class="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 text-xs"></i>
-                            <input type="text" id="admin-video-search" placeholder="Search by video title or channel..." 
+                            <input type="text" id="admin-video-search" placeholder="Search by video title, channel, or id..." 
                                    class="input-field pl-9 py-2 text-xs">
                         </div>
-                        <select id="admin-category-filter" class="input-field py-2 text-xs w-full sm:w-44">
+                        <select id="admin-category-filter" class="input-field py-2 text-xs w-full sm:w-40">
                             <option value="all">All Categories</option>
+                        </select>
+                        <select id="admin-type-filter" class="input-field py-2 text-xs w-full sm:w-36">
+                            <option value="all">All Types</option>
+                            <option value="longform">Longform Only</option>
+                            <option value="shorts">⚡ Shorts Only</option>
                         </select>
                     </div>
 
@@ -303,7 +521,9 @@
                                 <th class="px-5 py-3.5">Video</th>
                                 <th class="px-5 py-3.5 hidden sm:table-cell">Channel</th>
                                 <th class="px-5 py-3.5">Category</th>
-                                <th class="px-5 py-3.5 text-center">Action</th>
+                                <th class="px-4 py-3.5 text-center">Format</th>
+                                <th class="px-4 py-3.5 hidden md:table-cell text-right">Views</th>
+                                <th class="px-5 py-3.5 text-center">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="admin-table-body" class="divide-y divide-zinc-800/60"></tbody>
@@ -554,6 +774,110 @@
             </div>
 
         </main>
+    </div>
+
+    <!-- Edit Video Modal -->
+    <div id="edit-video-modal" class="fixed inset-0 z-[150] bg-zinc-950/85 backdrop-blur-sm hidden items-center justify-center p-4 overflow-y-auto">
+        <div class="glass-card w-full max-w-2xl p-6 sm:p-7 my-8 border border-zinc-700 shadow-2xl relative">
+            <div class="flex items-center justify-between pb-4 border-b border-zinc-800 mb-5">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center text-white shadow">
+                        <i class="fas fa-edit"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-black text-white">Edit Video Metadata</h2>
+                        <p class="text-xs text-zinc-400">Update video details, thumbnail, classification, and stats in Firestore.</p>
+                    </div>
+                </div>
+                <button type="button" id="close-edit-modal-btn" class="text-zinc-400 hover:text-white p-2 rounded-lg hover:bg-zinc-800 transition cursor-pointer">
+                    <i class="fas fa-times text-base"></i>
+                </button>
+            </div>
+
+            <form id="edit-video-form" class="space-y-4">
+                <input type="hidden" id="edit-vid-id">
+
+                <div>
+                    <label class="label">Video Title *</label>
+                    <input type="text" id="edit-vid-title" required class="input-field text-sm">
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                    <div>
+                        <label class="label">Category *</label>
+                        <input type="text" id="edit-vid-category" list="category-list" required class="input-field text-sm">
+                    </div>
+                    <div>
+                        <label class="label">Duration *</label>
+                        <input type="text" id="edit-vid-duration" required placeholder="e.g. 14:20" class="input-field text-sm">
+                    </div>
+                    <div>
+                        <label class="label">Channel Name *</label>
+                        <input type="text" id="edit-vid-channel" list="channel-list" required class="input-field text-sm">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div>
+                        <label class="label">Video Source URL *</label>
+                        <input type="url" id="edit-vid-url" required class="input-field text-sm">
+                    </div>
+                    <div>
+                        <label class="label">Playlist Name (Optional)</label>
+                        <input type="text" id="edit-vid-playlist" placeholder="e.g. Masterclass Series" class="input-field text-sm">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="label">Thumbnail URL</label>
+                    <div class="flex gap-2">
+                        <input type="url" id="edit-vid-thumbnail" class="input-field text-sm flex-1">
+                        <button type="button" id="edit-vid-fetch-thumb" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs px-3 rounded-xl border border-zinc-700 whitespace-nowrap cursor-pointer">
+                            <i class="fas fa-magic mr-1"></i> YT Thumb
+                        </button>
+                    </div>
+                    <div class="mt-2.5 flex items-center gap-3 bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800">
+                        <img id="edit-vid-thumb-preview" src="" alt="Thumbnail preview" class="w-24 aspect-video object-cover rounded-lg bg-zinc-800 border border-zinc-700 flex-shrink-0">
+                        <p class="text-xs text-zinc-400">Live preview of thumbnail displayed on homepage &amp; watch screen.</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                    <div>
+                        <label class="label">Content Classification</label>
+                        <select id="edit-vid-isshort" class="input-field text-sm">
+                            <option value="false">Regular Video (Standard)</option>
+                            <option value="true">⚡ YouTube Short (Vertical)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="label">Total Views</label>
+                        <input type="number" id="edit-vid-views" min="0" class="input-field text-sm">
+                    </div>
+                    <div>
+                        <label class="label">Likes Count</label>
+                        <input type="number" id="edit-vid-likes" min="0" class="input-field text-sm">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="label">Description</label>
+                    <textarea id="edit-vid-desc" rows="3" class="input-field text-sm resize-none"></textarea>
+                </div>
+
+                <div id="edit-vid-status" class="hidden text-xs font-bold p-3 rounded-xl"></div>
+
+                <div class="flex items-center justify-end gap-3 pt-3 border-t border-zinc-800">
+                    <button type="button" id="cancel-edit-btn" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold px-4 py-2.5 rounded-xl transition cursor-pointer">
+                        Cancel
+                    </button>
+                    <button type="submit" id="save-edit-btn" class="btn-success text-xs font-bold px-5 py-2.5 rounded-xl flex items-center gap-2 cursor-pointer">
+                        <i class="fas fa-save"></i>
+                        <span>Save to Firestore</span>
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js" defer></script>

@@ -2,54 +2,71 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Default rule: deny all access
+    // Default rule: deny all access unless explicitly allowed
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Videos collection: Public read for ultra-fast website loading
-    // Write allowed for admin operations (import, upload, likes, comments)
+    // Videos collection: All videos stored as links
+    // Public read for fast global site access
+    // Write permitted for saving new videos automatically, updating likes, views, comments, and AI-learned info
     match /videos/{videoId} {
       allow read: if true;
-      allow create: if true;
-      allow update: if true;
-      allow delete: if true;
+      allow create, update: if true;
+      allow delete: if request.auth != null;
     }
 
-    // Channels collection: Public read for fast channel page loads
-    // Write allowed for subscribe/unsubscribe and admin channel management
+    // AI Video Insights: Stores knowledge the AI learns every 10 minutes about each video
+    // (genre, depth, target audience, themes, summary)
+    match /ai_video_insights/{videoId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if request.auth != null;
+    }
+
+    // AI System Audits: Records of automated 10-minute scans across the entire website
+    match /ai_system_audits/{auditId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if request.auth != null;
+    }
+
+    // Channels collection: Public read for channel directories and profile pages
+    // Write permitted for subscription counters, stats sync, and channel configurations
     match /channels/{channelId} {
       allow read: if true;
-      allow create: if true;
-      allow update: if true;
-      allow delete: if true;
+      allow create, update: if true;
+      allow delete: if request.auth != null;
     }
 
-    // Categories collection: Public read for homepage category bar
+    // Categories collection: Public read for category filter bars
     match /categories/{categoryId} {
       allow read: if true;
-      allow create: if true;
-      allow update: if true;
-      allow delete: if true;
+      allow write: if true;
     }
 
-    // Users collection: Authenticated users can read basic profiles, users can write their own data
+    // Users collection: Public read for basic profile display
     match /users/{userId} {
       allow read: if true;
       allow write: if request.auth != null && request.auth.uid == userId;
       
-      // User history subcollection
+      // User watch history subcollection
       match /history/{historyId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // User Continue Watching subcollection
+      match /continueWatching/{videoId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
     }
 
-    // Group chat collection: Authenticated users can read and write
+    // Group chat collection: Authenticated users can participate
     match /jtube_group_chat/{messageId} {
       allow read, write: if request.auth != null;
     }
 
-    // Feedback collection: Anyone can submit feedback
+    // Feedback collection: Anyone can submit feedback, but not read others' feedback
     match /feedback/{feedbackId} {
       allow read: if false;
       allow create: if true;

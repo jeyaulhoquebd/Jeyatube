@@ -40,6 +40,15 @@
         </div>
 
         <div class="flex items-center space-x-3">
+            <!-- Watch Time Statistics Button -->
+            <button id="watch-time-stats-btn" class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800/90 hover:bg-zinc-700/80 border border-zinc-700/60 rounded-full text-xs text-zinc-300 hover:text-white transition shadow-sm" title="View your engagement & watch time stats">
+                <i class="fas fa-clock text-amber-400 text-xs"></i>
+                <span id="header-watch-time-label">0m watched</span>
+            </button>
+            <!-- Auto/System Theme Toggle (Dark Primary Default) -->
+            <button class="theme-toggle-btn p-2 hover:bg-zinc-800 rounded-full text-zinc-300 hover:text-white transition" title="Toggle Theme (Auto System / Dark / Light)">
+                <i class="fas fa-moon theme-icon"></i>
+            </button>
             <button id="mobile-search-btn" class="p-2 hover:bg-zinc-800 rounded-full sm:hidden transition"><i class="fas fa-search"></i></button>
             <a href="profile.html" title="Your Profile" id="header-profile-avatar" class="bg-purple-600 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm text-white hover:opacity-80 transition">U</a>
         </div>
@@ -102,16 +111,52 @@
             <div id="category-bar" class="flex items-center space-x-3 overflow-x-auto pb-4 mb-4" style="-ms-overflow-style:none;scrollbar-width:none;">
                 <!-- Categories will be injected here dynamically -->
             </div>
-            <!-- Shorts Shelf (YouTube-style) -->
-            <div id="shorts-shelf" class="mb-8 hidden">
+
+            <!-- Continue Watching Shelf (Persisted via Firebase Firestore & Local Cache) -->
+            <div id="continue-watching-shelf" class="mb-8 hidden">
                 <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center space-x-2.5">
+                        <span class="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center text-sm shadow-lg shadow-amber-500/20">
+                            <i class="fas fa-play"></i>
+                        </span>
+                        <div>
+                            <h2 class="text-xl font-black text-white tracking-tight flex items-center gap-2">
+                                <span>Continue Watching</span>
+                                <span class="text-[10px] bg-amber-500/20 text-amber-300 font-semibold px-2 py-0.5 rounded-full border border-amber-500/30 flex items-center gap-1">
+                                    <i class="fas fa-cloud-check text-[9px]"></i> Firestore Synced
+                                </span>
+                            </h2>
+                            <p class="text-xs text-zinc-400">Pick up right where you left off</p>
+                        </div>
+                    </div>
+                    <button id="clear-continue-watching-btn" class="text-xs text-zinc-400 hover:text-red-400 transition flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700/80 rounded-full" title="Clear continue watching history">
+                        <i class="fas fa-trash-alt text-[10px]"></i> <span class="hidden sm:inline">Clear all</span>
+                    </button>
+                </div>
+                <div id="continue-watching-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+            </div>
+
+                        <!-- Top Section of Big Videos (First rows of standard videos) -->
+            <div id="top-video-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-6 sm:gap-x-4 sm:gap-y-8"></div>
+
+            <!-- Shorts Shelf in the Middle (YouTube-style, strictly separate from big videos) -->
+            <div id="shorts-shelf" class="my-10 hidden">
+                <div class="flex items-center justify-between mb-4 border-b border-zinc-800 pb-3">
                     <div class="flex items-center space-x-2.5">
                         <span class="w-8 h-8 rounded-xl bg-red-600/20 text-red-500 border border-red-500/30 flex items-center justify-center text-sm shadow-lg shadow-red-600/20">
                             <i class="fas fa-bolt"></i>
                         </span>
-                        <h2 class="text-xl font-black text-white tracking-tight">Shorts</h2>
+                        <div>
+                            <h2 class="text-xl font-black text-white tracking-tight flex items-center gap-2">
+                                <span>Shorts</span>
+                                <span id="shorts-sync-badge" class="text-[10px] bg-red-500/15 text-red-400 font-semibold px-2 py-0.5 rounded-full border border-red-500/30 flex items-center gap-1">
+                                    <i class="fas fa-arrows-rotate text-[9px]"></i> Updated Every 10m • Saved in Firestore
+                                </span>
+                            </h2>
+                            <p class="text-xs text-zinc-400">Vertical bite-sized videos — kept strictly separated from full-length videos</p>
+                        </div>
                     </div>
-                    <a href="shorts.html" class="text-xs font-semibold text-red-400 hover:text-red-300 flex items-center gap-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 px-3 py-1.5 rounded-full transition">
+                    <a href="shorts.html" class="text-xs font-semibold text-red-400 hover:text-red-300 flex items-center gap-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 px-3.5 py-1.5 rounded-full transition">
                         <span>View all Shorts</span>
                         <i class="fas fa-chevron-right text-[10px]"></i>
                     </a>
@@ -119,8 +164,61 @@
                 <div id="shorts-carousel" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4"></div>
             </div>
 
-            <div id="video-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-6 sm:gap-x-4 sm:gap-y-8"></div>
+            <!-- Bottom Section of Big Videos (Remaining standard videos) -->
+            <div id="bottom-video-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-6 sm:gap-x-4 sm:gap-y-8"></div>
+
+            <!-- Legacy fallback container for backward compatibility -->
+            <div id="video-grid" class="hidden"></div>
         </main>
+    </div>
+
+    <!-- Watch Time Engagement Statistics Modal -->
+    <div id="watch-time-modal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 hidden backdrop-blur-sm p-4">
+        <div class="bg-zinc-900 border border-zinc-700 p-6 sm:p-8 rounded-2xl w-full max-w-lg shadow-2xl space-y-6">
+            <div class="flex justify-between items-center border-b border-zinc-800 pb-4">
+                <div class="flex items-center space-x-3">
+                    <span class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center text-lg shadow-lg shadow-amber-500/10">
+                        <i class="fas fa-clock"></i>
+                    </span>
+                    <div>
+                        <h2 class="text-xl font-bold text-white">Watch Time & Engagement</h2>
+                        <p class="text-xs text-zinc-400">Track your daily and all-time video habits</p>
+                    </div>
+                </div>
+                <button id="close-watch-time-modal" class="text-zinc-400 hover:text-white transition w-8 h-8 rounded-lg hover:bg-zinc-800 flex items-center justify-center">
+                    <i class="fas fa-times text-base"></i>
+                </button>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-zinc-800/60 border border-zinc-700/60 rounded-xl p-4">
+                    <span class="text-xs font-semibold text-zinc-400 uppercase tracking-wider block mb-1">Today's Watch Time</span>
+                    <span id="modal-today-watch-time" class="text-2xl sm:text-3xl font-black text-amber-400 font-mono">0m</span>
+                    <p class="text-[11px] text-zinc-500 mt-1">Resets at midnight</p>
+                </div>
+                <div class="bg-zinc-800/60 border border-zinc-700/60 rounded-xl p-4">
+                    <span class="text-xs font-semibold text-zinc-400 uppercase tracking-wider block mb-1">Total Watch Time</span>
+                    <span id="modal-total-watch-time" class="text-2xl sm:text-3xl font-black text-emerald-400 font-mono">0m</span>
+                    <p class="text-[11px] text-zinc-500 mt-1">All-time engagement</p>
+                </div>
+            </div>
+
+            <!-- Top Watched Videos List -->
+            <div>
+                <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                    <i class="fas fa-fire text-red-400"></i> Top Engaged Videos
+                </h3>
+                <div id="modal-top-videos-list" class="space-y-2 max-h-56 overflow-y-auto pr-1">
+                    <p class="text-xs text-zinc-500 italic py-2">Start watching videos to record engagement history.</p>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-2 border-t border-zinc-800 text-xs text-zinc-500">
+                <span class="flex items-center gap-1"><i class="fas fa-shield-alt text-zinc-400"></i> Synced to user profile</span>
+                <button id="reset-watch-stats-btn" class="text-zinc-500 hover:text-red-400 transition">Reset stats</button>
+            </div>
+        </div>
     </div>
 
     <!-- Auth Modal -->

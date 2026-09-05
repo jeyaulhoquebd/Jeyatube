@@ -145,6 +145,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Manage Videos Controls
     const searchInput = document.getElementById("admin-video-search");
     const categoryFilter = document.getElementById("admin-category-filter");
+    const typeFilter = document.getElementById("admin-type-filter");
     const selectAllCheckbox = document.getElementById("select-all-videos");
     const bulkActionsBar = document.getElementById("bulk-actions-bar");
     const selectedCountLabel = document.getElementById("selected-count-label");
@@ -195,14 +196,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     function getFilteredVideos() {
         const term = (searchInput ? searchInput.value : "").trim().toLowerCase();
         const cat = categoryFilter ? categoryFilter.value : "all";
+        const type = typeFilter ? typeFilter.value : "all";
 
         return adminVideos.filter(video => {
             const matchesTerm = !term || 
                 (video.title && video.title.toLowerCase().includes(term)) || 
                 (video.channel && video.channel.toLowerCase().includes(term)) ||
-                (video.category && video.category.toLowerCase().includes(term));
+                (video.category && video.category.toLowerCase().includes(term)) ||
+                (video.id && video.id.toLowerCase().includes(term));
             const matchesCat = cat === "all" || (video.category && video.category.toLowerCase() === cat.toLowerCase());
-            return matchesTerm && matchesCat;
+            
+            const isShort = (typeof isShortVideo === 'function') 
+                ? isShortVideo(video) 
+                : (Boolean(video.isShort) || (video.duration && parseDurationToSeconds(video.duration) <= 60));
+            const matchesType = type === "all" || (type === "shorts" && isShort) || (type === "longform" && !isShort);
+
+            return matchesTerm && matchesCat && matchesType;
         });
     }
 
@@ -255,7 +264,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (filtered.length === 0) {
             tableBody.innerHTML = `
                 <tr>
-                    <td colspan="5" class="text-center py-12 text-zinc-500 italic">
+                    <td colspan="6" class="text-center py-12 text-zinc-500 italic">
                         <i class="fas fa-film text-2xl mb-2 block opacity-40"></i>
                         No videos found matching current search/filter.
                     </td>
@@ -271,31 +280,55 @@ document.addEventListener("DOMContentLoaded", async () => {
                 ? "bg-red-950/25 border-l-2 border-red-500 hover:bg-red-950/35 transition" 
                 : "hover:bg-zinc-800/30 transition";
 
+            const isShort = (typeof isShortVideo === 'function') ? isShortVideo(video) : Boolean(video.isShort);
+            const formatBadge = isShort
+                ? '<span class="inline-flex items-center gap-1 bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold">⚡ Short</span>'
+                : '<span class="inline-flex items-center gap-1 bg-zinc-800 text-zinc-300 border border-zinc-700 px-2 py-0.5 rounded-full text-[10px] font-medium">Standard</span>';
+
             html += `
                 <tr id="video-row-${video.id}" class="${rowClass}">
                     <td class="w-12 px-4 py-3.5 text-center">
                         <input type="checkbox" class="video-select-checkbox w-4 h-4 rounded border-zinc-700 accent-red-600 bg-zinc-900 cursor-pointer" 
                                data-id="${video.id}" ${isSelected ? 'checked' : ''}>
                     </td>
-                    <td class="px-5 py-3.5 flex items-center space-x-3 min-w-[200px]">
-                        <img src="${video.thumbnail}" class="w-16 aspect-video object-cover rounded-lg bg-zinc-700 flex-shrink-0" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=60'">
-                        <div class="truncate max-w-[240px]">
+                    <td class="px-5 py-3.5 flex items-center space-x-3 min-w-[240px]">
+                        <div class="relative flex-shrink-0">
+                            <img src="${video.thumbnail}" class="w-16 aspect-video object-cover rounded-lg bg-zinc-700" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=60'">
+                            ${video.duration ? `<span class="absolute bottom-1 right-1 bg-black/80 text-white text-[9px] font-mono px-1 rounded">${escapeHtml(video.duration)}</span>` : ''}
+                        </div>
+                        <div class="truncate max-w-[260px]">
                             <a href="watch.html?id=${video.id}" target="_blank" class="font-semibold text-white truncate text-xs sm:text-sm hover:text-red-400 transition block">
                                 ${escapeHtml(video.title)}
                             </a>
                             <p class="text-[11px] text-zinc-500 sm:hidden">${escapeHtml(video.channel)}</p>
-                            <p class="text-[11px] text-zinc-600">${formatCompactNumber(video.views)} views</p>
+                            <p class="text-[10px] text-zinc-600 font-mono">ID: ${escapeHtml(video.id)}</p>
                         </div>
                     </td>
                     <td class="px-5 py-3.5 text-zinc-400 text-xs hidden sm:table-cell">${escapeHtml(video.channel)}</td>
                     <td class="px-5 py-3.5">
                         <span class="bg-zinc-900 border border-zinc-700 px-2.5 py-1 rounded-full text-xs text-zinc-400">${escapeHtml(video.category)}</span>
                     </td>
-                    <td class="px-5 py-3.5 text-center">
-                        <button onclick="deleteVideoHandler('${video.id}')" title="Delete video from Firestore"
-                                class="text-zinc-500 hover:text-red-400 hover:bg-red-500/10 p-2 rounded-full transition cursor-pointer">
-                            <i class="fas fa-trash-alt"></i>
-                        </button>
+                    <td class="px-4 py-3.5 text-center">
+                        ${formatBadge}
+                    </td>
+                    <td class="px-4 py-3.5 hidden md:table-cell text-right font-mono text-xs text-zinc-300">
+                        ${formatCompactNumber(video.views || 0)}
+                    </td>
+                    <td class="px-5 py-3.5 text-center whitespace-nowrap">
+                        <div class="flex items-center justify-center gap-1">
+                            <button onclick="openEditVideoModal('${video.id}')" title="Edit video metadata in Firestore"
+                                    class="text-zinc-400 hover:text-white hover:bg-zinc-800 p-2 rounded-lg transition cursor-pointer">
+                                <i class="fas fa-edit text-xs"></i>
+                            </button>
+                            <a href="watch.html?id=${video.id}" target="_blank" title="Watch video"
+                               class="text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 p-2 rounded-lg transition cursor-pointer inline-block">
+                                <i class="fas fa-external-link-alt text-xs"></i>
+                            </a>
+                            <button onclick="deleteVideoHandler('${video.id}')" title="Delete video from Firestore"
+                                    class="text-zinc-500 hover:text-red-400 hover:bg-red-500/10 p-2 rounded-lg transition cursor-pointer">
+                                <i class="fas fa-trash-alt text-xs"></i>
+                            </button>
+                        </div>
                     </td>
                 </tr>
             `;
@@ -354,6 +387,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
+    // Content Type filter dropdown listener
+    if (typeFilter) {
+        typeFilter.addEventListener("change", () => {
+            renderAdminVideosTable();
+        });
+    }
+
     // Bulk Delete Selected from Firestore Button Listener
     if (btnDeleteSelected) {
         btnDeleteSelected.addEventListener("click", async () => {
@@ -408,7 +448,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function loadAdminDashboard() {
         tableBody.innerHTML = `
             <tr>
-                <td colspan="5" class="text-center py-10 text-zinc-400">
+                <td colspan="6" class="text-center py-10 text-zinc-400">
                     <i class="fas fa-spinner fa-spin mr-2"></i> Loading videos...
                 </td>
             </tr>`;
@@ -416,11 +456,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         await loadChannelsForAdmin();
         adminVideos = await getVideos();
         const count = adminVideos.length;
-        videoCount.textContent = count;
-        sidebarVideoCount.textContent = count;
+        if (videoCount) videoCount.textContent = count;
+        if (sidebarVideoCount) sidebarVideoCount.textContent = count;
 
         renderAdminVideosTable();
         await loadCategoriesForAdmin();
+
+        const channels = await getChannels();
+        const categories = await getCategories();
+        await loadOverviewAnalytics(adminVideos, channels, categories, cachedUsersList);
     }
 
     // Categories Logic
@@ -482,6 +526,68 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     };
 
+    // Auto-fill video details from YouTube
+    const btnAutofillUpload = document.getElementById("btn-autofill-upload");
+    if (btnAutofillUpload) {
+        btnAutofillUpload.addEventListener("click", async () => {
+            const urlInput = document.getElementById("v-url");
+            const url = (urlInput ? urlInput.value : "").trim();
+            if (!url) {
+                alert("Please paste a YouTube URL into the Video URL field first.");
+                if (urlInput) urlInput.focus();
+                return;
+            }
+
+            let ytId = typeof getYoutubeId === 'function' ? getYoutubeId(url) : null;
+            if (!ytId) {
+                const match = url.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/);
+                ytId = (match && match[2].length === 11) ? match[2] : null;
+            }
+            if (!ytId) {
+                alert("Could not detect a valid 11-character YouTube video ID from that link.");
+                return;
+            }
+
+            const originalHtml = btnAutofillUpload.innerHTML;
+            btnAutofillUpload.disabled = true;
+            btnAutofillUpload.innerHTML = '<i class="fas fa-spinner fa-spin text-[10px]"></i><span>Fetching...</span>';
+
+            try {
+                // High-res YouTube thumbnail
+                const thumbInput = document.getElementById("v-thumbnail");
+                if (thumbInput) thumbInput.value = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+
+                // Query oEmbed
+                const oembedRes = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${ytId}`);
+                if (oembedRes.ok) {
+                    const oembed = await oembedRes.json();
+                    if (oembed.title) {
+                        const titleInput = document.getElementById("v-title");
+                        if (titleInput && !titleInput.value) titleInput.value = oembed.title;
+
+                        if (oembed.title.toLowerCase().includes("#short") || oembed.title.toLowerCase().includes("#shorts")) {
+                            const isShortSelect = document.getElementById("v-is-short");
+                            if (isShortSelect) isShortSelect.value = "true";
+                        }
+                    }
+                    if (oembed.author_name) {
+                        const chInput = document.getElementById("v-channel");
+                        if (chInput && !chInput.value) chInput.value = oembed.author_name;
+                    }
+                }
+                btnAutofillUpload.innerHTML = '<i class="fas fa-check text-[10px] text-green-400"></i><span>Auto-Filled!</span>';
+                setTimeout(() => {
+                    btnAutofillUpload.disabled = false;
+                    btnAutofillUpload.innerHTML = originalHtml;
+                }, 2500);
+            } catch (err) {
+                console.warn("Autofill notice:", err);
+                btnAutofillUpload.disabled = false;
+                btnAutofillUpload.innerHTML = originalHtml;
+            }
+        });
+    }
+
     // Upload form submission
     uploadForm.addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -497,6 +603,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         let thumbnail = document.getElementById("v-thumbnail").value.trim();
         let videoUrl = document.getElementById("v-url").value.trim();
         const description = document.getElementById("v-desc").value.trim();
+        const isShortVal = document.getElementById("v-is-short") ? (document.getElementById("v-is-short").value === "true") : false;
 
         if (!thumbnail) {
             thumbnail = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=60";
@@ -546,6 +653,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             description: description || "No description provided.",
             likes: fetchedLikes,
             liked: false,
+            isShort: isShortVal,
             comments: [],
             timestamp: Date.now()
         };
@@ -1088,6 +1196,397 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (refreshUsersBtn) {
         refreshUsersBtn.addEventListener("click", loadAdminUsers);
+    }
+
+    // ===== STUDIO OVERVIEW & ANALYTICS ENGINE =====
+    async function loadOverviewAnalytics(videos, channels, categories, users) {
+        const totalVids = videos ? videos.length : 0;
+        const totalShorts = videos ? videos.filter(v => (typeof isShortVideo === 'function') ? isShortVideo(v) : Boolean(v.isShort)).length : 0;
+        const totalLongform = Math.max(0, totalVids - totalShorts);
+
+        let totalViews = 0;
+        if (videos) {
+            videos.forEach(v => {
+                totalViews += (typeof v.views === 'number' ? v.views : parseInt(v.views || 0) || 0);
+            });
+        }
+
+        const channelKeys = channels ? Object.keys(channels) : [];
+        let totalSubscribers = 0;
+        channelKeys.forEach(k => {
+            const ch = channels[k];
+            totalSubscribers += (typeof ch.subscribers === 'number' ? ch.subscribers : parseInt(ch.subscribers || 0) || 0);
+        });
+
+        const usersCount = (users && users.length) ? users.length : (cachedUsersList ? cachedUsersList.length : 1);
+
+        const elTotalVids = document.getElementById("kpi-total-videos");
+        const elLongform = document.getElementById("kpi-longform-count");
+        const elShorts = document.getElementById("kpi-shorts-count");
+        const elTotalViews = document.getElementById("kpi-total-views");
+        const elTotalChannels = document.getElementById("kpi-total-channels");
+        const elTotalSubs = document.getElementById("kpi-total-subscribers");
+        const elTotalUsers = document.getElementById("kpi-total-users");
+        const elAiAuditTime = document.getElementById("kpi-ai-audit-time");
+
+        if (elTotalVids) elTotalVids.textContent = totalVids;
+        if (elLongform) elLongform.textContent = totalLongform;
+        if (elShorts) elShorts.textContent = totalShorts;
+        if (elTotalViews) elTotalViews.textContent = formatCompactNumber(totalViews);
+        if (elTotalChannels) elTotalChannels.textContent = channelKeys.length;
+        if (elTotalSubs) elTotalSubs.textContent = formatCompactNumber(totalSubscribers);
+        if (elTotalUsers) elTotalUsers.textContent = usersCount;
+
+        if (elAiAuditTime) {
+            const brain = (typeof AIVideoBrain !== 'undefined' && AIVideoBrain.getBrain) ? AIVideoBrain.getBrain() : null;
+            if (brain && brain.lastTrained) {
+                const diffMin = Math.max(1, Math.round((Date.now() - brain.lastTrained) / 60000));
+                elAiAuditTime.textContent = `Audited ${diffMin}m ago`;
+            } else {
+                elAiAuditTime.textContent = "Synced every 10m";
+            }
+        }
+
+        // Category Distribution Progress Bars
+        const catCountMap = {};
+        if (videos) {
+            videos.forEach(v => {
+                const cat = v.category || "Uncategorized";
+                catCountMap[cat] = (catCountMap[cat] || 0) + 1;
+            });
+        }
+
+        const catEntries = Object.entries(catCountMap).sort((a, b) => b[1] - a[1]);
+        const catBarsContainer = document.getElementById("overview-category-bars");
+        const catCountBadge = document.getElementById("overview-category-count");
+        const shortsDensityEl = document.getElementById("overview-shorts-density");
+
+        if (catCountBadge) catCountBadge.textContent = `${catEntries.length} active`;
+        if (shortsDensityEl && totalVids > 0) {
+            shortsDensityEl.textContent = `${Math.round((totalShorts / totalVids) * 100)}%`;
+        }
+
+        if (catBarsContainer) {
+            if (catEntries.length === 0) {
+                catBarsContainer.innerHTML = `<div class="text-xs text-zinc-500 text-center py-6">No categorized videos yet.</div>`;
+            } else {
+                const topCats = catEntries.slice(0, 5);
+                const colorGradients = [
+                    "from-red-500 to-rose-600",
+                    "from-blue-500 to-indigo-600",
+                    "from-purple-500 to-pink-600",
+                    "from-emerald-500 to-teal-600",
+                    "from-amber-500 to-orange-600"
+                ];
+
+                catBarsContainer.innerHTML = topCats.map(([catName, count], idx) => {
+                    const pct = totalVids > 0 ? Math.round((count / totalVids) * 100) : 0;
+                    const grad = colorGradients[idx % colorGradients.length];
+                    return `
+                        <div>
+                            <div class="flex items-center justify-between text-xs mb-1.5">
+                                <span class="text-white font-medium truncate max-w-[180px]">${escapeHtml(catName)}</span>
+                                <span class="text-zinc-400 font-mono text-[11px]">${count} videos (${pct}%)</span>
+                            </div>
+                            <div class="w-full h-2 rounded-full bg-zinc-800 overflow-hidden">
+                                <div class="h-full rounded-full bg-gradient-to-r ${grad} transition-all duration-500" style="width: ${pct}%"></div>
+                            </div>
+                        </div>
+                    `;
+                }).join("");
+            }
+        }
+
+        // Top Performing Videos Leaderboard
+        const topVideosContainer = document.getElementById("overview-top-videos");
+        if (topVideosContainer) {
+            if (!videos || videos.length === 0) {
+                topVideosContainer.innerHTML = `<div class="text-xs text-zinc-500 text-center py-6">No videos available.</div>`;
+            } else {
+                const sortedByViews = [...videos].sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, 5);
+                const rankBadges = [
+                    "bg-yellow-500 text-zinc-950 font-black",
+                    "bg-zinc-300 text-zinc-950 font-black",
+                    "bg-amber-700 text-white font-black",
+                    "bg-zinc-800 text-zinc-400 font-bold",
+                    "bg-zinc-800 text-zinc-400 font-bold"
+                ];
+
+                topVideosContainer.innerHTML = sortedByViews.map((v, i) => {
+                    const badgeClass = rankBadges[i] || "bg-zinc-800 text-zinc-400";
+                    return `
+                        <div class="p-2.5 rounded-xl bg-zinc-900/50 hover:bg-zinc-900 border border-zinc-800/80 flex items-center justify-between gap-3 transition">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <span class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] flex-shrink-0 ${badgeClass}">${i + 1}</span>
+                                <img src="${v.thumbnail}" class="w-14 aspect-video object-cover rounded-lg bg-zinc-800 flex-shrink-0" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=60'">
+                                <div class="min-w-0 truncate">
+                                    <a href="watch.html?id=${v.id}" target="_blank" class="text-xs font-semibold text-white hover:text-red-400 truncate block transition">
+                                        ${escapeHtml(v.title)}
+                                    </a>
+                                    <div class="flex items-center gap-2 text-[11px] text-zinc-500 mt-0.5">
+                                        <span class="truncate">${escapeHtml(v.channel)}</span>
+                                        <span>•</span>
+                                        <span class="bg-zinc-800 px-1.5 py-0.2 rounded text-[10px] text-zinc-400">${escapeHtml(v.category)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3 flex-shrink-0">
+                                <div class="text-right">
+                                    <div class="text-xs font-bold font-mono text-zinc-200">${formatCompactNumber(v.views || 0)}</div>
+                                    <div class="text-[10px] text-zinc-500">views</div>
+                                </div>
+                                <button onclick="openEditVideoModal('${v.id}')" title="Quick Edit" class="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer">
+                                    <i class="fas fa-edit text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join("");
+            }
+        }
+    }
+
+    // ===== OVERVIEW COMMAND ACTIONS =====
+    const btnTriggerAiAudit = document.getElementById("btn-trigger-ai-audit");
+    const btnForceYtSync = document.getElementById("btn-force-yt-sync");
+    const btnExportBackup = document.getElementById("btn-export-backup");
+    const overviewStatusBanner = document.getElementById("overview-status-banner");
+
+    function showOverviewBanner(msg, type = "success") {
+        if (!overviewStatusBanner) return;
+        overviewStatusBanner.classList.remove("hidden");
+        if (type === "success") {
+            overviewStatusBanner.className = "mb-6 p-3.5 rounded-xl text-xs font-semibold flex items-center justify-between bg-green-950/60 border border-green-700/60 text-green-200 transition-all";
+        } else if (type === "error") {
+            overviewStatusBanner.className = "mb-6 p-3.5 rounded-xl text-xs font-semibold flex items-center justify-between bg-red-950/60 border border-red-700/60 text-red-200 transition-all";
+        } else {
+            overviewStatusBanner.className = "mb-6 p-3.5 rounded-xl text-xs font-semibold flex items-center justify-between bg-zinc-800 border border-zinc-700 text-zinc-200 transition-all";
+        }
+        overviewStatusBanner.innerHTML = `
+            <div class="flex items-center space-x-2"><span>${msg}</span></div>
+            <button type="button" onclick="this.parentElement.classList.add('hidden')" class="text-zinc-400 hover:text-white ml-3"><i class="fas fa-times"></i></button>
+        `;
+        if (type !== "loading") {
+            setTimeout(() => {
+                if (overviewStatusBanner) overviewStatusBanner.classList.add("hidden");
+            }, 6000);
+        }
+    }
+
+    if (btnTriggerAiAudit) {
+        btnTriggerAiAudit.addEventListener("click", async () => {
+            try {
+                btnTriggerAiAudit.disabled = true;
+                btnTriggerAiAudit.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Auditing...</span>';
+                showOverviewBanner('<i class="fas fa-spinner fa-spin mr-2"></i>Running autonomous 10-minute AI content audit &amp; catalog retraining...', 'loading');
+
+                if (typeof AIVideoBrain !== 'undefined' && AIVideoBrain.train) {
+                    await AIVideoBrain.train();
+                }
+
+                showOverviewBanner('✓ AI Intelligence Engine audit completed! All video classifications, categories, and brain index updated.', 'success');
+                await loadAdminDashboard();
+            } catch (err) {
+                console.error("AI audit error:", err);
+                showOverviewBanner(`AI audit notice: ${err.message || err}`, 'error');
+            } finally {
+                btnTriggerAiAudit.disabled = false;
+                btnTriggerAiAudit.innerHTML = '<i class="fas fa-brain"></i><span>Run AI Audit</span>';
+            }
+        });
+    }
+
+    if (btnForceYtSync) {
+        btnForceYtSync.addEventListener("click", async () => {
+            try {
+                btnForceYtSync.disabled = true;
+                btnForceYtSync.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Syncing...</span>';
+                showOverviewBanner('<i class="fas fa-spinner fa-spin mr-2"></i>Syncing all configured YouTube channels with Firestore...', 'loading');
+
+                if (typeof autoSyncYouTubeChannels === 'function') {
+                    await autoSyncYouTubeChannels(true);
+                }
+
+                showOverviewBanner('✓ YouTube channels sync complete! Fresh videos pulled from subscribed channels.', 'success');
+                await loadAdminDashboard();
+            } catch (err) {
+                console.error("YT sync error:", err);
+                showOverviewBanner(`YouTube sync notice: ${err.message || err}`, 'error');
+            } finally {
+                btnForceYtSync.disabled = false;
+                btnForceYtSync.innerHTML = '<i class="fas fa-sync-alt"></i><span>Sync YT Channels</span>';
+            }
+        });
+    }
+
+    if (btnExportBackup) {
+        btnExportBackup.addEventListener("click", async () => {
+            try {
+                const videos = await getVideos();
+                const channels = await getChannels();
+                const categories = await getCategories();
+
+                const backupData = {
+                    version: "2.0",
+                    exportedAt: new Date().toISOString(),
+                    videoCount: videos.length,
+                    videos,
+                    channels,
+                    categories
+                };
+
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
+                const downloadAnchor = document.createElement("a");
+                const dateTag = new Date().toISOString().split("T")[0];
+                downloadAnchor.setAttribute("href", dataStr);
+                downloadAnchor.setAttribute("download", `jtube-catalog-backup-${dateTag}.json`);
+                document.body.appendChild(downloadAnchor);
+                downloadAnchor.click();
+                downloadAnchor.remove();
+
+                showOverviewBanner(`✓ Catalog backup downloaded successfully! (${videos.length} videos archived)`, 'success');
+            } catch (err) {
+                console.error("Export backup error:", err);
+                showOverviewBanner(`Failed to export backup: ${err.message || err}`, 'error');
+            }
+        });
+    }
+
+    // ===== EDIT VIDEO MODAL LOGIC =====
+    const editVideoModal = document.getElementById("edit-video-modal");
+    const editVideoForm = document.getElementById("edit-video-form");
+    const closeEditModalBtn = document.getElementById("close-edit-modal-btn");
+    const cancelEditBtn = document.getElementById("cancel-edit-btn");
+    const editVidThumbFetch = document.getElementById("edit-vid-fetch-thumb");
+    const editVidThumbInput = document.getElementById("edit-vid-thumbnail");
+    const editVidThumbPreview = document.getElementById("edit-vid-thumb-preview");
+    const editVidStatus = document.getElementById("edit-vid-status");
+
+    function closeEditModal() {
+        if (editVideoModal) {
+            editVideoModal.classList.add("hidden");
+            editVideoModal.classList.remove("flex");
+        }
+        if (editVidStatus) editVidStatus.classList.add("hidden");
+    }
+
+    if (closeEditModalBtn) closeEditModalBtn.addEventListener("click", closeEditModal);
+    if (cancelEditBtn) cancelEditBtn.addEventListener("click", closeEditModal);
+    if (editVideoModal) {
+        editVideoModal.addEventListener("click", (e) => {
+            if (e.target === editVideoModal) closeEditModal();
+        });
+    }
+
+    if (editVidThumbInput && editVidThumbPreview) {
+        editVidThumbInput.addEventListener("input", () => {
+            const url = editVidThumbInput.value.trim();
+            if (url) editVidThumbPreview.src = url;
+        });
+    }
+
+    if (editVidThumbFetch) {
+        editVidThumbFetch.addEventListener("click", () => {
+            const url = document.getElementById("edit-vid-url").value.trim();
+            let ytId = typeof getYoutubeId === 'function' ? getYoutubeId(url) : null;
+            if (!ytId) {
+                const match = url.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/);
+                ytId = (match && match[2].length === 11) ? match[2] : null;
+            }
+            if (ytId) {
+                const thumbUrl = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+                if (editVidThumbInput) editVidThumbInput.value = thumbUrl;
+                if (editVidThumbPreview) editVidThumbPreview.src = thumbUrl;
+            } else {
+                alert("Please provide a valid YouTube URL first to generate thumbnail.");
+            }
+        });
+    }
+
+    window.openEditVideoModal = function(videoId) {
+        const video = adminVideos.find(v => v.id === videoId);
+        if (!video) {
+            alert("Video could not be located in current catalog.");
+            return;
+        }
+
+        document.getElementById("edit-vid-id").value = video.id;
+        document.getElementById("edit-vid-title").value = video.title || "";
+        document.getElementById("edit-vid-category").value = video.category || "";
+        document.getElementById("edit-vid-duration").value = video.duration || "";
+        document.getElementById("edit-vid-channel").value = video.channel || "";
+        document.getElementById("edit-vid-url").value = video.videoUrl || "";
+        document.getElementById("edit-vid-playlist").value = video.playlist || "";
+        document.getElementById("edit-vid-thumbnail").value = video.thumbnail || "";
+        if (editVidThumbPreview) editVidThumbPreview.src = video.thumbnail || "";
+        
+        const isShort = (typeof isShortVideo === 'function') ? isShortVideo(video) : Boolean(video.isShort);
+        document.getElementById("edit-vid-isshort").value = isShort ? "true" : "false";
+        document.getElementById("edit-vid-views").value = video.views || 0;
+        document.getElementById("edit-vid-likes").value = video.likes || 0;
+        document.getElementById("edit-vid-desc").value = video.description || "";
+
+        if (editVidStatus) editVidStatus.classList.add("hidden");
+
+        if (editVideoModal) {
+            editVideoModal.classList.remove("hidden");
+            editVideoModal.classList.add("flex");
+        }
+    };
+
+    if (editVideoForm) {
+        editVideoForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const id = document.getElementById("edit-vid-id").value;
+            const existing = adminVideos.find(v => v.id === id) || {};
+
+            const updatedVideo = {
+                ...existing,
+                id,
+                title: document.getElementById("edit-vid-title").value.trim(),
+                category: document.getElementById("edit-vid-category").value.trim(),
+                duration: document.getElementById("edit-vid-duration").value.trim(),
+                channel: document.getElementById("edit-vid-channel").value.trim(),
+                videoUrl: document.getElementById("edit-vid-url").value.trim(),
+                playlist: document.getElementById("edit-vid-playlist").value.trim(),
+                thumbnail: document.getElementById("edit-vid-thumbnail").value.trim() || existing.thumbnail || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=60",
+                isShort: document.getElementById("edit-vid-isshort").value === "true",
+                views: parseInt(document.getElementById("edit-vid-views").value || "0"),
+                likes: parseInt(document.getElementById("edit-vid-likes").value || "0"),
+                description: document.getElementById("edit-vid-desc").value.trim(),
+                timestamp: existing.timestamp || Date.now()
+            };
+
+            const saveBtn = document.getElementById("save-edit-btn");
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Saving...</span>';
+            }
+
+            try {
+                await saveVideo(updatedVideo);
+                if (editVidStatus) {
+                    editVidStatus.className = "text-xs font-bold p-3 rounded-xl bg-green-950/70 border border-green-700 text-green-300 block";
+                    editVidStatus.textContent = "✓ Video updated successfully in Cloud Firestore!";
+                }
+                setTimeout(async () => {
+                    closeEditModal();
+                    await loadAdminDashboard();
+                    showActionStatus(`✓ Video "${updatedVideo.title}" was saved to Firestore.`, "success");
+                }, 800);
+            } catch (err) {
+                console.error("Save edit video error:", err);
+                if (editVidStatus) {
+                    editVidStatus.className = "text-xs font-bold p-3 rounded-xl bg-red-950/70 border border-red-700 text-red-300 block";
+                    editVidStatus.textContent = `Failed to save changes: ${err.message || err}`;
+                }
+            } finally {
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = '<i class="fas fa-save"></i><span>Save to Firestore</span>';
+                }
+            }
+        });
     }
 
     // Do NOT auto-load dashboard on page load (loads after login)

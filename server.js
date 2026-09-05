@@ -138,12 +138,12 @@ function trainAIBrain(videoList) {
   };
 }
 
-// Train cycle timer every 5 minutes (300,000 ms)
+// Train cycle timer every 10 minutes (600,000 ms)
 setInterval(() => {
-  console.log('[AI Video Brain] Running scheduled 5-minute automated knowledge refresh...');
+  console.log('[AI Video Brain] Running scheduled 10-minute automated knowledge refresh...');
   // The client synchronizer posts latest catalog; if empty, state timestamp is renewed
   AIBrainState.lastTrained = Date.now();
-}, 5 * 60 * 1000);
+}, 10 * 60 * 1000);
 
 // ===== COMPREHENSIVE MULTILINGUAL ABUSE FILTER =====
 const ABUSE_REGEX_PATTERNS = [
@@ -180,21 +180,21 @@ function checkAbusiveContent(text) {
 
 // ===== API ROUTES =====
 
-// 1. Get AI Brain Training Status
+// 1. Get AI Brain Training Status (10-minute cycle)
 app.get('/api/ai/brain-status', (req, res) => {
-  const nextTrainingInSec = Math.max(0, Math.round((AIBrainState.lastTrained + 300000 - Date.now()) / 1000));
+  const nextTrainingInSec = Math.max(0, Math.round((AIBrainState.lastTrained + 600000 - Date.now()) / 1000));
   res.json({
     status: 'online',
     lastTrained: AIBrainState.lastTrained,
     videoCount: AIBrainState.videoCount,
     categories: AIBrainState.categoryCounts,
     nextTrainingInSec,
-    intervalMinutes: 5,
+    intervalMinutes: 10,
     isTraining: AIBrainState.isTraining
   });
 });
 
-// 2. Train AI Brain with Video Catalog (every 5 minutes or on-demand)
+// 2. Train AI Brain with Video Catalog (every 10 minutes or on-demand)
 app.post('/api/ai/train', (req, res) => {
   const { videos } = req.body || {};
   if (Array.isArray(videos) && videos.length > 0) {

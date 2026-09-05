@@ -163,86 +163,98 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     // ===== VIDEOS TAB =====
-    const videos = await getVideosByChannel(channelNameParam);
-    channelVideoCount.textContent = `${videos.length} video${videos.length !== 1 ? 's' : ''}`;
+    async function renderChannelVideosTab() {
+        const videos = await getVideosByChannel(channelNameParam);
+        channelVideoCount.textContent = `${videos.length} video${videos.length !== 1 ? 's' : ''}`;
 
-    if (videos.length === 0) {
-        channelVideos.innerHTML = `<p class="col-span-full text-zinc-500 py-4">No videos found for this channel.</p>`;
-    } else {
-        channelVideos.innerHTML = "";
-        const fragment = document.createDocumentFragment();
-        videos.forEach(video => {
-            const ytId = getYoutubeId(video.videoUrl);
-            const isShort = isShortVideo(video);
-            const effectiveLikes = typeof getEffectiveLikes === 'function' ? getEffectiveLikes(video) : (video.likes || 0);
-            const subCount = typeof getEffectiveSubscribers === 'function' ? getEffectiveSubscribers(currentChannelData) : (currentChannelData.subscribers || 0);
+        if (videos.length === 0) {
+            channelVideos.innerHTML = `<p class="col-span-full text-zinc-500 py-4">No videos found for this channel.</p>`;
+        } else {
+            channelVideos.innerHTML = "";
+            const fragment = document.createDocumentFragment();
+            videos.forEach(video => {
+                const ytId = getYoutubeId(video.videoUrl);
+                const isShort = isShortVideo(video);
+                const effectiveLikes = typeof getEffectiveLikes === 'function' ? getEffectiveLikes(video) : (video.likes || 0);
 
-            const card = document.createElement('div');
-            card.className = "cursor-pointer group relative video-card-custom bg-zinc-800 rounded-xl pb-3 h-full flex flex-col";
-            card.onclick = () => location.href = isShort ? `shorts.html?id=${video.id}` : `watch.html?id=${video.id}`;
+                const card = document.createElement('div');
+                card.className = "cursor-pointer group relative video-card-custom bg-zinc-800 rounded-xl pb-3 h-full flex flex-col";
+                card.onclick = () => location.href = isShort ? `shorts.html?id=${video.id}` : `watch.html?id=${video.id}`;
 
-            const durationBadge = isShort
-                ? `<span class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-xs font-bold z-30 bg-red-600 text-white flex items-center gap-1 shadow"><i class="fas fa-bolt text-[9px]"></i> Shorts • ${video.duration}</span>`
-                : `<span class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-xs font-semibold z-30 ${getDurationBadgeClass(video.duration)}">${video.duration}</span>`;
+                const durationBadge = isShort
+                    ? `<span class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-xs font-bold z-30 bg-red-600 text-white flex items-center gap-1 shadow"><i class="fas fa-bolt text-[9px]"></i> Shorts • ${video.duration}</span>`
+                    : `<span class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-xs font-semibold z-30 ${getDurationBadgeClass(video.duration)}">${video.duration}</span>`;
 
-            card.innerHTML = `
-                <div class="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-2">
-                    <img src="${video.thumbnail}" alt="${video.title.replace(/"/g, '&quot;')}" class="w-full h-full object-cover group-hover:scale-105 transition duration-200" loading="lazy" decoding="async">
-                    <div class="video-preview-container absolute inset-0 w-full h-full bg-black z-20 pointer-events-none hidden"></div>
-                    <div class="play-icon-overlay absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-200 z-10">
-                        <div class="w-12 h-12 ${isShort ? 'bg-red-600' : 'bg-red-600/90'} rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 scale-75 group-hover:scale-100 shadow-lg">
-                            <i class="fas ${isShort ? 'fa-bolt text-sm' : 'fa-play text-sm ml-0.5'} text-white"></i>
+                card.innerHTML = `
+                    <div class="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-2">
+                        <img src="${video.thumbnail}" alt="${video.title.replace(/"/g, '&quot;')}" class="w-full h-full object-cover group-hover:scale-105 transition duration-200" loading="lazy" decoding="async">
+                        <div class="video-preview-container absolute inset-0 w-full h-full bg-black z-20 pointer-events-none hidden"></div>
+                        <div class="play-icon-overlay absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-200 z-10">
+                            <div class="w-12 h-12 ${isShort ? 'bg-red-600' : 'bg-red-600/90'} rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 scale-75 group-hover:scale-100 shadow-lg">
+                                <i class="fas ${isShort ? 'fa-bolt text-sm' : 'fa-play text-sm ml-0.5'} text-white"></i>
+                            </div>
+                        </div>
+                        ${durationBadge}
+                    </div>
+                    <div class="px-3 flex-1 flex flex-col justify-between">
+                        <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
+                        <div class="flex items-center flex-wrap gap-x-2 gap-y-0.5 text-xs text-zinc-400 mt-1.5">
+                            <span>${formatCompactNumber(video.views || 0)} views</span>
+                            <span>•</span>
+                            <span class="inline-flex items-center gap-1 text-zinc-300 font-medium"><i class="far fa-thumbs-up text-[10px] text-red-400"></i> ${formatCompactNumber(effectiveLikes)}</span>
+                            <span>•</span>
+                            <span>${timeAgo(video.timestamp)}</span>
                         </div>
                     </div>
-                    ${durationBadge}
-                </div>
-                <div class="px-3 flex-1 flex flex-col justify-between">
-                    <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
-                    <div class="flex items-center flex-wrap gap-x-2 gap-y-0.5 text-xs text-zinc-400 mt-1.5">
-                        <span>${formatCompactNumber(video.views || 0)} views</span>
-                        <span>•</span>
-                        <span class="inline-flex items-center gap-1 text-zinc-300 font-medium"><i class="far fa-thumbs-up text-[10px] text-red-400"></i> ${formatCompactNumber(effectiveLikes)}</span>
-                        <span>•</span>
-                        <span>${timeAgo(video.timestamp)}</span>
-                    </div>
-                </div>
-            `;
-            
-            // Hover to play and prefetch for instant loading
-            let hoverTimeout;
-            card.addEventListener('mouseenter', () => {
-                hoverTimeout = setTimeout(() => {
-                    if (ytId) {
-                        const previewContainer = card.querySelector('.video-preview-container');
-                        if (previewContainer.innerHTML === '') {
-                            previewContainer.innerHTML = `<iframe class='w-full h-full pointer-events-none' src='https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&controls=0&modestbranding=1&showinfo=0' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe>`;
+                `;
+                
+                // Hover to play and prefetch for instant loading
+                let hoverTimeout;
+                card.addEventListener('mouseenter', () => {
+                    hoverTimeout = setTimeout(() => {
+                        if (ytId) {
+                            const previewContainer = card.querySelector('.video-preview-container');
+                            if (previewContainer.innerHTML === '') {
+                                previewContainer.innerHTML = `<iframe class='w-full h-full pointer-events-none' src='https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&controls=0&modestbranding=1&showinfo=0' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe>`;
+                            }
+                            previewContainer.classList.remove('hidden');
+                            card.querySelector('.play-icon-overlay').classList.add('hidden');
                         }
-                        previewContainer.classList.remove('hidden');
-                        card.querySelector('.play-icon-overlay').classList.add('hidden');
+                        if (!document.querySelector(`link[href="watch.html?id=${video.id}"]`)) {
+                            const link = document.createElement('link');
+                            link.rel = 'prefetch';
+                            link.href = `watch.html?id=${video.id}`;
+                            document.head.appendChild(link);
+                        }
+                    }, 400);
+                });
+                
+                card.addEventListener('mouseleave', () => {
+                    clearTimeout(hoverTimeout);
+                    const previewContainer = card.querySelector('.video-preview-container');
+                    if (previewContainer) {
+                        previewContainer.innerHTML = '';
+                        previewContainer.classList.add('hidden');
                     }
-                    if (!document.querySelector(`link[href="watch.html?id=${video.id}"]`)) {
-                        const link = document.createElement('link');
-                        link.rel = 'prefetch';
-                        link.href = `watch.html?id=${video.id}`;
-                        document.head.appendChild(link);
-                    }
-                }, 400);
+                    const playIcon = card.querySelector('.play-icon-overlay');
+                    if (playIcon) playIcon.classList.remove('hidden');
+                });
+                
+                fragment.appendChild(card);
             });
-            
-            card.addEventListener('mouseleave', () => {
-                clearTimeout(hoverTimeout);
-                const previewContainer = card.querySelector('.video-preview-container');
-                if (previewContainer) {
-                    previewContainer.innerHTML = '';
-                    previewContainer.classList.add('hidden');
-                }
-                const playIcon = card.querySelector('.play-icon-overlay');
-                if (playIcon) playIcon.classList.remove('hidden');
-            });
-            
-            fragment.appendChild(card);
-        });
-        channelVideos.appendChild(fragment);
+            channelVideos.appendChild(fragment);
+        }
+    }
+
+    await renderChannelVideosTab();
+
+    // Automatically check YouTube for new videos from this channel, save to Firebase first, and update UI
+    if (typeof syncChannelByName === 'function') {
+        syncChannelByName(channelNameParam).then(hasNew => {
+            if (hasNew) {
+                renderChannelVideosTab();
+            }
+        }).catch(err => console.warn("Channel auto-sync:", err));
     }
 
     // ===== PLAYLISTS TAB (YouTube-style) =====

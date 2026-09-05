@@ -23,8 +23,15 @@
 </head>
 <body class="bg-zinc-900 text-white font-sans antialiased">
 
-    <header class="bg-zinc-900 flex items-center px-4 py-3 border-b border-zinc-800">
+    <header class="bg-zinc-900 flex items-center justify-between px-4 py-3 border-b border-zinc-800">
         <a href="index.html" class="flex items-center space-x-1 text-2xl font-black tracking-tighter brand-font"><span class="bg-gradient-to-br from-red-600 to-red-800 text-white px-2.5 py-0.5 rounded-lg shadow-lg shadow-red-600/20">J</span><span class="brand-logo-text">Tube</span></a>
+        
+        <div class="flex items-center space-x-2">
+            <!-- Auto/System Theme Toggle (Dark Primary Default) -->
+            <button class="theme-toggle-btn p-2 hover:bg-zinc-800 rounded-full text-zinc-300 hover:text-white transition" title="Toggle Theme (Auto System / Dark / Light)">
+                <i class="fas fa-moon theme-icon"></i>
+            </button>
+        </div>
     </header>
 
     <!-- Video Loading Screen -->
@@ -55,6 +62,11 @@
 
             <div id="video-container" class="w-full bg-black rounded-2xl overflow-hidden aspect-video shadow-lg relative">
                 <video id="video-player" controls class="w-full h-full" autoplay src=""></video>
+                <!-- On-Screen HUD feedback for keyboard shortcuts & controls -->
+                <div id="player-hud" class="player-feedback-hud">
+                    <i id="player-hud-icon" class="fas fa-play"></i>
+                    <span id="player-hud-text">Play</span>
+                </div>
             </div>
 
             <!-- Interactive Quick Controls Deck (Sound, Resolution, Seek/Scrub) -->
@@ -79,34 +91,34 @@
                     </div>
                 </div>
 
-                <!-- Secondary Action Buttons: Play/Pause, -10s, +10s, Sound/Volume, Resolution Selector, Speed, Fullscreen -->
+                <!-- Secondary Action Buttons: Play/Pause, -10s, +10s, Sound/Volume, Resolution Selector, Speed, Shortcuts, Fullscreen -->
                 <div class="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-zinc-800/80">
                     
                     <!-- Left: Play/Pause & Fast Seek -10s / +10s -->
                     <div class="flex items-center space-x-2">
-                        <button id="ctrl-play-pause-btn" class="w-9 h-9 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white flex items-center justify-center transition" title="Play / Pause">
+                        <button id="ctrl-play-pause-btn" class="w-9 h-9 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white flex items-center justify-center transition" title="Play / Pause (Space / K)">
                             <i id="ctrl-play-icon" class="fas fa-play text-xs"></i>
                         </button>
 
-                        <button id="ctrl-rewind-10" class="w-8 h-8 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center text-xs transition" title="Rewind 10 seconds">
+                        <button id="ctrl-rewind-10" class="w-8 h-8 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center text-xs transition" title="Rewind 10 seconds (J / Left Arrow)">
                             <span class="font-mono text-[10px] font-bold">-10s</span>
                         </button>
-                        <button id="ctrl-forward-10" class="w-8 h-8 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center text-xs transition" title="Forward 10 seconds">
+                        <button id="ctrl-forward-10" class="w-8 h-8 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center text-xs transition" title="Forward 10 seconds (L / Right Arrow)">
                             <span class="font-mono text-[10px] font-bold">+10s</span>
                         </button>
                     </div>
 
                     <!-- Middle: Sound / Volume Slider -->
                     <div class="flex items-center space-x-2 bg-zinc-800/50 rounded-xl px-2.5 py-1 border border-zinc-800">
-                        <button id="ctrl-volume-btn" class="text-zinc-300 hover:text-white transition w-5 flex items-center justify-center" title="Mute / Unmute">
+                        <button id="ctrl-volume-btn" class="text-zinc-300 hover:text-white transition w-5 flex items-center justify-center" title="Mute / Unmute (M)">
                             <i id="ctrl-volume-icon" class="fas fa-volume-up text-xs"></i>
                         </button>
                         <input type="range" id="ctrl-volume-slider" min="0" max="100" value="100" 
-                               class="w-16 sm:w-20 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-red-600 focus:outline-none" title="Volume">
+                               class="w-16 sm:w-20 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-red-600 focus:outline-none" title="Volume (Up/Down Arrow)">
                         <span id="ctrl-volume-label" class="text-[10px] font-mono text-zinc-400 w-6 text-right">100%</span>
                     </div>
 
-                    <!-- Right: Resolution Switcher & Speed & Fullscreen -->
+                    <!-- Right: Resolution Switcher & Speed & Shortcuts & Fullscreen -->
                     <div class="flex items-center space-x-2">
                         
                         <!-- Resolution Selector (রেজুলেশন) -->
@@ -157,8 +169,13 @@
                             </div>
                         </div>
 
-                        <!-- Fullscreen -->
-                        <button id="ctrl-fullscreen-btn" class="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center text-xs transition" title="Toggle Fullscreen">
+                        <!-- Keyboard Shortcuts Guide Button -->
+                        <button id="ctrl-shortcuts-btn" class="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center text-xs transition" title="Keyboard Shortcuts (?)">
+                            <i class="fas fa-keyboard"></i>
+                        </button>
+
+                        <!-- Fullscreen (F) -->
+                        <button id="ctrl-fullscreen-btn" class="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center text-xs transition" title="Toggle Fullscreen (F)">
                             <i class="fas fa-expand"></i>
                         </button>
                     </div>
@@ -185,6 +202,14 @@
                 </div>
 
                 <div class="flex items-center space-x-2 flex-wrap gap-y-2">
+                    <!-- Engagement & Watch Time Tracking Badge -->
+                    <div id="player-watch-engagement-badge" class="inline-flex items-center gap-1.5 bg-zinc-800/90 border border-zinc-700/60 rounded-full px-3 py-1.5 text-xs text-zinc-300 shadow-sm" title="Your watch time engagement on JTube">
+                        <i class="fas fa-stopwatch text-amber-400"></i>
+                        <span id="player-this-video-time" class="font-medium text-white">Watching: 0s</span>
+                        <span class="text-zinc-600">•</span>
+                        <span id="player-total-watch-time" class="text-emerald-400 font-mono">0m total</span>
+                    </div>
+
                     <button id="like-btn" class="bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold px-4 py-2 rounded-full flex items-center space-x-2 transition">
                         <i class="far fa-thumbs-up"></i> <span id="like-count">0</span>
                     </button>
@@ -350,6 +375,54 @@
                 <button id="ask-jask-more-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition flex items-center gap-1.5 shadow">
                     <i class="fas fa-robot text-xs"></i> Ask JAsk More
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Guide Modal -->
+    <div id="shortcuts-modal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 hidden backdrop-blur-sm p-4">
+        <div class="bg-zinc-900 border border-zinc-700 p-6 rounded-2xl w-full max-w-md shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-zinc-800 pb-3">
+                <h3 class="font-bold text-white flex items-center gap-2">
+                    <i class="fas fa-keyboard text-red-500"></i> Keyboard Playback Shortcuts
+                </h3>
+                <button id="close-shortcuts-modal" class="text-zinc-400 hover:text-white transition w-8 h-8 rounded-lg hover:bg-zinc-800 flex items-center justify-center">
+                    <i class="fas fa-times text-sm"></i>
+                </button>
+            </div>
+            <div class="space-y-2.5 text-xs">
+                <div class="flex justify-between items-center py-1 border-b border-zinc-800/50">
+                    <span class="text-zinc-300">Play / Pause</span>
+                    <div class="space-x-1"><kbd class="px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-200 font-mono text-[11px]">Space</kbd> or <kbd class="px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-200 font-mono text-[11px]">K</kbd></div>
+                </div>
+                <div class="flex justify-between items-center py-1 border-b border-zinc-800/50">
+                    <span class="text-zinc-300">Seek 5s (Rewind / Fast-forward)</span>
+                    <div class="space-x-1"><kbd class="px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-200 font-mono text-[11px]">←</kbd><kbd class="px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-200 font-mono text-[11px]">→</kbd></div>
+                </div>
+                <div class="flex justify-between items-center py-1 border-b border-zinc-800/50">
+                    <span class="text-zinc-300">Seek 10s (Rewind / Fast-forward)</span>
+                    <div class="space-x-1"><kbd class="px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-200 font-mono text-[11px]">J</kbd><kbd class="px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-200 font-mono text-[11px]">L</kbd></div>
+                </div>
+                <div class="flex justify-between items-center py-1 border-b border-zinc-800/50">
+                    <span class="text-zinc-300">Volume Up / Down</span>
+                    <div class="space-x-1"><kbd class="px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-200 font-mono text-[11px]">↑</kbd><kbd class="px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-200 font-mono text-[11px]">↓</kbd></div>
+                </div>
+                <div class="flex justify-between items-center py-1 border-b border-zinc-800/50">
+                    <span class="text-zinc-300">Mute / Unmute</span>
+                    <kbd class="px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-200 font-mono text-[11px]">M</kbd>
+                </div>
+                <div class="flex justify-between items-center py-1 border-b border-zinc-800/50">
+                    <span class="text-zinc-300">Toggle Fullscreen</span>
+                    <kbd class="px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-200 font-mono text-[11px]">F</kbd>
+                </div>
+                <div class="flex justify-between items-center py-1 border-b border-zinc-800/50">
+                    <span class="text-zinc-300">Jump to 0% .. 90%</span>
+                    <kbd class="px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-200 font-mono text-[11px]">0 .. 9</kbd>
+                </div>
+                <div class="flex justify-between items-center py-1">
+                    <span class="text-zinc-300">Open this help window</span>
+                    <kbd class="px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-200 font-mono text-[11px]">?</kbd>
+                </div>
             </div>
         </div>
     </div>
