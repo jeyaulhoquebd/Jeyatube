@@ -206,12 +206,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Track active category
     let currentCategory = "all";
 
-    // Listen for background updates from Firestore to keep UI fresh
-    document.addEventListener('jtube:videosUpdated', () => {
-        if (currentCategory === "all" && searchResultsSection && searchResultsSection.classList.contains("hidden")) {
-            renderVideos("all");
-        }
-    });
+    // Categories & channels listeners (do not auto-reload video feed)
     document.addEventListener('jtube:categoriesUpdated', () => {
         renderCategories();
     });
@@ -987,16 +982,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     });
 
-    // Listen to AI Brain 10-minute check events & new Firestore videos to refresh Shorts & videos
-    window.addEventListener('aiBrainUpdated', () => {
-        renderShortsShelf();
-    });
-    document.addEventListener('jtube:videosUpdated', () => {
-        renderShortsShelf();
-        renderVideos(currentCategory);
-    });
-
-    // Render videos immediately without blocking on other elements
+    // Render videos on page load (videos will not auto-reload; reload browser to fetch fresh videos)
     renderVideos("all");
     renderCategories();
     renderSidebarChannels();

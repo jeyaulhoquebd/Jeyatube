@@ -162,9 +162,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
+    let currentChannelVideos = [];
+
     // ===== VIDEOS TAB =====
     async function renderChannelVideosTab() {
         const videos = await getVideosByChannel(channelNameParam);
+        currentChannelVideos = videos;
         channelVideoCount.textContent = `${videos.length} video${videos.length !== 1 ? 's' : ''}`;
 
         if (videos.length === 0) {
@@ -244,70 +247,70 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
             channelVideos.appendChild(fragment);
         }
-    }
-
-    await renderChannelVideosTab();
-
-    // Automatically check YouTube for new videos from this channel, save to Firebase first, and update UI
-    if (typeof syncChannelByName === 'function') {
-        syncChannelByName(channelNameParam).then(hasNew => {
-            if (hasNew) {
-                renderChannelVideosTab();
-            }
-        }).catch(err => console.warn("Channel auto-sync:", err));
+        return videos;
     }
 
     // ===== PLAYLISTS TAB (YouTube-style) =====
-    // Group videos by playlist name for this channel
-    const playlistsMap = {};
-    videos.forEach(video => {
-        if (video.playlist && video.playlist.trim() !== "") {
-            const plName = video.playlist.trim();
-            if (!playlistsMap[plName]) {
-                playlistsMap[plName] = [];
+    function renderChannelPlaylistsTab(videos) {
+        if (!channelPlaylists) return;
+        const playlistsMap = {};
+        (videos || []).forEach(video => {
+            if (video.playlist && video.playlist.trim() !== "") {
+                const plName = video.playlist.trim();
+                if (!playlistsMap[plName]) {
+                    playlistsMap[plName] = [];
+                }
+                playlistsMap[plName].push(video);
             }
-            playlistsMap[plName].push(video);
-        }
-    });
+        });
 
-    const playlistNames = Object.keys(playlistsMap);
+        const playlistNames = Object.keys(playlistsMap);
 
-    if (playlistNames.length === 0) {
-        channelPlaylists.innerHTML = `<p class="col-span-full text-zinc-500 py-4">This channel has no playlists yet.</p>`;
-    } else {
-        channelPlaylists.innerHTML = "";
-        // Store playlists on window for onclick access
-        window._channelPlaylists = playlistsMap;
+        if (playlistNames.length === 0) {
+            channelPlaylists.innerHTML = `<p class="col-span-full text-zinc-500 py-4">This channel has no playlists yet.</p>`;
+        } else {
+            channelPlaylists.innerHTML = "";
+            // Store playlists on window for onclick access
+            window._channelPlaylists = playlistsMap;
 
-        playlistNames.forEach(plName => {
-            const plVideos = playlistsMap[plName];
-            const firstVideo = plVideos[0];
-            const count = plVideos.length;
+            playlistNames.forEach(plName => {
+                const plVideos = playlistsMap[plName];
+                const firstVideo = plVideos[0];
+                const count = plVideos.length;
 
-            channelPlaylists.innerHTML += `
-                <div class="playlist-card group" onclick="openChannelPlaylist('${plName.replace(/'/g, "\\'")}')">
-                    <div class="playlist-stack mb-4 mt-3 mx-2">
-                        <div class="playlist-thumb relative">
-                            <img src="${firstVideo.thumbnail}" alt="${plName}" class="w-full h-full object-cover" loading="lazy">
-                            <div class="playlist-count-badge">
-                                <i class="fas fa-list text-base text-white"></i>
-                                <span class="text-xs font-bold text-white">${count} video${count !== 1 ? 's' : ''}</span>
-                            </div>
-                            <div class="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition flex items-center justify-center">
-                                <i class="fas fa-play text-2xl text-white opacity-0 group-hover:opacity-100 transition drop-shadow-lg"></i>
+                channelPlaylists.innerHTML += `
+                    <div class="playlist-card group" onclick="openChannelPlaylist('${plName.replace(/'/g, "\\'")}')">
+                        <div class="playlist-stack mb-4 mt-3 mx-2">
+                            <div class="playlist-thumb relative">
+                                <img src="${firstVideo.thumbnail}" alt="${plName}" class="w-full h-full object-cover" loading="lazy">
+                                <div class="playlist-count-badge">
+                                    <i class="fas fa-list text-base text-white"></i>
+                                    <span class="text-xs font-bold text-white">${count} video${count !== 1 ? 's' : ''}</span>
+                                </div>
+                                <div class="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition flex items-center justify-center">
+                                    <i class="fas fa-play text-2xl text-white opacity-0 group-hover:opacity-100 transition drop-shadow-lg"></i>
+                                </div>
                             </div>
                         </div>
+                        <div class="px-3 pb-3">
+                            <h3 class="font-bold text-sm line-clamp-2 text-zinc-100 group-hover:text-white leading-snug">${plName}</h3>
+                            <p class="text-xs text-zinc-500 mt-1">Playlist • ${count} video${count !== 1 ? 's' : ''}</p>
+                            <p class="text-xs text-blue-400 mt-1.5 group-hover:text-blue-300 transition font-medium">
+                                <i class="fas fa-play-circle mr-1"></i>View full playlist
+                            </p>
+                        </div>
                     </div>
-                    <div class="px-3 pb-3">
-                        <h3 class="font-bold text-sm line-clamp-2 text-zinc-100 group-hover:text-white leading-snug">${plName}</h3>
-                        <p class="text-xs text-zinc-500 mt-1">Playlist • ${count} video${count !== 1 ? 's' : ''}</p>
-                        <p class="text-xs text-blue-400 mt-1.5 group-hover:text-blue-300 transition font-medium">
-                            <i class="fas fa-play-circle mr-1"></i>View full playlist
-                        </p>
-                    </div>
-                </div>
-            `;
-        });
+                `;
+            });
+        }
+    }
+
+    const initialChannelVideos = await renderChannelVideosTab();
+    renderChannelPlaylistsTab(initialChannelVideos);
+
+    // Automatically check YouTube for new videos in background (saved for next reload; does not interrupt viewing)
+    if (typeof syncChannelByName === 'function') {
+        syncChannelByName(channelNameParam).catch(err => console.warn("Channel auto-sync:", err));
     }
 
     // ===== PLAYLIST MODAL (opens all videos in that playlist) =====

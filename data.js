@@ -533,7 +533,7 @@ const _cache = {
     channelsTimestamp: Date.now(),
     categories: loadFromStorage('categories', defaultCats),
     categoriesTimestamp: Date.now(),
-    TTL: 180000 // 3 minutes cache TTL
+    TTL: 15 * 60 * 1000 // 15 minutes cache TTL to significantly reduce unnecessary Firestore reads
 };
 
 function isCacheValid(key) {
@@ -677,7 +677,9 @@ async function fetchVideosFromFirestore() {
 async function getVideos() {
     // 1. In-memory cache: return INSTANTLY (0ms)
     if (_cache.videos && _cache.videos.length > 0) {
-        fetchVideosFromFirestore(); // background sync with Firestore
+        if (!isCacheValid('videos')) {
+            fetchVideosFromFirestore(); // background sync with Firestore only when cache has expired
+        }
         return _cache.videos;
     }
     
@@ -686,7 +688,6 @@ async function getVideos() {
     if (stored && stored.length > 0) {
         _cache.videos = stored;
         _cache.videosTimestamp = Date.now();
-        fetchVideosFromFirestore();
         return stored;
     }
 
@@ -821,34 +822,6 @@ async function saveBatchVideos(videosArray) {
     }
 }
 
-// ===== REALTIME FIRESTORE VIDEO LISTENER =====
-let _realtimeVideosUnsubscribe = null;
-function initRealtimeVideoSync() {
-    if (_realtimeVideosUnsubscribe) return;
-    try {
-        _realtimeVideosUnsubscribe = db.collection("videos").orderBy("timestamp", "desc").limit(200).onSnapshot(snapshot => {
-            if (!snapshot || snapshot.empty) return;
-            const fresh = [];
-            snapshot.forEach(doc => {
-                fresh.push(doc.data());
-            });
-            if (fresh.length > 0) {
-                _cache.videos = fresh;
-                _cache.videosTimestamp = Date.now();
-                saveToStorage('videos', fresh);
-                if (typeof document !== 'undefined') {
-                    document.dispatchEvent(new CustomEvent('jtube:videosUpdated', { detail: fresh }));
-                }
-            }
-        }, err => {
-            console.warn("Realtime Firestore listener notice:", err.message || err);
-        });
-    } catch (e) {
-        console.warn("Could not bind realtime listener:", e);
-    }
-}
-initRealtimeVideoSync();
-
 async function deleteVideo(id) {
     if (!id) return;
     // 1. Delete from Firestore
@@ -941,14 +914,15 @@ async function fetchChannelsFromFirestore() {
 
 async function getChannels() {
     if (_cache.channels && Object.keys(_cache.channels).length > 0) {
-        fetchChannelsFromFirestore();
+        if (!isCacheValid('channels')) {
+            fetchChannelsFromFirestore();
+        }
         return _cache.channels;
     }
     const stored = loadFromStorage('channels', null);
     if (stored && Object.keys(stored).length > 0) {
         _cache.channels = stored;
         _cache.channelsTimestamp = Date.now();
-        fetchChannelsFromFirestore();
         return stored;
     }
     if (initialChannels && Object.keys(initialChannels).length > 0) {
@@ -1109,14 +1083,15 @@ async function fetchCategoriesFromFirestore() {
 
 async function getCategories() {
     if (_cache.categories && _cache.categories.length > 0) {
-        fetchCategoriesFromFirestore();
+        if (!isCacheValid('categories')) {
+            fetchCategoriesFromFirestore();
+        }
         return _cache.categories;
     }
     const stored = loadFromStorage('categories', null);
     if (stored && stored.length > 0) {
         _cache.categories = stored;
         _cache.categoriesTimestamp = Date.now();
-        fetchCategoriesFromFirestore();
         return stored;
     }
     if (defaultCats && defaultCats.length > 0) {
@@ -1299,7 +1274,7 @@ if (!sessionStorage.getItem('jtube_db_init')) {
 }
 
 // ===== AUTO-SYNC YOUTUBE CHANNELS & STATS =====
-async function syncChannelByName(channelName, force = true) {
+async function syncChannelByName(channelName, force = false) {
     const apiKey = typeof ENV !== 'undefined' ? ENV.YOUTUBE_API_KEY : null;
     if (!apiKey || !channelName) return false;
 
@@ -1307,6 +1282,12 @@ async function syncChannelByName(channelName, force = true) {
         const channels = await getChannels();
         const data = channels[channelName];
         if (!data) return false;
+
+        // Skip if synced recently (within 15 minutes) unless explicitly forced
+        const now = Date.now();
+        if (!force && data.lastSyncTime && (now - data.lastSyncTime < 15 * 60 * 1000)) {
+            return false;
+        }
 
         let playlistId = data.ytPlaylistId;
         let ytChannelId = data.ytChannelId;
@@ -1430,7 +1411,7 @@ async function autoSyncYouTubeChannels(force = false) {
     try {
         const channels = await getChannels();
         const now = Date.now();
-        const SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes between background checks
+        const SYNC_INTERVAL = 30 * 60 * 1000; // 30 minutes between channel background checks (saves Firestore reads & writes)
         let hasUpdates = false;
         const allVideos = await getVideos(); // Fetch all once for fast lookup
 
@@ -1456,6 +1437,7 @@ async function autoSyncYouTubeChannels(force = false) {
             const shouldSync = force || (!data.lastSyncTime || (now - data.lastSyncTime > SYNC_INTERVAL));
             if ((ytChannelId || playlistId) && shouldSync) {
                 console.log(`Auto-syncing YouTube channel & saving to Firebase first: ${channelName}`);
+                let channelChanged = false;
                 
                 // 1. Sync Channel Subscribers & Get Playlist ID if needed
                 if (ytChannelId) {
@@ -1467,10 +1449,15 @@ async function autoSyncYouTubeChannels(force = false) {
                             if (!playlistId) {
                                 playlistId = item.contentDetails.relatedPlaylists.uploads;
                                 data.ytPlaylistId = playlistId; // Cache it
+                                channelChanged = true;
                             }
-                            // Update subscribers from YouTube
+                            // Update subscribers from YouTube only if changed
                             if (item.statistics && item.statistics.subscriberCount) {
-                                data.subscribers = parseInt(item.statistics.subscriberCount);
+                                const newSubs = parseInt(item.statistics.subscriberCount);
+                                if (data.subscribers !== newSubs) {
+                                    data.subscribers = newSubs;
+                                    channelChanged = true;
+                                }
                             }
                         }
                     } catch (e) { console.warn("Error syncing channel stats", e); }
@@ -1563,7 +1550,7 @@ async function autoSyncYouTubeChannels(force = false) {
                     } catch (e) { console.warn("Error during auto-sync fetch for " + channelName, e); }
                 }
 
-                // 3. Sync stats for existing videos belonging to this channel
+                // 3. Sync stats for existing videos belonging to this channel only when views or likes change significantly
                 const channelVideos = allVideos.filter(v => v.channel === channelName && v.id.startsWith("yt_"));
                 if (channelVideos.length > 0) {
                     const chunkedVideos = [];
@@ -1586,7 +1573,11 @@ async function autoSyncYouTubeChannels(force = false) {
                                         const siteLikesCount = Array.isArray(jtubeVid.likedBy) ? jtubeVid.likedBy.length : 0;
                                         const totalLikes = newLikes + siteLikesCount;
 
-                                        if (jtubeVid.views !== newViews || jtubeVid.baseLikes !== newLikes || jtubeVid.likes !== totalLikes) {
+                                        // Only write to Firestore if views changed by at least 10 or likes changed, avoiding constant tiny single-view writes
+                                        const viewDelta = Math.abs(newViews - (jtubeVid.views || 0));
+                                        const likesChanged = jtubeVid.baseLikes !== newLikes || jtubeVid.likes !== totalLikes;
+
+                                        if (viewDelta >= 10 || likesChanged) {
                                             jtubeVid.views = newViews;
                                             jtubeVid.baseLikes = newLikes;
                                             jtubeVid.likes = totalLikes;
@@ -1605,14 +1596,18 @@ async function autoSyncYouTubeChannels(force = false) {
                     }
                 }
 
-                // Update sync time
-                await saveChannel(channelName, { ...data, lastSyncTime: Date.now() });
+                // Update sync time in memory and only write channel to Firestore if metadata actually changed
+                data.lastSyncTime = Date.now();
+                if (channelChanged) {
+                    await saveChannel(channelName, data);
+                } else if (_cache.channels) {
+                    _cache.channels[channelName] = data;
+                    saveToStorage('channels', _cache.channels);
+                }
             }
         }
 
-        if (hasUpdates && typeof renderVideos === 'function') {
-            renderVideos("all"); // Refresh UI if on homepage
-        }
+        // Keep synced data in cache/storage; do not auto-reload UI while user is browsing
     } catch (e) {
         console.error("Auto-sync background process failed:", e);
     }
@@ -1637,10 +1632,10 @@ document.addEventListener('DOMContentLoaded', () => {
         autoSyncYouTubeChannels();
     }, 1500);
 
-    // Keep checking every 10 minutes for new YouTube videos to save to Firebase automatically
+    // Keep checking every 30 minutes for new YouTube videos to save to Firebase automatically
     setInterval(() => {
         autoSyncYouTubeChannels(false);
-    }, 10 * 60 * 1000);
+    }, 30 * 60 * 1000);
 
     setTimeout(() => {
         fetch('https://api.country.is')
@@ -1817,10 +1812,10 @@ const AIModeration = {
     }
 };
 
-// ===== 10-MINUTE CONTINUOUS AI VIDEO BRAIN =====
+// ===== 60-MINUTE CONTINUOUS AI VIDEO BRAIN =====
 const AIVideoBrain = {
     lastTrained: 0,
-    intervalMs: 10 * 60 * 1000, // 10 minutes (600,000 ms)
+    intervalMs: 60 * 60 * 1000, // 60 minutes (saves massive Firestore write operations)
     timerId: null,
     catalog: {},
     videoCount: 0,
@@ -1884,15 +1879,16 @@ const AIVideoBrain = {
         };
     },
 
-    // Train AI by reading all videos on the entire website every 10 minutes and saving insights
+    // Train AI by reading videos, caching locally, and writing only new/changed insights to Firestore
     async train() {
         if (this.isTraining) return null;
         this.isTraining = true;
         try {
-            console.log('[AIVideoBrain] Beginning 10-minute AI audit of all website videos...');
+            console.log('[AIVideoBrain] Beginning AI audit of website videos...');
             const videos = await getVideos();
             if (!Array.isArray(videos) || videos.length === 0) return null;
 
+            const previousCatalog = this.catalog || {};
             const catalog = {};
             const insightsToSave = [];
 
@@ -1900,19 +1896,25 @@ const AIVideoBrain = {
                 if (v && v.id) {
                     const classified = this.classify(v);
                     catalog[v.id] = classified;
-                    insightsToSave.push({
-                        videoId: v.id,
-                        title: v.title || 'Untitled',
-                        channel: v.channel || 'Unknown',
-                        category: classified.category,
-                        genre: classified.genre,
-                        targetAudience: classified.targetAudience,
-                        depth: classified.depth,
-                        isShort: classified.isShort,
-                        tags: classified.tags,
-                        summary: classified.summary,
-                        lastLearned: Date.now()
-                    });
+
+                    // Only write to Firestore if this video hasn't been learned yet or genre/category changed
+                    const prev = previousCatalog[v.id];
+                    const isNewOrChanged = !prev || prev.genre !== classified.genre || prev.category !== classified.category;
+                    if (isNewOrChanged) {
+                        insightsToSave.push({
+                            videoId: v.id,
+                            title: v.title || 'Untitled',
+                            channel: v.channel || 'Unknown',
+                            category: classified.category,
+                            genre: classified.genre,
+                            targetAudience: classified.targetAudience,
+                            depth: classified.depth,
+                            isShort: classified.isShort,
+                            tags: classified.tags,
+                            summary: classified.summary,
+                            lastLearned: Date.now()
+                        });
+                    }
                 }
             });
 
@@ -1929,58 +1931,33 @@ const AIVideoBrain = {
                 }));
             } catch (e) {}
 
-            // 2. Persist AI learned info to Firestore in 'ai_video_insights' collection
-            try {
-                const batch = db.batch();
-                let batchCount = 0;
-                // Save up to 200 video insights per cycle to stay comfortably within limits
-                for (const insight of insightsToSave.slice(0, 200)) {
-                    const ref = db.collection("ai_video_insights").doc(insight.videoId);
-                    batch.set(ref, insight, { merge: true });
-                    batchCount++;
-                }
-                if (batchCount > 0) {
-                    await batch.commit().catch(err => console.warn('[AIVideoBrain] Error writing ai_video_insights:', err));
-                }
-            } catch (e) {
-                console.warn('[AIVideoBrain] Error preparing Firestore insights batch:', e);
-            }
-
-            // 3. Save AI audit to Firestore in 'ai_system_audits' collection
-            try {
-                const auditId = 'audit_' + Date.now();
-                const shortsCount = Object.values(catalog).filter(c => c.isShort).length;
-                const categoryCounts = {};
-                Object.values(catalog).forEach(c => {
-                    categoryCounts[c.category] = (categoryCounts[c.category] || 0) + 1;
-                });
-
-                await db.collection("ai_system_audits").doc(auditId).set({
-                    auditId,
-                    timestamp: Date.now(),
-                    totalVideosChecked: this.videoCount,
-                    totalShorts: shortsCount,
-                    categories: categoryCounts,
-                    intervalMinutes: 10,
-                    status: 'completed'
-                }).catch(err => console.warn('[AIVideoBrain] Audit log error:', err));
-            } catch (e) {}
-
-            // 4. Check YouTube channels for any brand-new videos or shorts, saving new ones automatically
-            if (typeof autoSyncYouTubeChannels === 'function') {
+            // 2. Persist AI learned info to Firestore ONLY for newly discovered or modified videos
+            if (insightsToSave.length > 0) {
                 try {
-                    await autoSyncYouTubeChannels(true);
-                } catch (e) {}
+                    const batch = db.batch();
+                    let batchCount = 0;
+                    for (const insight of insightsToSave.slice(0, 50)) {
+                        const ref = db.collection("ai_video_insights").doc(insight.videoId);
+                        batch.set(ref, insight, { merge: true });
+                        batchCount++;
+                    }
+                    if (batchCount > 0) {
+                        await batch.commit().catch(err => console.warn('[AIVideoBrain] Error writing ai_video_insights:', err));
+                        console.log(`[AIVideoBrain] Saved ${batchCount} newly classified video insights to Firestore.`);
+                    }
+                } catch (e) {
+                    console.warn('[AIVideoBrain] Error preparing Firestore insights batch:', e);
+                }
             }
 
-            // 5. Send to server-side AI Brain endpoint
+            // 3. Send to server-side AI Brain endpoint
             fetch('/api/ai/train', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ videos })
             }).catch(() => {});
 
-            // 6. Dispatch events for UI badges & shorts refresh
+            // 4. Dispatch events for UI badges & shorts refresh
             if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('aiBrainUpdated', {
                     detail: {
@@ -1990,7 +1967,7 @@ const AIVideoBrain = {
                 }));
             }
 
-            console.log(`[AIVideoBrain] Completed 10-minute training: learned ${this.videoCount} videos (${Object.values(catalog).filter(c => c.isShort).length} Shorts) across website at ${new Date(this.lastTrained).toLocaleTimeString()}`);
+            console.log(`[AIVideoBrain] Completed training: analyzed ${this.videoCount} videos (${Object.values(catalog).filter(c => c.isShort).length} Shorts) across website at ${new Date(this.lastTrained).toLocaleTimeString()}`);
             return this.catalog;
         } catch (err) {
             console.warn('[AIVideoBrain] Training cycle encountered an error:', err);
@@ -2000,7 +1977,7 @@ const AIVideoBrain = {
         }
     },
 
-    // Start 10-minute automated learning cycle
+    // Start automated learning cycle
     startPeriodicTraining() {
         // Load cache first if available
         try {
@@ -2013,13 +1990,15 @@ const AIVideoBrain = {
             }
         } catch (e) {}
 
-        // Immediate training
-        this.train();
+        // Immediate training only if never trained or cache is older than interval
+        if (!this.lastTrained || (Date.now() - this.lastTrained > this.intervalMs)) {
+            this.train();
+        }
 
-        // Repeat every 10 minutes (600,000 ms)
+        // Repeat every 60 minutes
         if (this.timerId) clearInterval(this.timerId);
         this.timerId = setInterval(() => {
-            console.log('[AIVideoBrain] Scheduled 10-minute learning cycle triggered...');
+            console.log('[AIVideoBrain] Scheduled 60-minute learning cycle triggered...');
             this.train();
         }, this.intervalMs);
     },
