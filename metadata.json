@@ -1,6 +1,6 @@
 {
   "name": "JTube",
-  "description": "Watch curated videos on Islam, Science, AI, Machine Learning and more.",
+  "description": "Curated high-quality video platform featuring hand-picked educational, scientific, programming, and intellectual content with zero clickbait, intelligent video breakdowns, and daily automated channel sync.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

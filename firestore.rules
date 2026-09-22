@@ -16,6 +16,20 @@ service cloud.firestore {
       allow delete: if request.auth != null;
     }
 
+    // Reels collection: Dedicated collection for Reels & Shorts
+    match /reels/{reelId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if request.auth != null;
+    }
+
+    // Shorts collection: Compatibility collection for vertical shorts
+    match /shorts/{shortId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if request.auth != null;
+    }
+
     // AI Video Insights: Stores knowledge the AI learns every 10 minutes about each video
     // (genre, depth, target audience, themes, summary)
     match /ai_video_insights/{videoId} {
@@ -61,9 +75,10 @@ service cloud.firestore {
       }
     }
 
-    // Group chat collection: Authenticated users can participate
+    // Group chat collection: Public read for community activity; authenticated users can participate and react
     match /jtube_group_chat/{messageId} {
-      allow read, write: if request.auth != null;
+      allow read: if true;
+      allow write: if request.auth != null || (request.resource.data.isAI == true);
     }
 
     // Feedback collection: Anyone can submit feedback, but not read others' feedback

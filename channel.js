@@ -181,16 +181,18 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const effectiveLikes = typeof getEffectiveLikes === 'function' ? getEffectiveLikes(video) : (video.likes || 0);
 
                 const card = document.createElement('div');
-                card.className = "cursor-pointer group relative video-card-custom bg-zinc-800 rounded-xl pb-3 h-full flex flex-col";
+                card.className = "cursor-pointer group relative video-card-custom bg-[#12151c] border border-white/[0.08] hover:border-white/[0.18] rounded-2xl pb-3.5 h-full flex flex-col overflow-hidden transition-all duration-200";
                 card.onclick = () => location.href = isShort ? `shorts.html?id=${video.id}` : `watch.html?id=${video.id}`;
 
                 const durationBadge = isShort
                     ? `<span class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-xs font-bold z-30 bg-red-600 text-white flex items-center gap-1 shadow"><i class="fas fa-bolt text-[9px]"></i> Shorts • ${video.duration}</span>`
                     : `<span class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-xs font-semibold z-30 ${getDurationBadgeClass(video.duration)}">${video.duration}</span>`;
 
+                const qualityBadge = video.qualityBadge || (video.duration && video.duration.length > 5 ? "✦ Masterclass" : "✦ Verified HD");
+
                 card.innerHTML = `
-                    <div class="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-2">
-                        <img src="${video.thumbnail}" alt="${video.title.replace(/"/g, '&quot;')}" class="w-full h-full object-cover group-hover:scale-105 transition duration-200" loading="lazy" decoding="async">
+                    <div class="relative aspect-video bg-[#181c26] rounded-xl overflow-hidden m-2 mb-2.5">
+                        <img src="${video.thumbnail}" alt="${video.title.replace(/"/g, '&quot;')}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" loading="lazy" decoding="async">
                         <div class="video-preview-container absolute inset-0 w-full h-full bg-black z-20 pointer-events-none hidden"></div>
                         <div class="play-icon-overlay absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-200 z-10">
                             <div class="w-12 h-12 ${isShort ? 'bg-red-600' : 'bg-red-600/90'} rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 scale-75 group-hover:scale-100 shadow-lg">
@@ -199,9 +201,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                         </div>
                         ${durationBadge}
                     </div>
-                    <div class="px-3 flex-1 flex flex-col justify-between">
-                        <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
-                        <div class="flex items-center flex-wrap gap-x-2 gap-y-0.5 text-xs text-zinc-400 mt-1.5">
+                    <div class="px-3.5 flex-1 flex flex-col justify-between">
+                        <div class="mb-2">
+                            <span class="inline-flex items-center gap-1 text-[9px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 mb-1.5">
+                                ${qualityBadge}
+                            </span>
+                            <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
+                        </div>
+                        <div class="flex items-center flex-wrap gap-x-2 gap-y-0.5 text-xs text-zinc-400 mt-1">
                             <span>${formatCompactNumber(video.views || 0)} views</span>
                             <span>•</span>
                             <span class="inline-flex items-center gap-1 text-zinc-300 font-medium"><i class="far fa-thumbs-up text-[10px] text-red-400"></i> ${formatCompactNumber(effectiveLikes)}</span>

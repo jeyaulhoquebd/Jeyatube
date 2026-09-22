@@ -137,6 +137,16 @@
                     <i class="fas fa-chart-pie w-5 text-center text-red-500"></i>
                     <span>Studio Overview</span>
                 </button>
+                <button class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold text-left text-zinc-400" data-tab="daily-sync">
+                    <i class="fas fa-satellite-dish w-5 text-center text-emerald-400"></i>
+                    <span>Daily YouTube Sync</span>
+                    <span id="sidebar-sync-badge" class="ml-auto bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 text-[10px] font-bold px-2 py-0.5 rounded-full">36 Feeds</span>
+                </button>
+                <button class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold text-left text-zinc-400" data-tab="ai-system">
+                    <i class="fas fa-brain w-5 text-center text-purple-400"></i>
+                    <span>AI Studio &amp; Gemini</span>
+                    <span class="ml-auto bg-purple-950/80 text-purple-400 border border-purple-800/60 text-[10px] font-bold px-2 py-0.5 rounded-full">Gemini 3.8</span>
+                </button>
 
                 <p class="text-[10px] font-bold uppercase tracking-widest text-zinc-600 px-3 mt-4 mb-2">Content</p>
                 <button class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold text-left text-zinc-400" data-tab="upload">
@@ -219,20 +229,50 @@
                 <!-- Global Action Status in Overview -->
                 <div id="overview-status-banner" class="hidden mb-6 p-3.5 rounded-xl text-xs font-semibold flex items-center justify-between transition-all"></div>
 
-                <!-- 5 Key Metric Cards -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+                <!-- 5 Key Metric Cards with Dedicated Saved Videos & Saved Reels -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
+                    <!-- Saved Videos in Firestore Card -->
+                    <div class="glass-card p-4 relative overflow-hidden group hover:border-zinc-700 transition">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-zinc-400">Saved Videos</span>
+                            <div class="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center text-sm border border-blue-500/20">
+                                <i class="fas fa-video"></i>
+                            </div>
+                        </div>
+                        <div class="text-2xl font-black text-white mb-1" id="kpi-saved-videos">0</div>
+                        <div class="text-[11px] text-zinc-500 flex items-center gap-1">
+                            <i class="fas fa-database text-blue-400 text-[9px]"></i>
+                            <span>Longform in Firestore</span>
+                        </div>
+                    </div>
+
+                    <!-- Saved Reels in Firestore Card -->
+                    <div class="glass-card p-4 relative overflow-hidden group hover:border-zinc-700 transition">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-zinc-400">Saved Reels</span>
+                            <div class="w-8 h-8 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center text-sm border border-red-500/20">
+                                <i class="fas fa-bolt"></i>
+                            </div>
+                        </div>
+                        <div class="text-2xl font-black text-white mb-1" id="kpi-saved-reels">0</div>
+                        <div class="text-[11px] text-zinc-500 flex items-center gap-1">
+                            <i class="fas fa-mobile-alt text-red-400 text-[9px]"></i>
+                            <span>Shorts in Firestore</span>
+                        </div>
+                    </div>
+
                     <!-- Total Catalog Card -->
                     <div class="glass-card p-4 relative overflow-hidden group hover:border-zinc-700 transition">
                         <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs font-semibold text-zinc-400">Total Videos</span>
-                            <div class="w-8 h-8 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center text-sm border border-red-500/20">
+                            <span class="text-xs font-semibold text-zinc-400">Total Saved Catalog</span>
+                            <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-sm border border-emerald-500/20">
                                 <i class="fas fa-film"></i>
                             </div>
                         </div>
                         <div class="text-2xl font-black text-white mb-1" id="kpi-total-videos">0</div>
                         <div class="text-[11px] text-zinc-500 flex items-center gap-1.5">
-                            <span class="text-zinc-300 font-medium" id="kpi-longform-count">0</span> Longform • 
-                            <span class="text-red-400 font-medium" id="kpi-shorts-count">0</span> Shorts
+                            <span class="text-zinc-300 font-medium" id="kpi-longform-count">0</span> Videos • 
+                            <span class="text-red-400 font-medium" id="kpi-shorts-count">0</span> Reels
                         </div>
                     </div>
 
@@ -240,7 +280,7 @@
                     <div class="glass-card p-4 relative overflow-hidden group hover:border-zinc-700 transition">
                         <div class="flex items-center justify-between mb-2">
                             <span class="text-xs font-semibold text-zinc-400">Platform Views</span>
-                            <div class="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center text-sm border border-blue-500/20">
+                            <div class="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center text-sm border border-purple-500/20">
                                 <i class="fas fa-eye"></i>
                             </div>
                         </div>
@@ -248,45 +288,24 @@
                         <div class="text-[11px] text-zinc-500">Across entire catalog</div>
                     </div>
 
-                    <!-- Active Channels -->
+                    <!-- Active Channels & Sync Daemon -->
                     <div class="glass-card p-4 relative overflow-hidden group hover:border-zinc-700 transition">
                         <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs font-semibold text-zinc-400">Channels Hosted</span>
-                            <div class="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center text-sm border border-purple-500/20">
+                            <span class="text-xs font-semibold text-zinc-400">Channels &amp; Daemon</span>
+                            <div class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center text-sm border border-amber-500/20">
                                 <i class="fas fa-tv"></i>
                             </div>
                         </div>
-                        <div class="text-2xl font-black text-white mb-1" id="kpi-total-channels">0</div>
-                        <div class="text-[11px] text-zinc-500">
-                            <span class="text-zinc-300 font-medium" id="kpi-total-subscribers">0</span> Total reach
-                        </div>
-                    </div>
-
-                    <!-- Registered Users -->
-                    <div class="glass-card p-4 relative overflow-hidden group hover:border-zinc-700 transition">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs font-semibold text-zinc-400">Users &amp; Members</span>
-                            <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-sm border border-emerald-500/20">
-                                <i class="fas fa-users"></i>
-                            </div>
-                        </div>
-                        <div class="text-2xl font-black text-white mb-1" id="kpi-total-users">0</div>
-                        <div class="text-[11px] text-zinc-500">Auth &amp; Firestore records</div>
-                    </div>
-
-                    <!-- 10-Minute AI Engine -->
-                    <div class="glass-card p-4 relative overflow-hidden group hover:border-zinc-700 transition">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs font-semibold text-zinc-400">10-Min AI Brain</span>
-                            <div class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center text-sm border border-amber-500/20">
-                                <i class="fas fa-microchip"></i>
-                            </div>
-                        </div>
                         <div class="flex items-center gap-1.5 mb-1">
-                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <span class="text-sm font-bold text-emerald-400">Active</span>
+                            <span class="text-2xl font-black text-white" id="kpi-total-channels">0</span>
+                            <span class="text-xs font-bold text-emerald-400 bg-emerald-950/70 border border-emerald-800/60 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                Auto-Sync
+                            </span>
                         </div>
-                        <div class="text-[11px] text-zinc-500 truncate" id="kpi-ai-audit-time">Every 10 min</div>
+                        <div class="text-[11px] text-zinc-500">
+                            <span class="text-zinc-300 font-medium" id="kpi-total-subscribers">0</span> Reach • <span id="kpi-ai-audit-time" class="text-zinc-400">10m daemon</span>
+                        </div>
                     </div>
                 </div>
 
@@ -773,7 +792,563 @@
                 </div>
             </div>
 
-        </main>
+            <!-- ===== DAILY YOUTUBE SYNC HUB TAB ===== -->
+            <div id="tab-daily-sync" class="tab-panel">
+                <div class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h1 class="text-2xl font-black text-white tracking-tight">Daily YouTube Uploads &amp; Sync Hub</h1>
+                            <span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Automated Daily Feed</span>
+                        </div>
+                        <p class="text-sm text-zinc-400 mt-1">Continuous ingestion of new daily videos uploaded across the 36 featured YouTube channels.</p>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <button id="btn-sync-all-channels" type="button"
+                                class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-lg shadow-emerald-900/30 flex items-center gap-2 transition cursor-pointer">
+                            <i class="fas fa-sync-alt" id="sync-all-icon"></i>
+                            <span>Sync All 36 Channels Now</span>
+                        </button>
+                        <button id="btn-refresh-sync-catalog" type="button"
+                                class="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-bold px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 transition cursor-pointer">
+                            <i class="fas fa-redo"></i>
+                            <span>Refresh Ingested Feed</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Sync Action Status Banner -->
+                <div id="daily-sync-status" class="hidden mb-6 p-4 rounded-xl text-xs font-semibold flex items-center justify-between transition-all"></div>
+
+                <!-- Daily Sync Progress Bar -->
+                <div id="daily-sync-progress-bar" class="hidden mb-6 p-4 glass-card">
+                    <div class="flex items-center justify-between mb-2">
+                        <p id="daily-sync-progress-text" class="text-xs text-zinc-300 font-medium flex items-center gap-2">
+                            <i class="fas fa-spinner fa-spin text-emerald-400"></i>
+                            <span>Ingesting daily YouTube RSS uploads...</span>
+                        </p>
+                        <span id="daily-sync-progress-pct" class="text-xs font-mono font-bold text-emerald-400">0%</span>
+                    </div>
+                    <div class="w-full h-2.5 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
+                        <div id="daily-sync-progress-fill" class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- 5 Sync & Firestore KPI Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+                    <!-- Total Saved Videos (Firestore) -->
+                    <div class="glass-card p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-zinc-400">Saved Videos</span>
+                            <div class="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center text-sm border border-blue-500/20">
+                                <i class="fas fa-video"></i>
+                            </div>
+                        </div>
+                        <div class="text-2xl font-black text-white mb-1" id="kpi-sync-saved-videos">0 Videos</div>
+                        <div class="text-[11px] text-zinc-500 flex items-center gap-1">
+                            <i class="fas fa-database text-blue-400 text-[9px]"></i>
+                            <span>Longform in Firestore</span>
+                        </div>
+                    </div>
+
+                    <!-- Total Saved Reels (Firestore) -->
+                    <div class="glass-card p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-zinc-400">Saved Reels</span>
+                            <div class="w-8 h-8 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center text-sm border border-red-500/20">
+                                <i class="fas fa-bolt"></i>
+                            </div>
+                        </div>
+                        <div class="text-2xl font-black text-white mb-1" id="kpi-sync-saved-reels">0 Reels</div>
+                        <div class="text-[11px] text-zinc-500 flex items-center gap-1">
+                            <i class="fas fa-mobile-alt text-red-400 text-[9px]"></i>
+                            <span>Shorts in Firestore</span>
+                        </div>
+                    </div>
+
+                    <!-- Total Saved Combined -->
+                    <div class="glass-card p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-zinc-400">Total Saved Catalog</span>
+                            <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-sm border border-emerald-500/20">
+                                <i class="fas fa-film"></i>
+                            </div>
+                        </div>
+                        <div class="text-2xl font-black text-white mb-1" id="kpi-sync-total-saved">0 Total</div>
+                        <div class="text-[11px] text-zinc-500">Active documents in Firestore</div>
+                    </div>
+
+                    <!-- Tracked Channels -->
+                    <div class="glass-card p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-zinc-400">Connected Channels</span>
+                            <div class="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center text-sm border border-purple-500/20">
+                                <i class="fas fa-satellite-dish"></i>
+                            </div>
+                        </div>
+                        <div class="text-2xl font-black text-white mb-1" id="kpi-sync-channel-count">36 Channels</div>
+                        <div class="text-[11px] text-zinc-500">Daily RSS Feeds Registry</div>
+                    </div>
+
+                    <!-- Sync Daemon & Last Check -->
+                    <div class="glass-card p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-zinc-400">Sync Engine Daemon</span>
+                            <div class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center text-sm border border-amber-500/20">
+                                <i class="fas fa-sync-alt"></i>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1.5 mb-1">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span class="text-sm font-bold text-emerald-400">Active (10 min)</span>
+                        </div>
+                        <div class="text-[11px] text-zinc-500 truncate" id="kpi-sync-last-time">Checking every 10 min</div>
+                    </div>
+                </div>
+
+                <!-- Automated Ingestion & Persistence Pipeline Bar -->
+                <div class="mb-6 p-4 glass-card border border-zinc-800 rounded-xl bg-zinc-900/40">
+                    <div class="flex items-center justify-between flex-wrap gap-3">
+                        <div class="flex items-center gap-3">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                            <div>
+                                <span class="text-xs font-bold text-white uppercase tracking-wider">Sync &amp; Persistence Workflow:</span>
+                                <span class="text-xs text-zinc-400 ml-1.5">New YouTube uploads &amp; Reels are discovered, saved to Firestore, and displayed on JTube.</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 text-xs font-semibold flex-wrap">
+                            <span class="px-2.5 py-1 rounded-lg bg-zinc-800 text-zinc-300 border border-zinc-700 flex items-center gap-1.5">
+                                <i class="fab fa-youtube text-red-400"></i> 1. Ingest YouTube Uploads
+                            </span>
+                            <i class="fas fa-arrow-right text-zinc-600 text-[10px]"></i>
+                            <span class="px-2.5 py-1 rounded-lg bg-emerald-950/70 text-emerald-300 border border-emerald-700/60 flex items-center gap-1.5">
+                                <i class="fas fa-database text-emerald-400"></i> 2. Save Links to Firestore
+                            </span>
+                            <i class="fas fa-arrow-right text-zinc-600 text-[10px]"></i>
+                            <span class="px-2.5 py-1 rounded-lg bg-blue-950/70 text-blue-300 border border-blue-700/60 flex items-center gap-1.5">
+                                <i class="fas fa-tv text-blue-400"></i> 3. Live on Website
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Two Column Layout: Recent Daily Uploads Gallery & Channels Directory -->
+                <div class="space-y-6">
+
+                    <!-- Section A: Recently Synced Daily Videos Gallery -->
+                    <div class="glass-card p-5">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-zinc-800">
+                            <div>
+                                <h3 class="font-bold text-sm text-white flex items-center gap-2">
+                                    <i class="fas fa-bolt text-amber-400 text-xs"></i>
+                                    <span>Latest Uploads Ingested From YouTube Channels</span>
+                                </h3>
+                                <p class="text-xs text-zinc-400 mt-0.5">Videos and Reels discovered from connected channels, saved to Firestore, and displayed live on your website.</p>
+                            </div>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <input type="text" id="daily-feed-search" placeholder="Search daily uploads..." 
+                                       class="input-field py-1.5 px-3 text-xs w-44">
+                                <select id="daily-feed-type" class="input-field py-1.5 px-3 text-xs w-36">
+                                    <option value="all">All Formats</option>
+                                    <option value="videos">Videos Only</option>
+                                    <option value="reels">Reels Only</option>
+                                </select>
+                                <select id="daily-feed-category" class="input-field py-1.5 px-3 text-xs w-36">
+                                    <option value="all">All Categories</option>
+                                    <option value="Programming">Programming</option>
+                                    <option value="AI & ML">AI &amp; ML</option>
+                                    <option value="Education">Education</option>
+                                    <option value="Islam">Islam</option>
+                                    <option value="Motivation">Motivation</option>
+                                    <option value="Podcasts">Podcasts</option>
+                                    <option value="Entertainment">Entertainment</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Gallery Grid -->
+                        <div id="daily-videos-gallery" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            <div class="col-span-full text-center py-10 text-zinc-500 text-xs">
+                                <i class="fas fa-spinner fa-spin mr-2"></i>Loading daily uploads...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Section B: Tracked Channels Directory (36 Channels) -->
+                    <div class="glass-card p-5">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-zinc-800">
+                            <div>
+                                <h3 class="font-bold text-sm text-white flex items-center gap-2">
+                                    <i class="fas fa-tv text-emerald-400 text-xs"></i>
+                                    <span>Tracked Featured YouTube Channels (36)</span>
+                                </h3>
+                                <p class="text-xs text-zinc-400 mt-0.5">Manage automated ingestion feeds and trigger on-demand sync for individual channels.</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input type="text" id="sync-channels-search" placeholder="Filter channels..." 
+                                       class="input-field py-1.5 px-3 text-xs w-56">
+                            </div>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs text-zinc-300">
+                                <thead class="bg-zinc-900/90 text-zinc-400 uppercase text-[10px] tracking-wider border-b border-zinc-800">
+                                    <tr>
+                                        <th class="p-3.5 font-bold">Channel</th>
+                                        <th class="p-3.5 font-bold">Category</th>
+                                        <th class="p-3.5 font-bold hidden md:table-cell">YouTube Channel ID</th>
+                                        <th class="p-3.5 font-bold">Status</th>
+                                        <th class="p-3.5 font-bold text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sync-channels-table-body" class="divide-y divide-zinc-800/60">
+                                    <!-- Populated dynamically with all 36 channels -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Section C: Add New Channel to Daily Sync Engine -->
+                    <div class="glass-card p-6">
+                        <div class="mb-4 pb-3 border-b border-zinc-800">
+                            <h3 class="font-bold text-sm text-white flex items-center gap-2">
+                                <i class="fas fa-plus-circle text-emerald-400 text-xs"></i>
+                                <span>Register Additional YouTube Channel for Daily Ingestion</span>
+                            </h3>
+                            <p class="text-xs text-zinc-400 mt-0.5">Add any public YouTube channel to the automated daily sync engine.</p>
+                        </div>
+                        <form id="add-sync-channel-form" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                                <label class="label">Channel Display Name *</label>
+                                <input type="text" id="new-sync-chan-name" required placeholder="e.g., Lex Fridman" class="input-field text-xs">
+                            </div>
+                            <div>
+                                <label class="label">YouTube Channel ID *</label>
+                                <input type="text" id="new-sync-chan-id" required placeholder="e.g., UCSHZKyawb77ixDdsGog4iWA" class="input-field text-xs">
+                            </div>
+                            <div>
+                                <label class="label">Category *</label>
+                                <select id="new-sync-chan-cat" class="input-field text-xs">
+                                    <option value="Programming">Programming</option>
+                                    <option value="AI & ML">AI &amp; ML</option>
+                                    <option value="Education">Education</option>
+                                    <option value="Islam">Islam</option>
+                                    <option value="Motivation">Motivation</option>
+                                    <option value="Podcasts">Podcasts</option>
+                                    <option value="Entertainment">Entertainment</option>
+                                    <option value="Science">Science</option>
+                                    <option value="General">General</option>
+                                </select>
+                            </div>
+                            <div class="sm:col-span-3 flex justify-end">
+                                <button type="submit" id="btn-add-sync-channel" class="btn-success text-xs font-bold py-2.5 px-5 flex items-center gap-2">
+                                    <i class="fas fa-check"></i>
+                                    <span>Register Channel &amp; Ingest Uploads</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- ===== AI STUDIO SUITE TAB ===== -->
+            <div id="tab-ai-system" class="tab-panel">
+                <div class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h1 class="text-2xl font-black text-white tracking-tight">AI Studio Command &amp; Gemini 3.8 Flash</h1>
+                            <span class="bg-purple-500/20 text-purple-400 border border-purple-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">gemini-3.8-flash</span>
+                        </div>
+                        <p class="text-sm text-zinc-400 mt-1">Enterprise-grade AI suite for content moderation, video categorization, creator scripting, and search SEO optimization.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="bg-purple-950/80 text-purple-300 border border-purple-800/60 text-xs px-3 py-1.5 rounded-full font-medium flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            Server-Side AI Active
+                        </span>
+                    </div>
+                </div>
+
+                <!-- AI System KPI Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <div class="glass-card p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-zinc-400">Core AI Model</span>
+                            <div class="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center text-sm border border-purple-500/20">
+                                <i class="fas fa-brain"></i>
+                            </div>
+                        </div>
+                        <div class="text-base font-black text-white mb-1">gemini-3.8-flash</div>
+                        <div class="text-[11px] text-zinc-500">Google GenAI Official SDK</div>
+                    </div>
+                    <div class="glass-card p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-zinc-400">Content Moderation</span>
+                            <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-sm border border-emerald-500/20">
+                                <i class="fas fa-shield-alt"></i>
+                            </div>
+                        </div>
+                        <div class="text-base font-black text-emerald-400 mb-1">Automated Safe Filter</div>
+                        <div class="text-[11px] text-zinc-500">Zero-tolerance toxicity</div>
+                    </div>
+                    <div class="glass-card p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-zinc-400">Video Auto-Classifier</span>
+                            <div class="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center text-sm border border-blue-500/20">
+                                <i class="fas fa-tags"></i>
+                            </div>
+                        </div>
+                        <div class="text-base font-black text-white mb-1">Heuristic + Gemini</div>
+                        <div class="text-[11px] text-zinc-500">Accurate taxonomy &amp; tags</div>
+                    </div>
+                    <div class="glass-card p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-zinc-400">JAsk Copilot</span>
+                            <div class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center text-sm border border-amber-500/20">
+                                <i class="fas fa-robot"></i>
+                            </div>
+                        </div>
+                        <div class="text-base font-black text-amber-400 mb-1">Online &amp; Responsive</div>
+                        <div class="text-[11px] text-zinc-500">36 channels knowledge grounded</div>
+                    </div>
+                </div>
+
+                <!-- Subtabs or Multi-Tool Workspaces -->
+                <div class="space-y-6">
+
+                    <!-- Workspace 1: Automated Content Moderation Queue -->
+                    <div class="glass-card p-6">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-zinc-800">
+                            <div>
+                                <h3 class="font-bold text-sm text-white flex items-center gap-2">
+                                    <i class="fas fa-shield-virus text-red-400 text-xs"></i>
+                                    <span>AI Content Moderation &amp; Safety Audit</span>
+                                </h3>
+                                <p class="text-xs text-zinc-400 mt-0.5">Evaluate user comments, descriptions, and community text using Gemini's safety guidelines.</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button id="btn-scan-catalog-comments" type="button"
+                                        class="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition cursor-pointer">
+                                    <i class="fas fa-search"></i>
+                                    <span>Scan All Video Comments</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <!-- Left: Interactive Moderation Tester -->
+                            <div class="space-y-3 bg-zinc-900/60 p-4 rounded-xl border border-zinc-800">
+                                <label class="label">Test Comment or Video Description for Toxicity</label>
+                                <textarea id="ai-mod-input" rows="3" class="input-field text-xs resize-none" placeholder="Paste any text to check with Gemini 3.8 Flash..."></textarea>
+                                <div class="flex items-center justify-between">
+                                    <span id="ai-mod-badge" class="text-xs font-bold hidden"></span>
+                                    <button type="button" id="btn-run-ai-mod" class="btn-primary text-xs font-bold py-2 px-4 ml-auto flex items-center gap-1.5">
+                                        <i class="fas fa-microchip"></i>
+                                        <span>Check Text Safety</span>
+                                    </button>
+                                </div>
+                                <div id="ai-mod-result-box" class="hidden p-3 rounded-xl bg-zinc-950/80 border text-xs"></div>
+                            </div>
+
+                            <!-- Right: Moderation Audit Log -->
+                            <div class="space-y-3 bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between">
+                                <div>
+                                    <div class="flex items-center justify-between mb-2">
+                                        <h4 class="text-xs font-bold text-white">Automated Moderation Queue</h4>
+                                        <span class="text-[10px] text-zinc-500">Live Database Checks</span>
+                                    </div>
+                                    <div id="ai-mod-queue-list" class="space-y-2 max-h-52 overflow-y-auto pr-1">
+                                        <div class="text-center py-6 text-zinc-500 text-xs">
+                                            Click "Scan All Video Comments" to audit community comments for spam or toxicity.
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="text-[11px] text-zinc-500 pt-2 border-t border-zinc-800 flex items-center justify-between">
+                                    <span>Zero tolerance for hate speech, harassment, and phishing.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Workspace 2: AI Video Classifier & Tagging Engine -->
+                    <div class="glass-card p-6">
+                        <div class="mb-4 pb-3 border-b border-zinc-800">
+                            <h3 class="font-bold text-sm text-white flex items-center gap-2">
+                                <i class="fas fa-layer-group text-blue-400 text-xs"></i>
+                                <span>AI Video Classifier &amp; Auto-Tagger</span>
+                            </h3>
+                            <p class="text-xs text-zinc-400 mt-0.5">Automatically analyze video titles and descriptions to assign proper categories and ranking keywords.</p>
+                        </div>
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="label">Video Title</label>
+                                    <input type="text" id="ai-classifier-title" placeholder="e.g. Build an AI Agent from scratch with Node.js" class="input-field text-xs">
+                                </div>
+                                <div>
+                                    <label class="label">Video Description or Transcript Excerpt</label>
+                                    <textarea id="ai-classifier-desc" rows="3" placeholder="Paste description or summary..." class="input-field text-xs resize-none"></textarea>
+                                </div>
+                                <button type="button" id="btn-run-classifier" class="btn-blue text-xs font-bold py-2.5 px-5 flex items-center gap-2">
+                                    <i class="fas fa-magic"></i>
+                                    <span>Classify Content with Gemini</span>
+                                </button>
+                            </div>
+                            <div class="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between">
+                                <div>
+                                    <h4 class="text-xs font-bold text-white mb-2">Classification &amp; Tagging Output</h4>
+                                    <div id="ai-classifier-output" class="text-xs text-zinc-400 leading-relaxed space-y-2.5">
+                                        <p class="text-zinc-500 text-center py-8">Input title above and click Classify to run Gemini classification.</p>
+                                    </div>
+                                </div>
+                                <div id="ai-classifier-actions" class="hidden pt-3 border-t border-zinc-800 flex justify-end">
+                                    <button type="button" id="btn-apply-classification" class="btn-success text-xs font-bold py-1.5 px-3 flex items-center gap-1.5">
+                                        <i class="fas fa-check"></i>
+                                        <span>Use in Upload Video Form</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Workspace 3: AI Creator Script Studio -->
+                    <div class="glass-card p-6">
+                        <div class="mb-4 pb-3 border-b border-zinc-800">
+                            <h3 class="font-bold text-sm text-white flex items-center gap-2">
+                                <i class="fas fa-pen-fancy text-purple-400 text-xs"></i>
+                                <span>AI Creator Script &amp; Production Studio</span>
+                            </h3>
+                            <p class="text-xs text-zinc-400 mt-0.5">Generate high-retention video outlines, hooks, scenes, and descriptions using Gemini 3.8 Flash.</p>
+                        </div>
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <form id="ai-script-form" class="space-y-4">
+                                <div>
+                                    <label class="label">Video Concept / Topic *</label>
+                                    <input type="text" id="ai-script-topic" required placeholder="e.g. 5 AI tools that will replace web developers in 2026" class="input-field text-xs">
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="label">Category</label>
+                                        <select id="ai-script-category" class="input-field text-xs">
+                                            <option value="Programming">Programming</option>
+                                            <option value="AI & ML">AI &amp; ML</option>
+                                            <option value="Education">Education</option>
+                                            <option value="Islam">Islam</option>
+                                            <option value="Motivation">Motivation</option>
+                                            <option value="Podcasts">Podcasts</option>
+                                            <option value="Entertainment">Entertainment</option>
+                                            <option value="Science">Science</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="label">Format Target</label>
+                                        <select id="ai-script-format" class="input-field text-xs">
+                                            <option value="Full Video">Full Longform Video (8-15 min)</option>
+                                            <option value="YouTube Short">⚡ Vertical YouTube Short (&le; 60s)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="label">Tone / Audience</label>
+                                    <input type="text" id="ai-script-tone" placeholder="e.g. High energy, educational, actionable" class="input-field text-xs">
+                                </div>
+                                <button type="submit" id="btn-generate-script" class="btn-primary text-xs font-bold py-2.5 px-5 flex items-center gap-2">
+                                    <i class="fas fa-wand-magic-sparkles"></i>
+                                    <span>Generate Production Script</span>
+                                </button>
+                            </form>
+
+                            <div class="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between">
+                                <div>
+                                    <div class="flex items-center justify-between mb-2">
+                                        <h4 class="text-xs font-bold text-white">Generated Production Script</h4>
+                                        <button type="button" id="btn-copy-script" class="text-zinc-400 hover:text-white text-xs hidden flex items-center gap-1">
+                                            <i class="fas fa-copy"></i>
+                                            <span>Copy Script</span>
+                                        </button>
+                                    </div>
+                                    <div id="ai-script-output" class="text-xs text-zinc-300 leading-relaxed max-h-96 overflow-y-auto space-y-3 font-sans pr-1">
+                                        <p class="text-zinc-500 text-center py-12">Submit a concept to generate an attention-grabbing hook, outline, and script.</p>
+                                    </div>
+                                </div>
+                                <div id="ai-script-actions" class="hidden pt-3 border-t border-zinc-800 flex justify-end">
+                                    <button type="button" id="btn-use-script-in-upload" class="btn-success text-xs font-bold py-1.5 px-3 flex items-center gap-1.5">
+                                        <i class="fas fa-arrow-right"></i>
+                                        <span>Use Title in Upload Form</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Workspace 4: AI SEO & Metadata Optimizer -->
+                    <div class="glass-card p-6">
+                        <div class="mb-4 pb-3 border-b border-zinc-800">
+                            <h3 class="font-bold text-sm text-white flex items-center gap-2">
+                                <i class="fas fa-chart-line text-emerald-400 text-xs"></i>
+                                <span>AI Metadata &amp; Search SEO Optimizer</span>
+                            </h3>
+                            <p class="text-xs text-zinc-400 mt-0.5">Transform generic video titles and descriptions into high-ranking, viral metadata.</p>
+                        </div>
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <form id="ai-seo-form" class="space-y-4">
+                                <div>
+                                    <label class="label">Draft Video Title *</label>
+                                    <input type="text" id="ai-seo-title" required placeholder="e.g. Python tutorial for beginners" class="input-field text-xs">
+                                </div>
+                                <div>
+                                    <label class="label">Channel &amp; Target Category</label>
+                                    <input type="text" id="ai-seo-category" placeholder="e.g. CodeWithHarry • Programming" class="input-field text-xs">
+                                </div>
+                                <div>
+                                    <label class="label">Key Highlights to Mention</label>
+                                    <textarea id="ai-seo-highlights" rows="2" placeholder="e.g. covers loops, variables, projects in 2026" class="input-field text-xs resize-none"></textarea>
+                                </div>
+                                <button type="submit" id="btn-optimize-seo" class="btn-success text-xs font-bold py-2.5 px-5 flex items-center gap-2">
+                                    <i class="fas fa-rocket"></i>
+                                    <span>Optimize Video SEO</span>
+                                </button>
+                            </form>
+
+                            <div class="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800">
+                                <h4 class="text-xs font-bold text-white mb-2">Optimized YouTube Metadata</h4>
+                                <div id="ai-seo-output" class="text-xs text-zinc-300 leading-relaxed max-h-80 overflow-y-auto space-y-3 pr-1">
+                                    <p class="text-zinc-500 text-center py-10">Enter video details to generate high-CTR titles, tags, and description.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Workspace 5: JAsk Admin Direct Terminal -->
+                    <div class="glass-card p-6">
+                        <div class="mb-4 pb-3 border-b border-zinc-800 flex items-center justify-between">
+                            <div>
+                                <h3 class="font-bold text-sm text-white flex items-center gap-2">
+                                    <i class="fas fa-terminal text-amber-400 text-xs"></i>
+                                    <span>JAsk Studio Admin Console</span>
+                                </h3>
+                                <p class="text-xs text-zinc-400 mt-0.5">Direct chat with the JTube AI Assistant powered by Gemini 3.8 Flash.</p>
+                            </div>
+                            <span class="text-[11px] font-mono text-zinc-500">model: gemini-3.8-flash</span>
+                        </div>
+                        <div class="space-y-4">
+                            <div id="ai-terminal-history" class="bg-zinc-950 p-4 rounded-xl border border-zinc-800 max-h-64 overflow-y-auto space-y-3 font-mono text-xs">
+                                <div class="text-zinc-400">
+                                    <span class="text-emerald-400 font-bold">[JTube AI]</span> Hello Admin! I am JAsk, powered by Gemini 3.8 Flash. I track 36 featured YouTube channels and catalog performance. Ask me anything!
+                                </div>
+                            </div>
+                            <form id="ai-terminal-form" class="flex gap-2">
+                                <input type="text" id="ai-terminal-input" placeholder="Ask JAsk AI about catalog optimization, channel performance, or content ideas..." class="input-field text-xs flex-1">
+                                <button type="submit" id="ai-terminal-btn" class="btn-primary text-xs font-bold px-4 py-2 flex items-center gap-1.5">
+                                    <i class="fas fa-paper-plane"></i>
+                                    <span>Send</span>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
     </div>
 
     <!-- Edit Video Modal -->

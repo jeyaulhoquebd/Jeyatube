@@ -18,11 +18,34 @@
         "liked": { "type": "boolean" },
         "likedBy": { "type": "array", "items": { "type": "string" } },
         "isShort": { "type": "boolean" },
+        "isReel": { "type": "boolean" },
+        "contentType": { "type": "string" },
         "playlist": { "type": "string" },
         "description": { "type": "string" },
         "timestamp": { "type": "number" },
         "aiLearned": { "type": "object" },
         "comments": { "type": "array", "items": { "type": "object" } }
+      },
+      "required": ["id", "title", "videoUrl"]
+    },
+    "Reel": {
+      "title": "Reel",
+      "description": "Short vertical reel or video document stored in Firestore",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "videoUrl": { "type": "string" },
+        "thumbnail": { "type": "string" },
+        "channel": { "type": "string" },
+        "category": { "type": "string" },
+        "duration": { "type": "string" },
+        "views": { "type": "number" },
+        "likes": { "type": "number" },
+        "isShort": { "type": "boolean" },
+        "isReel": { "type": "boolean" },
+        "contentType": { "type": "string" },
+        "timestamp": { "type": "number" }
       },
       "required": ["id", "title", "videoUrl"]
     },

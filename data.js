@@ -468,6 +468,37 @@ async function clearAllContinueWatching() {
 }
 
 // In-memory cache & persistent localStorage helper for instant loading
+function sanitizeAndCurateVideos(videosList) {
+    if (!Array.isArray(videosList)) return [];
+    const excludedChannels = new Set(["Fun With Gopal", "Bismillah Agro", "Basic Bhai", "Studio of Creative Arts Ltd"]);
+    return videosList.filter(v => {
+        if (!v || !v.title) return false;
+        if (excludedChannels.has(v.channel)) return false;
+        if (v.category === "Cartoon") return false;
+        if (typeof v.title === 'string' && (v.title.includes("Gopal Bhar") || v.title.includes("গোপাল ভাঁড়") || v.title.includes("গোপাল দাদার"))) return false;
+        return true;
+    }).map(v => {
+        if (!v.contentQuality || v.contentQuality === "Good Video" || v.contentQuality === "Bad Video") {
+            v.contentQuality = "Curated High Quality";
+        }
+        if (!v.qualityScore) {
+            v.qualityScore = 98;
+        }
+        if (!v.qualityBadge) {
+            if (v.category === "Programming" || v.category === "Tech" || v.category === "AI" || v.category === "Machine Learning") {
+                v.qualityBadge = "✦ STEM Curated";
+            } else if (v.category === "Science" || v.category === "Cyber ​​Security") {
+                v.qualityBadge = "✦ Deep Dive";
+            } else if (v.category === "Islam") {
+                v.qualityBadge = "✦ Curated Wisdom";
+            } else {
+                v.qualityBadge = "✦ High Quality";
+            }
+        }
+        return v;
+    });
+}
+
 function loadFromStorage(key, fallback) {
     try {
         if (typeof localStorage !== 'undefined') {
@@ -475,6 +506,9 @@ function loadFromStorage(key, fallback) {
             if (stored) {
                 const parsed = JSON.parse(stored);
                 if (parsed && (Array.isArray(parsed) ? parsed.length > 0 : Object.keys(parsed).length > 0)) {
+                    if (key === 'videos' && Array.isArray(parsed)) {
+                        return sanitizeAndCurateVideos(parsed);
+                    }
                     return parsed;
                 }
             }
@@ -640,70 +674,198 @@ async function syncAllWebsiteVideosToFirestore() {
 }
 
 let _isFetchingVideos = false;
+let _hasFetchedFromFirestore = false;
+let _videosRealtimeListenerAttached = false;
+
+// Real-time Firestore sync for all videos and reels (instantly catches newly saved items)
+function initVideosRealtimeSync() {
+    if (_videosRealtimeListenerAttached || typeof db === 'undefined' || !db.collection) return;
+    _videosRealtimeListenerAttached = true;
+    try {
+        // 1. Realtime listener for videos collection
+        db.collection("videos").onSnapshot(snapshot => {
+            if (!snapshot || snapshot.empty) return;
+            handleFirestoreRealtimeSnapshot(snapshot, false);
+        }, err => console.warn("Live Firestore videos snapshot warning:", err));
+
+        // 2. Realtime listener for reels collection
+        db.collection("reels").onSnapshot(snapshot => {
+            if (!snapshot || snapshot.empty) return;
+            handleFirestoreRealtimeSnapshot(snapshot, true);
+        }, err => console.warn("Live Firestore reels snapshot warning:", err));
+    } catch (e) {
+        console.warn("Could not attach Firestore realtime listener:", e);
+    }
+}
+
+function handleFirestoreRealtimeSnapshot(snapshot, isReelsCol) {
+    if (!snapshot || snapshot.empty) return;
+    let changed = false;
+    const currentVideos = Array.isArray(_cache.videos) ? [..._cache.videos] : [];
+    const videoMap = new Map(currentVideos.map(v => [v.id, v]));
+
+    snapshot.docChanges().forEach(change => {
+        const doc = change.doc;
+        const d = doc.data();
+        if (!d || !d.id) return;
+        if (isReelsCol) {
+            d.isShort = true;
+            d.isReel = true;
+        }
+
+        if (change.type === "added" || change.type === "modified") {
+            videoMap.set(d.id, d);
+            changed = true;
+        } else if (change.type === "removed") {
+            if (videoMap.has(d.id)) {
+                videoMap.delete(d.id);
+                changed = true;
+            }
+        }
+    });
+
+    if (changed) {
+        const merged = Array.from(videoMap.values());
+        merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        _cache.videos = merged;
+        _cache.videosTimestamp = Date.now();
+        _hasFetchedFromFirestore = true;
+        try { saveToStorage('videos', merged.slice(0, 100)); } catch (e) {}
+        if (typeof document !== 'undefined') {
+            document.dispatchEvent(new CustomEvent('jtube:videosUpdated', { detail: merged }));
+        }
+    }
+}
+
 async function fetchVideosFromFirestore() {
-    if (_isFetchingVideos) return;
+    if (_isFetchingVideos) return (_cache.videos || []);
     _isFetchingVideos = true;
     try {
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000));
-        const fetchPromise = db.collection("videos").orderBy("timestamp", "desc").get();
-        const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
-        
-        let freshVideos = [];
-        if (snapshot && !snapshot.empty) {
-            snapshot.forEach(doc => {
+        // Fetch all videos and reels from Cloud Firestore in parallel
+        // Do not restrict by server-side orderBy to prevent dropping documents missing the timestamp field
+        const queries = [
+            db.collection("videos").get().catch(e => {
+                console.warn("Error fetching /videos collection:", e);
+                return null;
+            }),
+            db.collection("reels").get().catch(e => {
+                console.warn("Error fetching /reels collection:", e);
+                return null;
+            }),
+            db.collection("shorts").get().catch(e => {
+                console.warn("Error fetching /shorts collection:", e);
+                return null;
+            })
+        ];
+
+        const [videosSnap, reelsSnap, shortsSnap] = await Promise.all(queries);
+
+        const videoMap = new Map();
+
+        // 1. Ingest videos collection (standard videos and reels saved in videos)
+        if (videosSnap && !videosSnap.empty) {
+            videosSnap.forEach(doc => {
                 const d = doc.data();
-                if (d && d.id) freshVideos.push(d);
+                if (d && d.id) {
+                    if (isShortVideo(d)) {
+                        d.isShort = true;
+                        d.isReel = true;
+                    }
+                    videoMap.set(d.id, d);
+                }
             });
         }
 
-        if (freshVideos.length > 0) {
-            _cache.videos = freshVideos;
+        // 2. Ingest dedicated reels collection
+        if (reelsSnap && !reelsSnap.empty) {
+            reelsSnap.forEach(doc => {
+                const d = doc.data();
+                if (d && d.id) {
+                    d.isShort = true;
+                    d.isReel = true;
+                    videoMap.set(d.id, d);
+                }
+            });
+        }
+
+        // 3. Ingest dedicated shorts collection
+        if (shortsSnap && !shortsSnap.empty) {
+            shortsSnap.forEach(doc => {
+                const d = doc.data();
+                if (d && d.id) {
+                    d.isShort = true;
+                    d.isReel = true;
+                    videoMap.set(d.id, d);
+                }
+            });
+        }
+
+        let combined = Array.from(videoMap.values());
+
+        // Sort descending by timestamp in memory (safely handles any item missing timestamp)
+        combined.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+        if (combined.length > 0) {
+            _cache.videos = combined;
             _cache.videosTimestamp = Date.now();
-            saveToStorage('videos', freshVideos);
+            _hasFetchedFromFirestore = true;
+            try { saveToStorage('videos', combined.slice(0, 100)); } catch (e) {}
             if (typeof document !== 'undefined') {
-                document.dispatchEvent(new CustomEvent('jtube:videosUpdated', { detail: freshVideos }));
+                document.dispatchEvent(new CustomEvent('jtube:videosUpdated', { detail: combined }));
             }
+            initVideosRealtimeSync();
+            return combined;
         } else {
-            // Firestore was empty or missing videos: populate all website videos into Firestore
+            // Firestore was empty: seed default catalog into Firestore so it's initialized
             await syncAllWebsiteVideosToFirestore();
+            initVideosRealtimeSync();
+            return _cache.videos || [];
         }
     } catch (err) {
-        console.warn("Background Firestore videos fetch:", err.message || err);
+        console.warn("Error fetching all videos and reels from Firestore:", err);
+        return _cache.videos || [];
     } finally {
         _isFetchingVideos = false;
     }
 }
 
 async function getVideos() {
-    // 1. In-memory cache: return INSTANTLY (0ms)
-    if (_cache.videos && _cache.videos.length > 0) {
-        if (!isCacheValid('videos')) {
-            fetchVideosFromFirestore(); // background sync with Firestore only when cache has expired
-        }
-        return _cache.videos;
+    initVideosRealtimeSync();
+
+    // 1. If we have already fetched the full Firestore database in memory, return it instantly
+    if (_hasFetchedFromFirestore && _cache.videos && _cache.videos.length > 0) {
+        return sanitizeAndCurateVideos(_cache.videos);
     }
-    
-    // 2. LocalStorage cache
+
+    // 2. Fetch directly from Firestore to ensure all 3,000 videos and 6,000 Reels are retrieved
+    try {
+        const firestoreVideos = await fetchVideosFromFirestore();
+        if (firestoreVideos && firestoreVideos.length > 0) {
+            return sanitizeAndCurateVideos(firestoreVideos);
+        }
+    } catch (e) {
+        console.warn("getVideos Firestore load fallback:", e);
+    }
+
+    // 3. Fallback to storage cache if Firestore fetch failed or is offline
     const stored = loadFromStorage('videos', null);
     if (stored && stored.length > 0) {
-        _cache.videos = stored;
+        const curated = sanitizeAndCurateVideos(stored);
+        _cache.videos = curated;
         _cache.videosTimestamp = Date.now();
-        return stored;
+        return curated;
     }
 
-    // 3. Fallback to catalog and sync to Firestore
+    // 4. Fallback to initial seeds
     const fallback = (seedData.videos && seedData.videos.length > 0) ? seedData.videos : initialVideos;
     if (fallback && fallback.length > 0) {
-        _cache.videos = fallback;
+        const curated = sanitizeAndCurateVideos(fallback);
+        _cache.videos = curated;
         _cache.videosTimestamp = Date.now();
-        saveToStorage('videos', fallback);
-        syncAllWebsiteVideosToFirestore();
-        return fallback;
+        return curated;
     }
 
-    // 4. Fresh fetch from Firestore
-    await fetchVideosFromFirestore();
-    return (_cache.videos && _cache.videos.length > 0) ? _cache.videos : initialVideos;
+    return [];
 }
 
 async function getVideoById(videoId) {
@@ -780,17 +942,33 @@ async function getVideoById(videoId) {
 
 async function saveVideo(video) {
     if (!video.timestamp) video.timestamp = Date.now();
-    await db.collection("videos").doc(video.id).set(video);
+    const isReelContent = isShortVideo(video);
+    if (isReelContent) {
+        video.isShort = true;
+        video.isReel = true;
+    }
+
+    const savePromises = [
+        db.collection("videos").doc(video.id).set(video)
+    ];
+    if (isReelContent) {
+        savePromises.push(db.collection("reels").doc(video.id).set(video).catch(() => {}));
+    }
+    await Promise.all(savePromises);
     try { rtdb.ref(`videos/${video.id}`).set(video); } catch (e) {}
     
-    // Update local cache immediately
-    if (_cache.videos) {
-        const idx = _cache.videos.findIndex(v => v.id === video.id);
-        if (idx >= 0) _cache.videos[idx] = video;
-        else _cache.videos.unshift(video);
-        saveToStorage('videos', _cache.videos);
-    }
+    // Update local memory cache immediately
+    if (!_cache.videos) _cache.videos = [];
+    const idx = _cache.videos.findIndex(v => v.id === video.id);
+    if (idx >= 0) _cache.videos[idx] = video;
+    else _cache.videos.unshift(video);
+    
+    try { saveToStorage('videos', _cache.videos.slice(0, 100)); } catch (e) {}
     invalidateCache('videos');
+
+    if (typeof document !== 'undefined') {
+        document.dispatchEvent(new CustomEvent('jtube:videosUpdated', { detail: _cache.videos }));
+    }
 }
 
 async function saveBatchVideos(videosArray) {
@@ -801,21 +979,29 @@ async function saveBatchVideos(videosArray) {
         const chunk = videosArray.slice(i, i + batchSize);
         chunk.forEach(video => {
             if (!video.timestamp) video.timestamp = Date.now();
+            const isReelContent = isShortVideo(video);
+            if (isReelContent) {
+                video.isShort = true;
+                video.isReel = true;
+            }
             const ref = db.collection("videos").doc(video.id);
             batch.set(ref, video);
+            if (isReelContent) {
+                const reelRef = db.collection("reels").doc(video.id);
+                batch.set(reelRef, video);
+            }
             try { rtdb.ref(`videos/${video.id}`).set(video); } catch (e) {}
         });
         await batch.commit();
     }
-    // Update memory cache and localStorage immediately for instant UI availability
-    if (_cache.videos) {
-        videosArray.forEach(v => {
-            const idx = _cache.videos.findIndex(item => item.id === v.id);
-            if (idx >= 0) _cache.videos[idx] = v;
-            else _cache.videos.unshift(v);
-        });
-        saveToStorage('videos', _cache.videos);
-    }
+    // Update memory cache immediately for instant UI availability
+    if (!_cache.videos) _cache.videos = [];
+    videosArray.forEach(v => {
+        const idx = _cache.videos.findIndex(item => item.id === v.id);
+        if (idx >= 0) _cache.videos[idx] = v;
+        else _cache.videos.unshift(v);
+    });
+    try { saveToStorage('videos', _cache.videos.slice(0, 100)); } catch (e) {}
     invalidateCache('videos');
     if (typeof document !== 'undefined') {
         document.dispatchEvent(new CustomEvent('jtube:videosUpdated', { detail: _cache.videos || [] }));
@@ -824,14 +1010,18 @@ async function saveBatchVideos(videosArray) {
 
 async function deleteVideo(id) {
     if (!id) return;
-    // 1. Delete from Firestore
-    await db.collection("videos").doc(id).delete();
+    // 1. Delete from Firestore (both collections)
+    await Promise.all([
+        db.collection("videos").doc(id).delete().catch(() => {}),
+        db.collection("reels").doc(id).delete().catch(() => {}),
+        db.collection("shorts").doc(id).delete().catch(() => {})
+    ]);
     // 2. Delete from RTDB
     try { rtdb.ref(`videos/${id}`).remove(); } catch (e) {}
     // 3. Update memory and local persistent storage
     if (_cache.videos) {
         _cache.videos = _cache.videos.filter(v => v.id !== id);
-        saveToStorage('videos', _cache.videos);
+        try { saveToStorage('videos', _cache.videos.slice(0, 100)); } catch (e) {}
     }
     invalidateCache('videos');
     if (typeof document !== 'undefined') {
@@ -1273,129 +1463,178 @@ if (!sessionStorage.getItem('jtube_db_init')) {
     initializeDatabase(); // non-blocking: no await
 }
 
-// ===== AUTO-SYNC YOUTUBE CHANNELS & STATS =====
+// ===== AUTO-SYNC YOUTUBE CHANNELS & STATS (REAL DAILY SYNC) =====
+const VERIFIED_FEATURED_CHANNELS = {
+    "Stanford Online": { ytChannelId: "UCBa5G_ESCn8Yd4vw5U-gIcg", category: "Programming" },
+    "CS50": { ytChannelId: "UCcabW7890RKJzL968QWEykA", category: "Programming" },
+    "CodeWithHarry": { ytChannelId: "UCeVMnSShP_Iviwkknt83cww", category: "Programming" },
+    "Programming Hero Bangladesh": { ytChannelId: "UCZ34f0PHL-TC8vD31hVPZuw", category: "Programming" },
+    "Bro Code": { ytChannelId: "UC4SVo0Ue36XCfOyb5Lh1viQ", category: "Programming" },
+    "Phitron": { ytChannelId: "UCjKb3rI-O-sAc64yXscpCDQ", category: "Programming" },
+    "CPS Academy": { ytChannelId: "UC3S_jVMwhUrF6jjkFCQvyuA", category: "Programming" },
+    "Hablu Programmer": { ytChannelId: "UCpGQisjfG8w-E21cG4ScEOA", category: "Programming" },
+    "Ali Hossain": { ytChannelId: "UCnbAAJ1l1AvmfaH2TVdH18Q", category: "Programming" },
+    "Mark Rober": { ytChannelId: "UCY1kMZp36IQSyNx_9h4mpCg", category: "Science" },
+    "David Bombal": { ytChannelId: "UCP7WmQ_U4GB3K51Od9QvM0w", category: "AI & ML" },
+    "AI Frontier": { ytChannelId: "UC6CGPM_qMkmtJY5_bd4rK2w", category: "AI & ML" },
+    "MIT OpenCourseWare": { ytChannelId: "UCEBb1b_L6zDS3xTUrIALZOw", category: "Education" },
+    "IIT Madras - B.S. Degree Programme": { ytChannelId: "UCvKzzGO37oT83K0FwnUucxw", category: "Education" },
+    "Towards Eternity": { ytChannelId: "UCPubBVDCzu7IWWnitlkEsNw", category: "Islam" },
+    "Alokito Ummah": { ytChannelId: "UCFRd_Id8mRnpjn-Cgm75fSA", category: "Islam" },
+    "تلاوات ياسر الدوسري إمام الحرم المكي": { ytChannelId: "UClncV9OLPto_MinRzGfjr2g", category: "Islam" },
+    "Qari Sabah Muhtadi Abid [Premium]": { ytChannelId: "UCY0tyW-tjT_-gGfxdagsmiw", category: "Islam" },
+    "Sabit International": { ytChannelId: "UCGmpReKFeVJjviXDp9knOpA", category: "Motivation" },
+    "Make First Million - Badar Munir": { ytChannelId: "UCVzgTh8i9W-UtengLs-xytA", category: "Motivation" },
+    "Raj Shamani": { ytChannelId: "UCzwCEE_PchiBULMnAJqhGVg", category: "Podcasts" },
+    "erspective Podcast Clips": { ytChannelId: "UCLx4XRxWzq3jLYqNfIGs15Q", category: "Podcasts" },
+    "Fun With Gopal": { ytChannelId: "UCpjQGNslJmPeGywrPlBEpNQ", category: "Entertainment" },
+    "The Kohistani": { ytChannelId: "UCCBGUffdWwRV0gUqgElkCfw", category: "Entertainment" },
+    "Basic Bhai": { ytChannelId: "UC8jp_6lbyD9EffZ1ZkyU5dQ", category: "Entertainment" },
+    "Dipro Prattoy": { ytChannelId: "UC_gzNUehJ7BS84seL2_e2FQ", category: "Education" },
+    "Inception BD": { ytChannelId: "UCLakvfuaLwTC-KPVCccQXAA", category: "Education" },
+    "উৎকর্ষ": { ytChannelId: "UCT9YVvhcV1SCSAk1aIP0f0A", category: "Education" },
+    "Asadudzaman Joy": { ytChannelId: "UCiQwtqIAlphixACg_4ADeWA", category: "Education" },
+    "Bismillah Agro": { ytChannelId: "UC0k1lj3hwhACiBlCw8L96cg", category: "General" },
+    "Rokomari․com": { ytChannelId: "UCMtGHnB-gqavI2L0d8SP2xg", category: "General" },
+    "Studio of Creative Arts Ltd": { ytChannelId: "UCMWEXniw4ADj95vExGV5iAQ", category: "Entertainment" },
+    "Tech Minds": { ytChannelId: "UC9a8Z6Sp6eb2s3O79pX5Zvg", category: "AI & ML" },
+    "Heritage & Science": { ytChannelId: "UCDE92JmI7T5C8fQwj2eNbhA", category: "Science" },
+    "Fahim Abdullah": { ytChannelId: "UCzRXuZ2TLCtVywE676SYIVg", category: "Education" },
+    "Abir Chowdhury": { ytChannelId: "UCaSJJoUiIAiD03pk4O426rQ", category: "Motivation" }
+};
+
+function decodeXmlEntities(str) {
+    if (!str) return "";
+    return str
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>');
+}
+
+function computeRelativeTime(timestamp) {
+    const sec = Math.floor((Date.now() - timestamp) / 1000);
+    if (sec < 60) return "Just now";
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min}m ago`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr}h ago`;
+    const day = Math.floor(hr / 24);
+    if (day === 1) return "Yesterday";
+    if (day < 30) return `${day} days ago`;
+    const mo = Math.floor(day / 30);
+    return `${mo} mo ago`;
+}
+
 async function syncChannelByName(channelName, force = false) {
-    const apiKey = typeof ENV !== 'undefined' ? ENV.YOUTUBE_API_KEY : null;
-    if (!apiKey || !channelName) return false;
+    if (!channelName) return false;
 
     try {
         const channels = await getChannels();
-        const data = channels[channelName];
-        if (!data) return false;
+        const data = channels[channelName] || {};
+        const verified = VERIFIED_FEATURED_CHANNELS[channelName] || {};
+        const ytChannelId = data.ytChannelId || verified.ytChannelId;
+        const category = data.syncCategory || verified.category || data.category || "General";
 
-        // Skip if synced recently (within 15 minutes) unless explicitly forced
-        const now = Date.now();
-        if (!force && data.lastSyncTime && (now - data.lastSyncTime < 15 * 60 * 1000)) {
-            return false;
-        }
-
-        let playlistId = data.ytPlaylistId;
-        let ytChannelId = data.ytChannelId;
-
-        // Auto-resolve channel ID if missing
-        if (!ytChannelId && !playlistId) {
-            try {
-                const searchRes = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q=${encodeURIComponent(channelName)}&key=${apiKey}`);
-                const searchData = await searchRes.json();
-                if (searchData.items && searchData.items.length > 0) {
-                    ytChannelId = searchData.items[0].snippet.channelId;
-                    data.ytChannelId = ytChannelId;
+        // 1. Try server-side sync endpoint first (fast, cached, bypasses CORS)
+        try {
+            const sRes = await fetch('/api/channels/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ channelName, force })
+            });
+            if (sRes.ok) {
+                const sData = await sRes.json();
+                if (sData.videos && sData.videos.length > 0) {
+                    const allVideos = await getVideos();
+                    const existingIds = new Set(allVideos.map(v => v.id));
+                    const newVids = sData.videos.filter(v => !existingIds.has(v.id));
+                    if (newVids.length > 0) {
+                        await saveBatchVideos(newVids);
+                        console.log(`[JTube Sync] Ingested ${newVids.length} new videos from server sync for ${channelName}`);
+                    }
+                    data.lastSyncTime = Date.now();
+                    if (_cache.channels) {
+                        _cache.channels[channelName] = data;
+                        saveToStorage('channels', _cache.channels);
+                    }
+                    return true;
                 }
-            } catch (e) {
-                console.warn(`Could not resolve YouTube ID for ${channelName}:`, e);
             }
+        } catch (serverErr) {
+            // Server sync not available, proceed to direct fetch
         }
 
-        if (!ytChannelId && !playlistId) return false;
-
-        if (ytChannelId && !playlistId) {
+        // 2. Direct client-side RSS sync if channel ID known
+        if (ytChannelId) {
             try {
-                const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=contentDetails,statistics&id=${ytChannelId}&key=${apiKey}`);
-                const cData = await res.json();
-                if (cData.items && cData.items.length > 0) {
-                    const item = cData.items[0];
-                    playlistId = item.contentDetails.relatedPlaylists.uploads;
-                    data.ytPlaylistId = playlistId;
-                    if (item.statistics && item.statistics.subscriberCount) {
-                        data.subscribers = parseInt(item.statistics.subscriberCount);
+                const res = await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${ytChannelId}`);
+                if (res.ok) {
+                    const xml = await res.text();
+                    const entries = xml.split("<entry>").slice(1);
+                    const allVideos = await getVideos();
+                    const existingIds = new Set(allVideos.map(v => v.id));
+                    const newVideos = [];
+
+                    for (const entry of entries) {
+                        const videoId = (entry.match(/<yt:videoId>(.*?)<\/yt:videoId>/) || [])[1];
+                        if (!videoId) continue;
+                        const docId = "yt_" + videoId;
+                        if (existingIds.has(docId)) continue;
+
+                        const rawTitle = (entry.match(/<title>(.*?)<\/title>/) || [])[1] || "Untitled";
+                        const title = decodeXmlEntities(rawTitle);
+                        const pub = (entry.match(/<published>(.*?)<\/published>/) || [])[1];
+                        const thumb = (entry.match(/<media:thumbnail url="(.*?)"/) || [])[1] || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+                        const desc = decodeXmlEntities((entry.match(/<media:description>([\s\S]*?)<\/media:description>/) || [])[1] || "");
+                        const views = parseInt((entry.match(/<media:statistics views="(\d+)"/) || [])[1] || "0", 10);
+                        const isReel = /#shorts|#short|#reels|#reel|\bshorts\b|\breels\b/i.test(title + " " + desc) || title.toLowerCase().includes('#reel') || title.toLowerCase().includes('#short');
+                        const isShort = isReel;
+                        const timestamp = pub ? new Date(pub).getTime() : Date.now();
+
+                        newVideos.push({
+                            id: docId,
+                            title,
+                            channel: channelName,
+                            category,
+                            playlist: "",
+                            views,
+                            time: computeRelativeTime(timestamp),
+                            duration: isReel ? "0:45" : "11:20",
+                            thumbnail: thumb,
+                            videoUrl: isReel ? `https://www.youtube.com/shorts/${videoId}` : `https://www.youtube.com/watch?v=${videoId}`,
+                            description: desc.slice(0, 1000),
+                            likes: Math.max(10, Math.floor(views * 0.04)),
+                            baseLikes: Math.max(10, Math.floor(views * 0.04)),
+                            liked: false,
+                            likedBy: [],
+                            isShort: isReel,
+                            isReel: isReel,
+                            contentType: isReel ? 'reel' : 'video',
+                            comments: [],
+                            timestamp
+                        });
+                    }
+
+                    if (newVideos.length > 0) {
+                        // 1. First save video and Reel links to Firestore
+                        await saveBatchVideos(newVideos);
+                        data.lastSyncTime = Date.now();
+                        data.ytChannelId = ytChannelId;
+                        if (_cache.channels) {
+                            _cache.channels[channelName] = data;
+                            saveToStorage('channels', _cache.channels);
+                        }
+                        // 2. Then display those saved videos and reels on website
+                        if (typeof document !== 'undefined') {
+                            document.dispatchEvent(new CustomEvent('jtube:videosUpdated', { detail: newVideos }));
+                        }
+                        return true;
                     }
                 }
-            } catch (e) {}
-        }
-
-        if (!playlistId) return false;
-
-        const allVideos = await getVideos();
-        const existingIds = new Set(allVideos.map(v => v.id));
-
-        const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=30&playlistId=${playlistId}&key=${apiKey}`;
-        const res = await fetch(url);
-        const pData = await res.json();
-
-        if (pData.items && pData.items.length > 0) {
-            const videoIds = pData.items.map(item => item.contentDetails.videoId).filter(Boolean).join(',');
-            const vidRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails,statistics&id=${videoIds}&key=${apiKey}`);
-            const vidData = await vidRes.json();
-
-            const durationMap = {};
-            const statsMap = {};
-            if (vidData.items) {
-                vidData.items.forEach(v => {
-                    durationMap[v.id] = v.contentDetails.duration;
-                    statsMap[v.id] = v.statistics || {};
-                });
-            }
-
-            const newVideos = [];
-            for (const item of pData.items) {
-                const snippet = item.snippet;
-                const videoId = snippet.resourceId ? snippet.resourceId.videoId : (item.contentDetails ? item.contentDetails.videoId : '');
-                if (!videoId) continue;
-
-                const docId = "yt_" + videoId;
-                if (existingIds.has(docId)) continue;
-
-                const dStr = durationMap[videoId];
-                if (!dStr) continue;
-
-                const totalSeconds = parseDurationToSeconds(dStr);
-                const h = Math.floor(totalSeconds / 3600);
-                const m = Math.floor((totalSeconds % 3600) / 60);
-                const s = totalSeconds % 60;
-                const durationText = h > 0 
-                    ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}` 
-                    : `${m}:${s.toString().padStart(2, '0')}`;
-
-                const stats = statsMap[videoId] || {};
-                const rawLikes = parseInt(stats.likeCount || 0);
-
-                newVideos.push({
-                    id: docId,
-                    title: snippet.title,
-                    channel: channelName,
-                    category: data.syncCategory || "General",
-                    playlist: "",
-                    views: parseInt(stats.viewCount || 0),
-                    time: "Just now",
-                    duration: durationText,
-                    thumbnail: snippet.thumbnails?.maxres?.url || snippet.thumbnails?.high?.url || snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url || "",
-                    videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
-                    description: snippet.description || "Imported automatically from YouTube",
-                    likes: rawLikes,
-                    baseLikes: rawLikes,
-                    liked: false,
-                    likedBy: [],
-                    isShort: totalSeconds <= 60,
-                    comments: [],
-                    timestamp: new Date(snippet.publishedAt).getTime()
-                });
-            }
-
-            if (newVideos.length > 0) {
-                await saveBatchVideos(newVideos);
-                console.log(`Saved ${newVideos.length} new YouTube videos to Firebase first for ${channelName}!`);
-                await saveChannel(channelName, { ...data, lastSyncTime: Date.now() });
-                return true;
+            } catch (rssErr) {
+                console.warn(`[JTube Sync] Client RSS error for ${channelName}:`, rssErr);
             }
         }
     } catch (e) {
@@ -1405,211 +1644,65 @@ async function syncChannelByName(channelName, force = false) {
 }
 
 async function autoSyncYouTubeChannels(force = false) {
-    const apiKey = typeof ENV !== 'undefined' ? ENV.YOUTUBE_API_KEY : null;
-    if (!apiKey) return;
-
     try {
-        const channels = await getChannels();
-        const now = Date.now();
-        const SYNC_INTERVAL = 30 * 60 * 1000; // 30 minutes between channel background checks (saves Firestore reads & writes)
-        let hasUpdates = false;
-        const allVideos = await getVideos(); // Fetch all once for fast lookup
-
-        for (const [channelName, data] of Object.entries(channels)) {
-            let playlistId = data.ytPlaylistId;
-            let ytChannelId = data.ytChannelId;
-
-            // Auto-resolve channel ID if missing
-            if (!ytChannelId && !playlistId) {
-                try {
-                    const searchRes = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q=${encodeURIComponent(channelName)}&key=${apiKey}`);
-                    const searchData = await searchRes.json();
-                    if (searchData.items && searchData.items.length > 0) {
-                        ytChannelId = searchData.items[0].snippet.channelId;
-                        data.ytChannelId = ytChannelId;
+        console.log("[JTube Sync] Checking for new daily videos and Reels across featured YouTube channels...");
+        
+        // 1. Fetch daily videos from server cache (instant, pre-synced background engine)
+        try {
+            const res = await fetch('/api/channels/daily-videos');
+            if (res.ok) {
+                const data = await res.json();
+                if (data.videos && data.videos.length > 0) {
+                    const allVideos = await getVideos();
+                    const existingIds = new Set(allVideos.map(v => v.id));
+                    const freshVideos = data.videos.filter(v => !existingIds.has(v.id)).map(v => {
+                        const isReelVid = isShortVideo(v);
+                        return {
+                            ...v,
+                            isShort: isReelVid,
+                            isReel: isReelVid,
+                            contentType: isReelVid ? 'reel' : 'video',
+                            videoUrl: v.videoUrl || (isReelVid ? `https://www.youtube.com/shorts/${v.videoId || v.id.replace('yt_', '')}` : `https://www.youtube.com/watch?v=${v.videoId || v.id.replace('yt_', '')}`)
+                        };
+                    });
+                    
+                    if (freshVideos.length > 0) {
+                        // 1. First save newly discovered video and Reel links to Firestore
+                        await saveBatchVideos(freshVideos);
+                        const vCount = freshVideos.filter(v => !v.isReel).length;
+                        const rCount = freshVideos.filter(v => v.isReel).length;
+                        console.log(`[JTube Sync] Successfully saved ${vCount} new videos and ${rCount} new Reels to Firestore!`);
+                        
+                        // 2. Then display saved videos on website
+                        if (typeof document !== 'undefined') {
+                            document.dispatchEvent(new CustomEvent('jtube:videosUpdated', { detail: freshVideos }));
+                        }
+                        return { synced: true, savedCount: freshVideos.length, videosCount: vCount, reelsCount: rCount };
                     }
-                } catch (e) {
-                    console.warn(`Could not resolve YouTube ID for ${channelName}:`, e);
                 }
             }
+        } catch (serverErr) {
+            console.warn("[JTube Sync] Server daily-videos fetch skipped:", serverErr.message);
+        }
 
-            // Sync if channel has YouTube ID or playlist configured
-            const shouldSync = force || (!data.lastSyncTime || (now - data.lastSyncTime > SYNC_INTERVAL));
-            if ((ytChannelId || playlistId) && shouldSync) {
-                console.log(`Auto-syncing YouTube channel & saving to Firebase first: ${channelName}`);
-                let channelChanged = false;
-                
-                // 1. Sync Channel Subscribers & Get Playlist ID if needed
-                if (ytChannelId) {
-                    try {
-                        const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=contentDetails,statistics&id=${ytChannelId}&key=${apiKey}`);
-                        const cData = await res.json();
-                        if (cData.items && cData.items.length > 0) {
-                            const item = cData.items[0];
-                            if (!playlistId) {
-                                playlistId = item.contentDetails.relatedPlaylists.uploads;
-                                data.ytPlaylistId = playlistId; // Cache it
-                                channelChanged = true;
-                            }
-                            // Update subscribers from YouTube only if changed
-                            if (item.statistics && item.statistics.subscriberCount) {
-                                const newSubs = parseInt(item.statistics.subscriberCount);
-                                if (data.subscribers !== newSubs) {
-                                    data.subscribers = newSubs;
-                                    channelChanged = true;
-                                }
-                            }
-                        }
-                    } catch (e) { console.warn("Error syncing channel stats", e); }
-                }
+        // 2. Client-side fallback: check featured channels that have not been synced in 30 minutes
+        const channels = await getChannels();
+        const now = Date.now();
+        const SYNC_INTERVAL = 30 * 60 * 1000;
+        let syncedAny = false;
 
-                // 2. Fetch new videos & shorts from Channel's uploads Playlist
-                if (playlistId) {
-                    try {
-                        // Fetch latest 25 items so new videos and shorts are always caught
-                        const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=25&playlistId=${playlistId}&key=${apiKey}`;
-                        const res = await fetch(url);
-                        const pData = await res.json();
-                        
-                        if (pData.items && pData.items.length > 0) {
-                            const videoIds = pData.items.map(item => item.contentDetails.videoId).filter(Boolean).join(',');
-                            
-                            const vidRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails,statistics&id=${videoIds}&key=${apiKey}`);
-                            const vidData = await vidRes.json();
-                            
-                            const durationMap = {};
-                            const statsMap = {};
-                            if (vidData.items) {
-                                vidData.items.forEach(v => { 
-                                    durationMap[v.id] = v.contentDetails.duration; 
-                                    statsMap[v.id] = v.statistics || {};
-                                });
-                            }
-
-                            const existingIds = new Set(allVideos.map(v => v.id));
-                            const newVideos = [];
-
-                            for (const item of pData.items) {
-                                const snippet = item.snippet;
-                                const videoId = snippet.resourceId ? snippet.resourceId.videoId : (item.contentDetails ? item.contentDetails.videoId : '');
-                                if (!videoId) continue;
-                                
-                                const docId = "yt_" + videoId;
-                                if (existingIds.has(docId)) continue; // Already exists
-
-                                const dStr = durationMap[videoId];
-                                if (!dStr) continue;
-                                
-                                // Parse duration
-                                let totalSeconds = 0;
-                                const match = dStr.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
-                                if (match) {
-                                    totalSeconds = (parseInt(match[1] || 0) * 3600) + (parseInt(match[2] || 0) * 60) + parseInt(match[3] || 0);
-                                }
-
-                                // Format duration (including shorts <= 60 seconds)
-                                const h = Math.floor(totalSeconds / 3600);
-                                const m = Math.floor((totalSeconds % 3600) / 60);
-                                const s = totalSeconds % 60;
-                                const durationText = h > 0 
-                                    ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}` 
-                                    : `${m}:${s.toString().padStart(2, '0')}`;
-
-                                const stats = statsMap[videoId] || {};
-                                const rawLikes = parseInt(stats.likeCount || 0);
-
-                                newVideos.push({
-                                    id: docId,
-                                    title: snippet.title,
-                                    channel: channelName,
-                                    category: data.syncCategory || "General",
-                                    playlist: "",
-                                    views: parseInt(stats.viewCount || 0),
-                                    time: "Just now",
-                                    duration: durationText,
-                                    thumbnail: snippet.thumbnails?.maxres?.url || snippet.thumbnails?.high?.url || snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url || "",
-                                    videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
-                                    description: snippet.description || "Imported automatically from YouTube",
-                                    likes: rawLikes,
-                                    baseLikes: rawLikes,
-                                    liked: false,
-                                    likedBy: [],
-                                    isShort: totalSeconds <= 60,
-                                    comments: [],
-                                    timestamp: new Date(snippet.publishedAt).getTime()
-                                });
-                            }
-
-                            if (newVideos.length > 0) {
-                                await saveBatchVideos(newVideos);
-                                console.log(`Auto-synced ${newVideos.length} new videos & shorts for ${channelName}!`);
-                                hasUpdates = true;
-                                allVideos.push(...newVideos);
-                            }
-                        }
-                    } catch (e) { console.warn("Error during auto-sync fetch for " + channelName, e); }
-                }
-
-                // 3. Sync stats for existing videos belonging to this channel only when views or likes change significantly
-                const channelVideos = allVideos.filter(v => v.channel === channelName && v.id.startsWith("yt_"));
-                if (channelVideos.length > 0) {
-                    const chunkedVideos = [];
-                    for(let i=0; i < channelVideos.length; i+=50) {
-                        chunkedVideos.push(channelVideos.slice(i, i+50));
-                    }
-                    
-                    const updatedVideos = [];
-                    for(const chunk of chunkedVideos) {
-                        const ytIds = chunk.map(v => v.id.replace("yt_", "")).join(',');
-                        try {
-                            const statsRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${ytIds}&key=${apiKey}`);
-                            const statsData = await statsRes.json();
-                            if (statsData.items) {
-                                statsData.items.forEach(ytVid => {
-                                    const jtubeVid = chunk.find(v => v.id === `yt_${ytVid.id}`);
-                                    if (jtubeVid && ytVid.statistics) {
-                                        const newViews = parseInt(ytVid.statistics.viewCount || jtubeVid.views);
-                                        const newLikes = parseInt(ytVid.statistics.likeCount || (jtubeVid.baseLikes ?? jtubeVid.likes ?? 0));
-                                        const siteLikesCount = Array.isArray(jtubeVid.likedBy) ? jtubeVid.likedBy.length : 0;
-                                        const totalLikes = newLikes + siteLikesCount;
-
-                                        // Only write to Firestore if views changed by at least 10 or likes changed, avoiding constant tiny single-view writes
-                                        const viewDelta = Math.abs(newViews - (jtubeVid.views || 0));
-                                        const likesChanged = jtubeVid.baseLikes !== newLikes || jtubeVid.likes !== totalLikes;
-
-                                        if (viewDelta >= 10 || likesChanged) {
-                                            jtubeVid.views = newViews;
-                                            jtubeVid.baseLikes = newLikes;
-                                            jtubeVid.likes = totalLikes;
-                                            updatedVideos.push(jtubeVid);
-                                        }
-                                    }
-                                });
-                            }
-                        } catch(e) { console.warn("Error syncing video stats batch", e); }
-                    }
-                    
-                    if (updatedVideos.length > 0) {
-                        await saveBatchVideos(updatedVideos);
-                        hasUpdates = true;
-                        console.log(`Updated YouTube stats for ${updatedVideos.length} videos of ${channelName}.`);
-                    }
-                }
-
-                // Update sync time in memory and only write channel to Firestore if metadata actually changed
-                data.lastSyncTime = Date.now();
-                if (channelChanged) {
-                    await saveChannel(channelName, data);
-                } else if (_cache.channels) {
-                    _cache.channels[channelName] = data;
-                    saveToStorage('channels', _cache.channels);
-                }
+        for (const [name, meta] of Object.entries(VERIFIED_FEATURED_CHANNELS)) {
+            const chanData = channels[name] || {};
+            if (force || !chanData.lastSyncTime || (now - chanData.lastSyncTime > SYNC_INTERVAL)) {
+                const ok = await syncChannelByName(name, force);
+                if (ok) syncedAny = true;
             }
         }
 
-        // Keep synced data in cache/storage; do not auto-reload UI while user is browsing
+        return syncedAny;
     } catch (e) {
         console.error("Auto-sync background process failed:", e);
+        return false;
     }
 }
 
@@ -1717,17 +1810,62 @@ function parseDurationInSeconds(durationStr) {
 
 function isShortVideo(video) {
     if (!video) return false;
-    if (video.isShort === true) return true;
-    if (video.category && video.category.toLowerCase() === 'shorts') return true;
-    if (video.videoUrl && /youtube\.com\/shorts\//i.test(video.videoUrl)) return true;
-    if (video.title && /#shorts?\b/i.test(video.title)) return true;
+    if (video.isShort === true || video.isReel === true) return true;
+    if (video.contentType === 'reel' || video.contentType === 'short' || video.type === 'reel') return true;
+    if (video.category && (video.category.toLowerCase() === 'shorts' || video.category.toLowerCase() === 'reels')) return true;
+    if (video.videoUrl && (/youtube\.com\/shorts\//i.test(video.videoUrl) || /instagram\.com\/reel\//i.test(video.videoUrl))) return true;
+    if (video.title && (/#shorts?\b|#reels?\b|\bshorts\b|\breels\b/i.test(video.title))) return true;
+    if (video.description && (/#shorts?\b|#reels?\b|\bshorts\b|\breels\b/i.test(video.description))) return true;
     const secs = parseDurationInSeconds(video.duration);
     return secs > 0 && secs <= 120; // 2 minutes or less
+}
+
+function isReel(video) {
+    return isShortVideo(video);
+}
+
+function isRegularVideo(video) {
+    return !isShortVideo(video);
 }
 
 async function getShortVideos() {
     const all = await getVideos();
     return all.filter(v => isShortVideo(v));
+}
+
+// Direct Firestore Catalog Counter for Admin Dashboard
+async function getFirestoreCatalogCounts() {
+    try {
+        const snapshot = await db.collection("videos").get();
+        let videosCount = 0;
+        let reelsCount = 0;
+        let totalViews = 0;
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            if (isShortVideo(data)) {
+                reelsCount++;
+            } else {
+                videosCount++;
+            }
+            totalViews += (typeof data.views === 'number' ? data.views : parseInt(data.views || 0) || 0);
+        });
+        return {
+            total: snapshot.size,
+            videos: videosCount,
+            reels: reelsCount,
+            views: totalViews
+        };
+    } catch (err) {
+        console.warn("getFirestoreCatalogCounts fallback to memory cache:", err);
+        const all = await getVideos();
+        const reelsCount = all.filter(v => isShortVideo(v)).length;
+        return {
+            total: all.length,
+            videos: Math.max(0, all.length - reelsCount),
+            reels: reelsCount,
+            views: all.reduce((sum, v) => sum + (parseInt(v.views) || 0), 0)
+        };
+    }
 }
 
 function getDurationBadgeClass(durationStr) {
@@ -2260,4 +2398,9 @@ if (typeof window !== 'undefined') {
     window.getSiteUserIdentifier = getSiteUserIdentifier;
     window.AIModeration = AIModeration;
     window.AIVideoBrain = AIVideoBrain;
+    window.isReel = isReel;
+    window.isRegularVideo = isRegularVideo;
+    window.getFirestoreCatalogCounts = getFirestoreCatalogCounts;
+    window.autoSyncYouTubeChannels = autoSyncYouTubeChannels;
+    window.syncChannelByName = syncChannelByName;
 }

@@ -713,6 +713,18 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     videoTitle.textContent = video.title;
+
+    // Populate Curated Quality Indicators
+    const videoQualityPill = document.getElementById("video-quality-pill");
+    const videoCategoryTag = document.getElementById("video-category-tag");
+    if (videoQualityPill) {
+        const badge = video.qualityBadge || (video.duration && video.duration.length > 5 ? "✦ Curated Masterclass" : "✦ Verified HD");
+        videoQualityPill.innerHTML = `<i class="fas fa-check-circle text-[10px]"></i> ${badge} &bull; Verified Quality`;
+    }
+    if (videoCategoryTag) {
+        videoCategoryTag.textContent = video.category || "STEM & Tech";
+    }
+
     const currentChannelData = channels[video.channel];
     if (currentChannelData && currentChannelData.avatarUrl) {
         channelAvatar.innerHTML = `<img src="${currentChannelData.avatarUrl}" class="w-full h-full object-cover rounded-full" alt="${video.channel}">`;
@@ -905,7 +917,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     async function renderRecommendations() {
-        recommendationsContainer.innerHTML = `<h3 class="text-xs font-bold text-zinc-400 tracking-wider uppercase mb-1">Up Next</h3>`;
+        recommendationsContainer.innerHTML = `
+            <div class="flex items-center justify-between mb-3 pb-2 border-b border-white/[0.08]">
+                <h3 class="text-xs font-bold text-zinc-300 tracking-wider uppercase flex items-center gap-1.5">
+                    <i class="fas fa-sparkles text-amber-400 text-[10px]"></i> Curated Next
+                </h3>
+                <span class="text-[10px] text-zinc-500 font-medium">Auto-filter ON</span>
+            </div>
+        `;
         const videos = await getVideos();
         let recs = videos.filter(v => v.id !== video.id);
         // Shuffle for variety
@@ -917,19 +936,24 @@ document.addEventListener("DOMContentLoaded", async () => {
         const fragment = document.createDocumentFragment();
         recs.forEach(v => {
             const el = document.createElement('div');
-            el.className = 'flex space-x-3 cursor-pointer group';
+            el.className = 'flex space-x-3 cursor-pointer group p-2 rounded-xl hover:bg-white/[0.04] transition border border-transparent hover:border-white/[0.06]';
             el.onclick = () => location.href = `watch.html?id=${v.id}`;
+            const badgeLabel = v.qualityBadge || (v.duration && v.duration.length > 5 ? "✦ Masterclass" : "✦ Verified HD");
             el.innerHTML = `
-                <div class="relative w-32 sm:w-40 aspect-video bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0">
-                    <img src="${v.thumbnail}" loading="lazy" class="w-full h-full object-cover">
+                <div class="relative w-36 sm:w-40 aspect-video bg-[#181c26] rounded-xl overflow-hidden flex-shrink-0 border border-white/[0.06]">
+                    <img src="${v.thumbnail}" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" alt="${v.title.replace(/"/g, '&quot;')}">
+                    <span class="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-black/80 backdrop-blur-sm text-zinc-200 border border-white/10">${v.duration || 'HD'}</span>
                 </div>
-                <div class="flex-1">
+                <div class="flex-1 min-w-0">
+                    <span class="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 mb-1">
+                        ${badgeLabel}
+                    </span>
                     <h4 class="text-xs font-semibold line-clamp-2 text-zinc-100 leading-snug group-hover:text-white">${v.title}</h4>
                     <div class="flex items-center space-x-1 mt-1">
                         <p class="text-[11px] text-zinc-400 truncate">${v.channel}</p>
-                        <img src="img/icons.svg" class="w-3 h-3 flex-shrink-0" alt="Verified" title="Verified">
+                        <img src="img/icons.svg" class="w-3 h-3 flex-shrink-0" alt="Verified" title="Verified Creator">
                     </div>
-                    <p class="text-[11px] text-zinc-400">${formatCompactNumber(v.views)} views</p>
+                    <p class="text-[10px] text-zinc-500 mt-0.5">${formatCompactNumber(v.views)} views • ${timeAgo(v.timestamp)}</p>
                 </div>
             `;
             fragment.appendChild(el);

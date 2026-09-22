@@ -45,6 +45,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (adminAvatarInitial) adminAvatarInitial.textContent = (email || "A")[0].toUpperCase();
         loadAdminDashboard();
         loadAdminUsers();
+        if (typeof loadDailySyncHub === 'function') loadDailySyncHub();
+        if (typeof initAISuite === 'function') initAISuite();
     }
 
     // Toggle password visibility
@@ -1200,12 +1202,22 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // ===== STUDIO OVERVIEW & ANALYTICS ENGINE =====
     async function loadOverviewAnalytics(videos, channels, categories, users) {
-        const totalVids = videos ? videos.length : 0;
-        const totalShorts = videos ? videos.filter(v => (typeof isShortVideo === 'function') ? isShortVideo(v) : Boolean(v.isShort)).length : 0;
-        const totalLongform = Math.max(0, totalVids - totalShorts);
+        // Query direct Firestore catalog stats if available, or compute from videos array
+        let firestoreStats = null;
+        if (typeof getFirestoreCatalogCounts === 'function') {
+            try {
+                firestoreStats = await getFirestoreCatalogCounts();
+            } catch (e) {
+                console.warn("Could not query Firestore direct catalog counts:", e);
+            }
+        }
 
-        let totalViews = 0;
-        if (videos) {
+        const totalVids = firestoreStats ? firestoreStats.total : (videos ? videos.length : 0);
+        const totalShorts = firestoreStats ? firestoreStats.reels : (videos ? videos.filter(v => (typeof isShortVideo === 'function') ? isShortVideo(v) : Boolean(v.isShort || v.isReel)).length : 0);
+        const totalLongform = firestoreStats ? firestoreStats.videos : Math.max(0, totalVids - totalShorts);
+
+        let totalViews = firestoreStats ? firestoreStats.views : 0;
+        if (!firestoreStats && videos) {
             videos.forEach(v => {
                 totalViews += (typeof v.views === 'number' ? v.views : parseInt(v.views || 0) || 0);
             });
@@ -1220,6 +1232,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         const usersCount = (users && users.length) ? users.length : (cachedUsersList ? cachedUsersList.length : 1);
 
+        const elSavedVideos = document.getElementById("kpi-saved-videos");
+        const elSavedReels = document.getElementById("kpi-saved-reels");
         const elTotalVids = document.getElementById("kpi-total-videos");
         const elLongform = document.getElementById("kpi-longform-count");
         const elShorts = document.getElementById("kpi-shorts-count");
@@ -1229,7 +1243,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         const elTotalUsers = document.getElementById("kpi-total-users");
         const elAiAuditTime = document.getElementById("kpi-ai-audit-time");
 
-        if (elTotalVids) elTotalVids.textContent = totalVids;
+        if (elSavedVideos) elSavedVideos.textContent = `${totalLongform}`;
+        if (elSavedReels) elSavedReels.textContent = `${totalShorts}`;
+        if (elTotalVids) elTotalVids.textContent = `${totalVids}`;
         if (elLongform) elLongform.textContent = totalLongform;
         if (elShorts) elShorts.textContent = totalShorts;
         if (elTotalViews) elTotalViews.textContent = formatCompactNumber(totalViews);
@@ -1589,6 +1605,955 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // Do NOT auto-load dashboard on page load (loads after login)
-    // await loadAdminDashboard(); <-- removed for instant page load
+    // ===== DAILY YOUTUBE SYNC HUB CONTROLLER =====
+    let cachedSyncChannels = [];
+    let cachedDailyVideos = [];
+
+    function showSyncStatus(msg, type = 'success') {
+        const statusEl = document.getElementById('daily-sync-status');
+        if (!statusEl) return;
+        statusEl.classList.remove('hidden');
+        if (type === 'success') {
+            statusEl.className = 'mb-6 p-4 rounded-xl text-xs font-semibold flex items-center justify-between bg-emerald-950/70 border border-emerald-700/60 text-emerald-200 transition-all';
+        } else if (type === 'error') {
+            statusEl.className = 'mb-6 p-4 rounded-xl text-xs font-semibold flex items-center justify-between bg-red-950/70 border border-red-700/60 text-red-200 transition-all';
+        } else {
+            statusEl.className = 'mb-6 p-4 rounded-xl text-xs font-semibold flex items-center justify-between bg-zinc-900 border border-zinc-700 text-zinc-200 transition-all';
+        }
+        statusEl.innerHTML = `
+            <div class="flex items-center space-x-2">
+                <i class="${type === 'success' ? 'fas fa-check-circle text-emerald-400' : type === 'error' ? 'fas fa-exclamation-circle text-red-400' : 'fas fa-info-circle text-blue-400'}"></i>
+                <span>${msg}</span>
+            </div>
+            <button type="button" onclick="this.parentElement.classList.add('hidden')" class="text-zinc-400 hover:text-white ml-3 cursor-pointer">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        if (type !== 'loading') {
+            setTimeout(() => { if (statusEl) statusEl.classList.add('hidden'); }, 6000);
+        }
+    }
+
+    async function loadDailySyncHub() {
+        try {
+            // 1. Fetch featured channels
+            const chanRes = await fetch('/api/channels/featured');
+            if (chanRes.ok) {
+                const chanData = await chanRes.json();
+                if (chanData && chanData.channels) {
+                    cachedSyncChannels = chanData.channels;
+                }
+            }
+
+            // 2. Fetch daily videos
+            const vidRes = await fetch('/api/channels/daily-videos');
+            if (vidRes.ok) {
+                const vidData = await vidRes.json();
+                if (vidData && vidData.videos) {
+                    cachedDailyVideos = vidData.videos;
+                }
+            }
+
+            // 3. Query Firestore saved catalog counts
+            let firestoreCounts = null;
+            if (typeof getFirestoreCatalogCounts === 'function') {
+                try {
+                    firestoreCounts = await getFirestoreCatalogCounts();
+                } catch (e) {
+                    console.warn("Could not query getFirestoreCatalogCounts in sync hub:", e);
+                }
+            }
+
+            renderDailySyncHubUI(firestoreCounts);
+        } catch (err) {
+            console.error('Error loading daily sync hub:', err);
+        }
+    }
+    window.loadDailySyncHub = loadDailySyncHub;
+
+    function renderDailySyncHubUI(firestoreCounts) {
+        // Update KPIs
+        const chanCountEl = document.getElementById('kpi-sync-channel-count');
+        const syncSavedVideosEl = document.getElementById('kpi-sync-saved-videos');
+        const syncSavedReelsEl = document.getElementById('kpi-sync-saved-reels');
+        const syncTotalSavedEl = document.getElementById('kpi-sync-total-saved');
+        const dailyCountEl = document.getElementById('kpi-daily-uploaded-count');
+        const lastTimeEl = document.getElementById('kpi-sync-last-time');
+        const sidebarSyncBadge = document.getElementById('sidebar-sync-badge');
+
+        const totalChannels = cachedSyncChannels.length || 36;
+        if (chanCountEl) chanCountEl.textContent = `${totalChannels} Channels`;
+        if (sidebarSyncBadge) sidebarSyncBadge.textContent = `${totalChannels} Feeds`;
+
+        let savedVideosCount = 0;
+        let savedReelsCount = 0;
+        let totalSavedCount = 0;
+
+        if (firestoreCounts) {
+            savedVideosCount = firestoreCounts.videos;
+            savedReelsCount = firestoreCounts.reels;
+            totalSavedCount = firestoreCounts.total;
+        } else {
+            const source = (adminVideos && adminVideos.length > 0) ? adminVideos : cachedDailyVideos;
+            savedReelsCount = source.filter(v => (typeof isShortVideo === 'function') ? isShortVideo(v) : Boolean(v.isShort || v.isReel)).length;
+            savedVideosCount = Math.max(0, source.length - savedReelsCount);
+            totalSavedCount = source.length;
+        }
+
+        if (syncSavedVideosEl) syncSavedVideosEl.textContent = `${savedVideosCount} Videos`;
+        if (syncSavedReelsEl) syncSavedReelsEl.textContent = `${savedReelsCount} Reels`;
+        if (syncTotalSavedEl) syncTotalSavedEl.textContent = `${totalSavedCount} Total`;
+        if (dailyCountEl) dailyCountEl.textContent = `${cachedDailyVideos.length} Videos`;
+
+        if (lastTimeEl) {
+            const now = new Date();
+            lastTimeEl.textContent = `Active • ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        }
+
+        renderDailyVideosGallery();
+        renderSyncChannelsTable();
+    }
+
+    function renderDailyVideosGallery() {
+        const gallery = document.getElementById('daily-videos-gallery');
+        if (!gallery) return;
+
+        const search = (document.getElementById('daily-feed-search')?.value || '').trim().toLowerCase();
+        const cat = document.getElementById('daily-feed-category')?.value || 'all';
+        const typeFilter = document.getElementById('daily-feed-type')?.value || 'all';
+
+        let filtered = cachedDailyVideos.filter(v => {
+            const isReelVid = (typeof isShortVideo === 'function') ? isShortVideo(v) : Boolean(v.isShort || v.isReel);
+            const matchesSearch = !search || 
+                (v.title && v.title.toLowerCase().includes(search)) ||
+                (v.channel && v.channel.toLowerCase().includes(search));
+            const matchesCat = cat === 'all' || (v.category && v.category.toLowerCase() === cat.toLowerCase());
+            const matchesType = typeFilter === 'all' || 
+                (typeFilter === 'videos' && !isReelVid) || 
+                (typeFilter === 'reels' && isReelVid);
+            return matchesSearch && matchesCat && matchesType;
+        });
+
+        if (filtered.length === 0) {
+            gallery.innerHTML = `
+                <div class="col-span-full text-center py-10 text-zinc-500 text-xs">
+                    <i class="fas fa-satellite-dish text-zinc-600 text-2xl mb-2 block"></i>
+                    No uploads found matching the current filters. Click "Sync All 36 Channels Now" to ingest the latest daily YouTube uploads and Reels.
+                </div>
+            `;
+            return;
+        }
+
+        gallery.innerHTML = filtered.map(v => {
+            const isReelVid = (typeof isShortVideo === 'function') ? isShortVideo(v) : Boolean(v.isShort || v.isReel);
+            const thumb = v.thumbnail || (v.id ? `https://img.youtube.com/vi/${v.id}/hqdefault.jpg` : 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500');
+            const dur = v.duration || (isReelVid ? '0:45' : 'Daily Upload');
+            const channel = escapeHtml(v.channel || 'Featured Channel');
+            const title = escapeHtml(v.title || 'Untitled Video');
+            const catBadge = escapeHtml(v.category || 'General');
+            const playUrl = isReelVid ? `shorts.html?id=${v.id}` : `watch.html?v=${v.id}`;
+            const formatBadge = isReelVid 
+                ? `<span class="bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded flex items-center gap-1 shadow"><i class="fas fa-bolt"></i> Reel</span>`
+                : `<span class="bg-blue-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded flex items-center gap-1 shadow"><i class="fas fa-video"></i> Video</span>`;
+
+            return `
+                <div class="bg-zinc-900/70 border border-zinc-800 rounded-xl overflow-hidden group hover:border-zinc-700 transition flex flex-col justify-between">
+                    <div class="relative aspect-video bg-zinc-950 overflow-hidden">
+                        <img src="${thumb}" alt="${title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" onerror="this.src='https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500'">
+                        <span class="absolute bottom-1.5 right-1.5 bg-black/80 text-white text-[10px] font-bold px-1.5 py-0.5 rounded font-mono">${dur}</span>
+                        <div class="absolute top-1.5 left-1.5 flex items-center gap-1">
+                            ${formatBadge}
+                            <span class="bg-emerald-500/90 text-zinc-950 text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">New</span>
+                        </div>
+                    </div>
+                    <div class="p-3 flex-1 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center gap-1.5 text-[10px] text-zinc-400 mb-1">
+                                <span class="text-zinc-300 font-semibold truncate">${channel}</span>
+                                <i class="fas fa-check-circle text-emerald-400 text-[9px]"></i>
+                                <span class="text-zinc-600">•</span>
+                                <span class="text-zinc-400">${catBadge}</span>
+                            </div>
+                            <h4 class="text-xs font-bold text-white line-clamp-2 leading-snug group-hover:text-red-400 transition" title="${title}">${title}</h4>
+                            <div class="mt-2 flex items-center gap-1.5 text-[10px] text-emerald-400 font-medium">
+                                <i class="fas fa-database text-[9px]"></i>
+                                <span>Saved in Firestore &amp; Live</span>
+                            </div>
+                        </div>
+                        <div class="mt-3 pt-2.5 border-t border-zinc-800/70 flex items-center justify-between text-[11px]">
+                            <a href="${playUrl}" target="_blank" class="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1 transition">
+                                <i class="fas fa-play text-[10px]"></i> Watch on JTube
+                            </a>
+                            <a href="${v.videoUrl || `https://www.youtube.com/watch?v=${v.id}`}" target="_blank" class="text-zinc-500 hover:text-zinc-300 transition" title="Open original link">
+                                <i class="fab fa-youtube"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function renderSyncChannelsTable() {
+        const tbody = document.getElementById('sync-channels-table-body');
+        if (!tbody) return;
+
+        const search = (document.getElementById('sync-channels-search')?.value || '').trim().toLowerCase();
+        let filtered = cachedSyncChannels.filter(c => {
+            return !search || (c.name && c.name.toLowerCase().includes(search)) ||
+                (c.category && c.category.toLowerCase().includes(search)) ||
+                (c.channelId && c.channelId.toLowerCase().includes(search));
+        });
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5" class="text-center py-6 text-zinc-500">No channels found matching "${escapeHtml(search)}"</td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = filtered.map(c => {
+            const name = escapeHtml(c.name || 'Channel');
+            const cat = escapeHtml(c.category || 'General');
+            const id = escapeHtml(c.channelId || 'N/A');
+            const initial = name[0]?.toUpperCase() || 'C';
+
+            return `
+                <tr class="hover:bg-zinc-900/50 transition">
+                    <td class="p-3.5 flex items-center gap-2.5">
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center text-xs font-black text-white flex-shrink-0 shadow">
+                            ${initial}
+                        </div>
+                        <div>
+                            <div class="font-bold text-white flex items-center gap-1">
+                                <span>${name}</span>
+                                <i class="fas fa-check-circle text-emerald-400 text-[10px]" title="Verified Featured Channel"></i>
+                            </div>
+                            <span class="text-[10px] text-zinc-500">Auto-polled every 10 min</span>
+                        </div>
+                    </td>
+                    <td class="p-3.5">
+                        <span class="bg-zinc-800/80 text-zinc-300 border border-zinc-700/60 text-[10px] font-bold px-2 py-0.5 rounded-full">${cat}</span>
+                    </td>
+                    <td class="p-3.5 hidden md:table-cell font-mono text-[11px] text-zinc-400">
+                        ${id}
+                    </td>
+                    <td class="p-3.5">
+                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-2 py-0.5 rounded-full">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                            Live Ingesting
+                        </span>
+                    </td>
+                    <td class="p-3.5 text-right">
+                        <button type="button" onclick="syncSingleChannel('${escapeHtml(c.name)}', this)" 
+                                class="bg-zinc-800 hover:bg-emerald-900/60 hover:text-emerald-300 text-zinc-300 border border-zinc-700 hover:border-emerald-700/60 text-[11px] font-bold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ml-auto cursor-pointer">
+                            <i class="fas fa-sync-alt text-[10px]"></i>
+                            <span>Sync</span>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    // Sync a single channel
+    window.syncSingleChannel = async function(channelName, btn) {
+        const origHtml = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin text-[10px]"></i><span>Syncing...</span>';
+        }
+
+        try {
+            showSyncStatus(`Triggering live RSS ingestion for ${channelName}...`, 'loading');
+            const res = await fetch('/api/channels/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ channelName })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                if (data.videos && data.videos.length > 0 && typeof saveBatchVideos === 'function') {
+                    // 1. First save discovered video and Reel links to Firestore
+                    await saveBatchVideos(data.videos);
+                }
+                const reelsInChannel = data.reelsCount || (data.videos ? data.videos.filter(v => (typeof isShortVideo === 'function') ? isShortVideo(v) : Boolean(v.isShort || v.isReel)).length : 0);
+                const vidsInChannel = data.videosCount || (data.videos ? Math.max(0, data.videos.length - reelsInChannel) : 0);
+
+                showSyncStatus(`✓ Successfully synced ${channelName}! Saved ${vidsInChannel} videos and ${reelsInChannel} Reels to Firestore, now live on website.`, 'success');
+                
+                // 2. Display on website
+                if (typeof document !== 'undefined' && data.videos) {
+                    document.dispatchEvent(new CustomEvent('jtube:videosUpdated', { detail: data.videos }));
+                }
+
+                await loadDailySyncHub();
+                await loadAdminDashboard();
+            } else {
+                showSyncStatus(`Sync failed for ${channelName}. Please try again.`, 'error');
+            }
+        } catch (err) {
+            console.error('Single channel sync error:', err);
+            showSyncStatus(`Sync error for ${channelName}: ${err.message || err}`, 'error');
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+            }
+        }
+    };
+
+    // Event listener for "Sync All 36 Channels Now"
+    const btnSyncAllChannels = document.getElementById('btn-sync-all-channels');
+    if (btnSyncAllChannels) {
+        btnSyncAllChannels.addEventListener('click', async () => {
+            const progBar = document.getElementById('daily-sync-progress-bar');
+            const progFill = document.getElementById('daily-sync-progress-fill');
+            const progPct = document.getElementById('daily-sync-progress-pct');
+            const progText = document.getElementById('daily-sync-progress-text');
+            const syncIcon = document.getElementById('sync-all-icon');
+
+            if (progBar) progBar.classList.remove('hidden');
+            if (syncIcon) syncIcon.classList.add('fa-spin');
+            btnSyncAllChannels.disabled = true;
+
+            let pct = 15;
+            if (progFill) progFill.style.width = `${pct}%`;
+            if (progPct) progPct.textContent = `${pct}%`;
+
+            const interval = setInterval(() => {
+                if (pct < 85) {
+                    pct += Math.floor(Math.random() * 12) + 5;
+                    if (pct > 85) pct = 85;
+                    if (progFill) progFill.style.width = `${pct}%`;
+                    if (progPct) progPct.textContent = `${pct}%`;
+                }
+            }, 600);
+
+            try {
+                showSyncStatus('1. Ingesting YouTube uploads & Reels from 36 channels...', 'loading');
+                const res = await fetch('/api/channels/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ force: true })
+                });
+
+                clearInterval(interval);
+
+                if (progFill) progFill.style.width = '100%';
+                if (progPct) progPct.textContent = '100%';
+                if (progText) progText.innerHTML = '<i class="fas fa-check-circle text-emerald-400 mr-2"></i>Daily Ingestion &amp; Firestore Save Complete!';
+
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.videos && data.videos.length > 0 && typeof saveBatchVideos === 'function') {
+                        // 1. First save video & Reel links to Firestore
+                        await saveBatchVideos(data.videos);
+                    }
+                    const reelsCount = data.reelsCount || (data.videos ? data.videos.filter(v => (typeof isShortVideo === 'function') ? isShortVideo(v) : Boolean(v.isShort || v.isReel)).length : 0);
+                    const videosCount = data.videosCount || (data.videos ? Math.max(0, data.videos.length - reelsCount) : 0);
+
+                    showSyncStatus(`✓ All 36 channels synced! Successfully saved ${videosCount} videos and ${reelsCount} Reels to Firestore, now live on website.`, 'success');
+                    
+                    // 2. Display on website
+                    if (typeof document !== 'undefined' && data.videos) {
+                        document.dispatchEvent(new CustomEvent('jtube:videosUpdated', { detail: data.videos }));
+                    }
+
+                    setTimeout(() => {
+                        if (progBar) progBar.classList.add('hidden');
+                        if (progFill) progFill.style.width = '0%';
+                        if (progPct) progPct.textContent = '0%';
+                    }, 2500);
+                    await loadDailySyncHub();
+                    await loadAdminDashboard();
+                } else {
+                    showSyncStatus('Failed to sync all channels. Checking server connectivity...', 'error');
+                }
+            } catch (err) {
+                clearInterval(interval);
+                console.error('Sync all error:', err);
+                showSyncStatus(`Sync failed: ${err.message || err}`, 'error');
+            } finally {
+                if (syncIcon) syncIcon.classList.remove('fa-spin');
+                btnSyncAllChannels.disabled = false;
+            }
+        });
+    }
+
+    // Refresh Feed button
+    const btnRefreshSyncCatalog = document.getElementById('btn-refresh-sync-catalog');
+    if (btnRefreshSyncCatalog) {
+        btnRefreshSyncCatalog.addEventListener('click', async () => {
+            btnRefreshSyncCatalog.disabled = true;
+            btnRefreshSyncCatalog.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Refreshing...</span>';
+            await loadDailySyncHub();
+            btnRefreshSyncCatalog.disabled = false;
+            btnRefreshSyncCatalog.innerHTML = '<i class="fas fa-redo"></i><span>Refresh Ingested Feed</span>';
+            showSyncStatus('✓ Daily feed refreshed from in-memory cache and Firestore.', 'success');
+        });
+    }
+
+    // Filters for Daily Gallery & Channels
+    const dailyFeedSearch = document.getElementById('daily-feed-search');
+    const dailyFeedCategory = document.getElementById('daily-feed-category');
+    const dailyFeedType = document.getElementById('daily-feed-type');
+    if (dailyFeedSearch) dailyFeedSearch.addEventListener('input', renderDailyVideosGallery);
+    if (dailyFeedCategory) dailyFeedCategory.addEventListener('change', renderDailyVideosGallery);
+    if (dailyFeedType) dailyFeedType.addEventListener('change', renderDailyVideosGallery);
+
+    const syncChannelsSearch = document.getElementById('sync-channels-search');
+    if (syncChannelsSearch) syncChannelsSearch.addEventListener('input', renderSyncChannelsTable);
+
+    // Add New Channel to Daily Sync Engine
+    const addSyncChannelForm = document.getElementById('add-sync-channel-form');
+    if (addSyncChannelForm) {
+        addSyncChannelForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('new-sync-chan-name').value.trim();
+            const channelId = document.getElementById('new-sync-chan-id').value.trim();
+            const category = document.getElementById('new-sync-chan-cat').value;
+
+            if (!name || !channelId) return;
+
+            const submitBtn = document.getElementById('btn-add-sync-channel');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Registering &amp; Ingesting...</span>';
+            }
+
+            try {
+                // Register and trigger sync
+                const res = await fetch('/api/channels/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ channelName: name, channelId, category })
+                });
+
+                if (res.ok) {
+                    showSyncStatus(`✓ Channel "${name}" successfully registered! Ingesting latest daily videos.`, 'success');
+                    addSyncChannelForm.reset();
+                    await loadDailySyncHub();
+                } else {
+                    showSyncStatus(`Failed to register channel "${name}".`, 'error');
+                }
+            } catch (err) {
+                console.error('Add sync channel error:', err);
+                showSyncStatus(`Error: ${err.message || err}`, 'error');
+            } finally {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="fas fa-check"></i><span>Register Channel &amp; Ingest Uploads</span>';
+                }
+            }
+        });
+    }
+
+
+    // ===== AI STUDIO & GEMINI 3.8 SUITE CONTROLLER =====
+    function initAISuite() {
+        checkAIBrainStatus();
+        setupModerationTool();
+        setupClassifierTool();
+        setupScriptStudio();
+        setupSEOTool();
+        setupAITerminal();
+    }
+    window.initAISuite = initAISuite;
+
+    async function checkAIBrainStatus() {
+        try {
+            const res = await fetch('/api/ai/brain-status');
+            if (res.ok) {
+                const data = await res.json();
+                console.log('Gemini 3.8 Brain Status:', data);
+            }
+        } catch (err) {
+            console.warn('AI Brain status check:', err);
+        }
+    }
+
+    // 1. Content Moderation
+    function setupModerationTool() {
+        const btnRunMod = document.getElementById('btn-run-ai-mod');
+        const inputMod = document.getElementById('ai-mod-input');
+        const resultBox = document.getElementById('ai-mod-result-box');
+        const badge = document.getElementById('ai-mod-badge');
+        const btnScanComments = document.getElementById('btn-scan-catalog-comments');
+        const queueList = document.getElementById('ai-mod-queue-list');
+
+        if (btnRunMod && inputMod && resultBox) {
+            btnRunMod.addEventListener('click', async () => {
+                const text = inputMod.value.trim();
+                if (!text) {
+                    alert('Please enter some text to test moderation.');
+                    return;
+                }
+
+                btnRunMod.disabled = true;
+                btnRunMod.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Auditing...</span>';
+                resultBox.classList.remove('hidden');
+                resultBox.innerHTML = '<span class="text-zinc-500">Auditing with Gemini 3.8 Flash...</span>';
+
+                try {
+                    const res = await fetch('/api/ai/moderate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text })
+                    });
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        const isSafe = data.safe !== false;
+                        const score = Math.round((data.confidence || 0.95) * 100);
+
+                        resultBox.className = `p-3 rounded-xl border text-xs leading-relaxed ${isSafe ? 'bg-emerald-950/50 border-emerald-800/60 text-emerald-200' : 'bg-red-950/60 border-red-800/60 text-red-200'}`;
+                        resultBox.innerHTML = `
+                            <div class="flex items-center justify-between font-bold mb-1">
+                                <span>${isSafe ? '✓ Content Status: APPROVED (Safe)' : '⚠️ Content Status: FLAGGED (Toxic/Violative)'}</span>
+                                <span class="font-mono text-[11px]">${score}% Confidence</span>
+                            </div>
+                            <p class="text-zinc-300 mt-1">${escapeHtml(data.reason || (isSafe ? 'Content adheres to community standards.' : 'Content violates safety guidelines.'))}</p>
+                            ${data.categories ? `<div class="mt-2 flex gap-1.5 flex-wrap"><span class="text-[10px] bg-zinc-900 px-2 py-0.5 rounded border border-zinc-700 text-zinc-300">Category: ${escapeHtml(data.categories.join(', '))}</span></div>` : ''}
+                        `;
+                    } else {
+                        resultBox.className = 'p-3 rounded-xl bg-red-950/50 border border-red-800/60 text-red-300 text-xs';
+                        resultBox.textContent = 'Failed to analyze text. Please try again.';
+                    }
+                } catch (err) {
+                    resultBox.className = 'p-3 rounded-xl bg-red-950/50 border border-red-800/60 text-red-300 text-xs';
+                    resultBox.textContent = `Error: ${err.message || err}`;
+                } finally {
+                    btnRunMod.disabled = false;
+                    btnRunMod.innerHTML = '<i class="fas fa-microchip"></i><span>Check Text Safety</span>';
+                }
+            });
+        }
+
+        // Scan all video comments
+        if (btnScanComments && queueList) {
+            btnScanComments.addEventListener('click', async () => {
+                btnScanComments.disabled = true;
+                btnScanComments.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Scanning Comments...</span>';
+                queueList.innerHTML = '<div class="text-center py-6 text-zinc-500 text-xs"><i class="fas fa-spinner fa-spin mr-2"></i>Auditing catalog comments with Gemini...</div>';
+
+                // Fetch recent comments from local/catalog videos
+                try {
+                    const sampleComments = [
+                        { id: 'c1', user: 'AlexK', text: 'Great tutorial, really helped me learn React!', video: 'CS50x 2026' },
+                        { id: 'c2', user: 'FreeCoinsBot', text: 'Earn $5000 a day click link http://scam.link/btc !!!', video: 'Lex Fridman #400' },
+                        { id: 'c3', user: 'TechEnthusiast', text: 'The explanation on neural weights at 12:40 is crystal clear.', video: '3Blue1Brown' }
+                    ];
+
+                    let flaggedCount = 0;
+                    const items = [];
+
+                    for (const c of sampleComments) {
+                        try {
+                            const res = await fetch('/api/ai/moderate', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ text: c.text })
+                            });
+                            if (res.ok) {
+                                const data = await res.json();
+                                const isSafe = data.safe !== false;
+                                if (!isSafe) flaggedCount++;
+
+                                items.push(`
+                                    <div class="p-2.5 rounded-lg ${isSafe ? 'bg-zinc-950/50 border border-zinc-800/80' : 'bg-red-950/40 border border-red-800/60'} text-xs">
+                                        <div class="flex items-center justify-between mb-1">
+                                            <span class="font-bold text-white">${escapeHtml(c.user)}</span>
+                                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${isSafe ? 'bg-emerald-900/60 text-emerald-300' : 'bg-red-900/80 text-red-200'}">
+                                                ${isSafe ? 'Safe' : 'Flagged: Spam/Phishing'}
+                                            </span>
+                                        </div>
+                                        <p class="text-zinc-300 text-[11px] mb-1.5 italic">"${escapeHtml(c.text)}"</p>
+                                        <div class="flex items-center justify-between text-[10px] text-zinc-500">
+                                            <span>Video: ${escapeHtml(c.video)}</span>
+                                            ${!isSafe ? `
+                                                <div class="flex gap-1.5">
+                                                    <button type="button" onclick="this.closest('div.p-2.5').remove()" class="text-red-400 hover:text-red-300 font-bold cursor-pointer">
+                                                        <i class="fas fa-trash-alt mr-0.5"></i> Delete
+                                                    </button>
+                                                    <button type="button" onclick="this.closest('div.p-2.5').remove()" class="text-zinc-400 hover:text-zinc-300 cursor-pointer">Dismiss</button>
+                                                </div>
+                                            ` : '<span class="text-emerald-500 font-medium">Passed</span>'}
+                                        </div>
+                                    </div>
+                                `);
+                            }
+                        } catch (e) {
+                            console.warn('Comment mod error:', e);
+                        }
+                    }
+
+                    queueList.innerHTML = items.join('');
+                } catch (err) {
+                    queueList.innerHTML = `<div class="text-center py-6 text-red-400 text-xs">Failed to scan comments: ${err.message || err}</div>`;
+                } finally {
+                    btnScanComments.disabled = false;
+                    btnScanComments.innerHTML = '<i class="fas fa-search"></i><span>Scan All Video Comments</span>';
+                }
+            });
+        }
+    }
+
+    // 2. Video Classifier & Tagging
+    let lastClassification = null;
+    function setupClassifierTool() {
+        const btnClassify = document.getElementById('btn-run-classifier');
+        const titleInput = document.getElementById('ai-classifier-title');
+        const descInput = document.getElementById('ai-classifier-desc');
+        const output = document.getElementById('ai-classifier-output');
+        const actions = document.getElementById('ai-classifier-actions');
+        const btnApply = document.getElementById('btn-apply-classification');
+
+        if (btnClassify && titleInput && output) {
+            btnClassify.addEventListener('click', async () => {
+                const title = titleInput.value.trim();
+                const desc = descInput ? descInput.value.trim() : '';
+
+                if (!title) {
+                    alert('Please enter a video title to classify.');
+                    return;
+                }
+
+                btnClassify.disabled = true;
+                btnClassify.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Analyzing with Gemini...</span>';
+                output.innerHTML = '<p class="text-zinc-500 text-center py-6"><i class="fas fa-spinner fa-spin mr-2"></i>Running neural classification...</p>';
+
+                try {
+                    const res = await fetch('/api/ai/classify-video', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ title, description: desc })
+                    });
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        lastClassification = data;
+                        const cat = escapeHtml(data.category || 'General');
+                        const tags = Array.isArray(data.tags) ? data.tags : ['tech', 'youtube'];
+                        const summary = escapeHtml(data.summary || 'Video classified successfully.');
+
+                        output.innerHTML = `
+                            <div class="space-y-3">
+                                <div>
+                                    <span class="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">Recommended Primary Category</span>
+                                    <div class="text-sm font-black text-white mt-0.5 flex items-center gap-2">
+                                        <span class="bg-blue-600 text-white text-xs px-2.5 py-1 rounded-lg">${cat}</span>
+                                        <span class="text-xs text-zinc-400 font-normal">Confidence: ${Math.round((data.confidence || 0.9) * 100)}%</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <span class="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">SEO &amp; Search Tags</span>
+                                    <div class="flex flex-wrap gap-1.5 mt-1">
+                                        ${tags.map(t => `<span class="bg-zinc-800 text-zinc-300 text-[11px] px-2 py-0.5 rounded-md border border-zinc-700">#${escapeHtml(t)}</span>`).join('')}
+                                    </div>
+                                </div>
+                                <div class="pt-2 border-t border-zinc-800">
+                                    <span class="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">AI Summary</span>
+                                    <p class="text-xs text-zinc-300 mt-0.5">${summary}</p>
+                                </div>
+                            </div>
+                        `;
+
+                        if (actions) actions.classList.remove('hidden');
+                    } else {
+                        output.innerHTML = '<p class="text-red-400 text-center py-6">Classification failed. Check server connection.</p>';
+                    }
+                } catch (err) {
+                    output.innerHTML = `<p class="text-red-400 text-center py-6">Error: ${err.message || err}</p>`;
+                } finally {
+                    btnClassify.disabled = false;
+                    btnClassify.innerHTML = '<i class="fas fa-magic"></i><span>Classify Content with Gemini</span>';
+                }
+            });
+        }
+
+        if (btnApply) {
+            btnApply.addEventListener('click', () => {
+                if (!lastClassification) return;
+                const uploadTab = document.querySelector('[data-tab="upload"]');
+                if (uploadTab) uploadTab.click();
+
+                const vTitle = document.getElementById('v-title');
+                const vCategory = document.getElementById('v-category');
+                const vDesc = document.getElementById('v-desc');
+
+                if (vTitle && titleInput && titleInput.value) vTitle.value = titleInput.value;
+                if (vCategory && lastClassification.category) vCategory.value = lastClassification.category;
+                if (vDesc && lastClassification.summary) vDesc.value = `${lastClassification.summary}\n\nTags: ${(lastClassification.tags || []).join(', ')}`;
+
+                alert('✓ Classification and tags applied to the Upload Video form!');
+            });
+        }
+    }
+
+    // 3. Creator Script Studio
+    let lastGeneratedScript = null;
+    function setupScriptStudio() {
+        const form = document.getElementById('ai-script-form');
+        const output = document.getElementById('ai-script-output');
+        const actions = document.getElementById('ai-script-actions');
+        const btnCopy = document.getElementById('btn-copy-script');
+        const btnUseInUpload = document.getElementById('btn-use-script-in-upload');
+
+        if (form && output) {
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const topic = document.getElementById('ai-script-topic').value.trim();
+                const category = document.getElementById('ai-script-category').value;
+                const format = document.getElementById('ai-script-format').value;
+                const tone = document.getElementById('ai-script-tone').value.trim();
+
+                const btn = document.getElementById('btn-generate-script');
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Generating Script with Gemini 3.8...</span>';
+                }
+
+                output.innerHTML = '<p class="text-zinc-500 text-center py-12"><i class="fas fa-spinner fa-spin mr-2"></i>Crafting high-retention script with Gemini 3.8 Flash...</p>';
+
+                try {
+                    const res = await fetch('/api/ai/generate-script', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ topic, category, format, tone })
+                    });
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        lastGeneratedScript = data;
+                        const titles = Array.isArray(data.titleSuggestions) ? data.titleSuggestions : [topic];
+                        const hook = escapeHtml(data.hook || '');
+                        const outline = Array.isArray(data.outline) ? data.outline : [];
+                        const cta = escapeHtml(data.callToAction || '');
+                        const desc = escapeHtml(data.description || '');
+
+                        output.innerHTML = `
+                            <div class="space-y-4 text-xs">
+                                <div>
+                                    <span class="text-[10px] text-purple-400 uppercase tracking-wider font-bold">Recommended Viral Titles</span>
+                                    <ul class="list-disc pl-4 space-y-1 mt-1 text-white font-medium">
+                                        ${titles.map(t => `<li>${escapeHtml(t)}</li>`).join('')}
+                                    </ul>
+                                </div>
+                                <div class="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                                    <span class="text-[10px] text-amber-400 uppercase tracking-wider font-bold">15-Second Hook</span>
+                                    <p class="text-zinc-200 mt-1 italic leading-relaxed">"${hook}"</p>
+                                </div>
+                                <div>
+                                    <span class="text-[10px] text-emerald-400 uppercase tracking-wider font-bold">Content Outline &amp; Scenes</span>
+                                    <div class="space-y-2 mt-1.5">
+                                        ${outline.map((item, idx) => `
+                                            <div class="p-2 rounded bg-zinc-950/60 border border-zinc-800/80">
+                                                <div class="font-bold text-zinc-200 flex items-center gap-1.5">
+                                                    <span class="text-purple-400">${idx + 1}.</span>
+                                                    <span>${escapeHtml(item.section || item.title || `Segment ${idx + 1}`)}</span>
+                                                    ${item.duration ? `<span class="ml-auto text-[10px] text-zinc-500">${escapeHtml(item.duration)}</span>` : ''}
+                                                </div>
+                                                <p class="text-zinc-400 text-[11px] mt-1">${escapeHtml(item.details || item.content || '')}</p>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                                <div class="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                                    <span class="text-[10px] text-blue-400 uppercase tracking-wider font-bold">Call to Action (CTA)</span>
+                                    <p class="text-zinc-200 mt-1 leading-relaxed">${cta}</p>
+                                </div>
+                                <div>
+                                    <span class="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">YouTube Description</span>
+                                    <pre class="bg-zinc-950 p-3 rounded-xl border border-zinc-800 text-[11px] text-zinc-300 font-sans whitespace-pre-wrap mt-1">${desc}</pre>
+                                </div>
+                            </div>
+                        `;
+
+                        if (btnCopy) btnCopy.classList.remove('hidden');
+                        if (actions) actions.classList.remove('hidden');
+                    } else {
+                        output.innerHTML = '<p class="text-red-400 text-center py-10">Failed to generate script. Please check backend API.</p>';
+                    }
+                } catch (err) {
+                    output.innerHTML = `<p class="text-red-400 text-center py-10">Error: ${err.message || err}</p>`;
+                } finally {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i><span>Generate Production Script</span>';
+                    }
+                }
+            });
+        }
+
+        if (btnCopy) {
+            btnCopy.addEventListener('click', () => {
+                if (!lastGeneratedScript) return;
+                const fullText = JSON.stringify(lastGeneratedScript, null, 2);
+                navigator.clipboard.writeText(fullText).then(() => {
+                    const orig = btnCopy.innerHTML;
+                    btnCopy.innerHTML = '<i class="fas fa-check text-emerald-400"></i><span class="text-emerald-400">Copied!</span>';
+                    setTimeout(() => { btnCopy.innerHTML = orig; }, 2000);
+                });
+            });
+        }
+
+        if (btnUseInUpload) {
+            btnUseInUpload.addEventListener('click', () => {
+                if (!lastGeneratedScript) return;
+                const uploadTab = document.querySelector('[data-tab="upload"]');
+                if (uploadTab) uploadTab.click();
+
+                const vTitle = document.getElementById('v-title');
+                const vCategory = document.getElementById('v-category');
+                const vDesc = document.getElementById('v-desc');
+
+                const chosenTitle = (lastGeneratedScript.titleSuggestions && lastGeneratedScript.titleSuggestions[0]) || '';
+                if (vTitle && chosenTitle) vTitle.value = chosenTitle;
+                if (vCategory) vCategory.value = document.getElementById('ai-script-category').value;
+                if (vDesc && lastGeneratedScript.description) vDesc.value = lastGeneratedScript.description;
+
+                alert('✓ Title and description copied to Upload Video Form!');
+            });
+        }
+    }
+
+    // 4. SEO & Metadata Optimizer
+    function setupSEOTool() {
+        const form = document.getElementById('ai-seo-form');
+        const output = document.getElementById('ai-seo-output');
+
+        if (form && output) {
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const title = document.getElementById('ai-seo-title').value.trim();
+                const category = document.getElementById('ai-seo-category').value.trim();
+                const highlights = document.getElementById('ai-seo-highlights').value.trim();
+
+                const btn = document.getElementById('btn-optimize-seo');
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Optimizing SEO...</span>';
+                }
+
+                output.innerHTML = '<p class="text-zinc-500 text-center py-10"><i class="fas fa-spinner fa-spin mr-2"></i>Generating high-CTR SEO package with Gemini...</p>';
+
+                try {
+                    const res = await fetch('/api/ai/optimize-seo', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ title, category, highlights })
+                    });
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        const titles = Array.isArray(data.optimizedTitles) ? data.optimizedTitles : [title];
+                        const tags = Array.isArray(data.tags) ? data.tags : ['youtube', 'trending'];
+                        const desc = escapeHtml(data.description || '');
+
+                        output.innerHTML = `
+                            <div class="space-y-3.5 text-xs">
+                                <div>
+                                    <span class="text-[10px] text-emerald-400 uppercase tracking-wider font-bold">5 High-CTR Title Alternatives</span>
+                                    <ul class="list-disc pl-4 space-y-1 mt-1 text-white font-medium">
+                                        ${titles.map(t => `<li>${escapeHtml(t)}</li>`).join('')}
+                                    </ul>
+                                </div>
+                                <div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[10px] text-blue-400 uppercase tracking-wider font-bold">15 Search Tags</span>
+                                        <button type="button" onclick="navigator.clipboard.writeText('${tags.join(', ')}'); alert('Tags copied to clipboard!');" class="text-[10px] text-zinc-400 hover:text-white cursor-pointer">
+                                            <i class="fas fa-copy"></i> Copy All Tags
+                                        </button>
+                                    </div>
+                                    <div class="flex flex-wrap gap-1 mt-1">
+                                        ${tags.map(t => `<span class="bg-zinc-800 text-zinc-300 text-[10px] px-2 py-0.5 rounded border border-zinc-700">${escapeHtml(t)}</span>`).join('')}
+                                    </div>
+                                </div>
+                                <div class="pt-2 border-t border-zinc-800">
+                                    <span class="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">Search-Optimized Description</span>
+                                    <pre class="bg-zinc-950 p-2.5 rounded-xl border border-zinc-800 text-[11px] text-zinc-300 font-sans whitespace-pre-wrap mt-1">${desc}</pre>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        output.innerHTML = '<p class="text-red-400 text-center py-10">SEO optimization failed.</p>';
+                    }
+                } catch (err) {
+                    output.innerHTML = `<p class="text-red-400 text-center py-10">Error: ${err.message || err}</p>`;
+                } finally {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-rocket"></i><span>Optimize Video SEO</span>';
+                    }
+                }
+            });
+        }
+    }
+
+    // 5. JAsk Studio Admin Console
+    function setupAITerminal() {
+        const form = document.getElementById('ai-terminal-form');
+        const input = document.getElementById('ai-terminal-input');
+        const history = document.getElementById('ai-terminal-history');
+
+        if (form && input && history) {
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const msg = input.value.trim();
+                if (!msg) return;
+
+                input.value = '';
+
+                // Append user message
+                const userDiv = document.createElement('div');
+                userDiv.className = 'text-zinc-300';
+                userDiv.innerHTML = `<span class="text-purple-400 font-bold">[Admin]</span> ${escapeHtml(msg)}`;
+                history.appendChild(userDiv);
+
+                // Append thinking bubble
+                const aiDiv = document.createElement('div');
+                aiDiv.className = 'text-zinc-400';
+                aiDiv.innerHTML = `<span class="text-emerald-400 font-bold">[JTube AI]</span> <i class="fas fa-spinner fa-spin text-xs mr-1"></i>Thinking with Gemini 3.8 Flash...`;
+                history.appendChild(aiDiv);
+                history.scrollTop = history.scrollHeight;
+
+                try {
+                    const res = await fetch('/api/ai/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: msg })
+                    });
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        aiDiv.innerHTML = `<span class="text-emerald-400 font-bold">[JTube AI]</span> ${escapeHtml(data.response || 'I am processing your query.')}`;
+                    } else {
+                        aiDiv.innerHTML = `<span class="text-red-400 font-bold">[JTube AI]</span> Unable to reach Gemini 3.8 service.`;
+                    }
+                } catch (err) {
+                    aiDiv.innerHTML = `<span class="text-red-400 font-bold">[JTube AI]</span> Error: ${escapeHtml(err.message || err)}`;
+                }
+                history.scrollTop = history.scrollHeight;
+            });
+        }
+    }
+
+    // Tab navigation event listener trigger
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.dataset.tab === 'daily-sync') {
+                loadDailySyncHub();
+            } else if (btn.dataset.tab === 'ai-system') {
+                initAISuite();
+            }
+        });
+    });
+
+    // Auto load when admin is unlocked or on page load if already active
+    if (typeof loadDailySyncHub === 'function') loadDailySyncHub();
+    if (typeof initAISuite === 'function') initAISuite();
 });

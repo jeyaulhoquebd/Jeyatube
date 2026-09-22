@@ -214,31 +214,349 @@ document.addEventListener("DOMContentLoaded", async () => {
         renderSidebarChannels();
     });
 
-    // Render Videos Grid with Shorts in the Middle and Strict Separation
+    // Progressive pagination state for thousands of videos & reels
+    let activeVideosPool = [];
+    let currentRenderIndex = 0;
+    const CHUNK_SIZE = 24;
+    let infiniteScrollObserver = null;
+    let cachedChannelsMap = {};
+
+    // Render Reel Feed Card for the main feed when viewed together with standard videos
+    function renderReelFeedCard(video, channelsMap) {
+        const channelData = (channelsMap && channelsMap[video.channel]) || {};
+        const subsCount = typeof getEffectiveSubscribers === 'function' ? getEffectiveSubscribers(channelData) : (channelData.subscribers || 0);
+        const effectiveLikes = typeof getEffectiveLikes === 'function' ? getEffectiveLikes(video) : (video.likes || 0);
+
+        const card = document.createElement('div');
+        card.className = "cursor-pointer group relative video-card-custom bg-[#14121b] rounded-2xl pb-3.5 h-full flex flex-col border border-pink-500/20 hover:border-pink-500/50 shadow-md hover:shadow-pink-500/10 transition-all";
+        card.onclick = () => location.href = `shorts.html?id=${video.id}`;
+
+        let avatarHtml = `<div class="flex-shrink-0 bg-zinc-800 text-zinc-300 border border-white/10 w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs mt-0.5">${(video.channel || 'C')[0]}</div>`;
+        if (channelData && channelData.avatarUrl) {
+            avatarHtml = `<img src="${channelData.avatarUrl}" class="flex-shrink-0 w-9 h-9 rounded-full object-cover border border-white/10 mt-0.5" alt="${video.channel}" loading="lazy">`;
+        }
+
+        card.innerHTML = `
+            <div class="relative aspect-video thumbnail-wrapper bg-[#1d1424] rounded-t-2xl overflow-hidden mb-3 flex items-center justify-center">
+                <img src="${video.thumbnail}" alt="${video.title.replace(/"/g, '&quot;')}" loading="lazy" decoding="async" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none"></div>
+                
+                <span class="absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-gradient-to-r from-red-600 via-rose-600 to-pink-600 text-white border border-white/20 z-20 flex items-center gap-1.5 shadow-lg shadow-red-600/30">
+                    <i class="fas fa-bolt text-[9px] text-amber-300"></i> Reel
+                </span>
+
+                <div class="play-icon-overlay absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/35 transition-all duration-200 z-10">
+                    <div class="w-11 h-11 bg-gradient-to-r from-red-600 to-pink-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 scale-90 group-hover:scale-100 shadow-xl shadow-pink-600/40">
+                        <i class="fas fa-play text-xs ml-0.5"></i>
+                    </div>
+                </div>
+                
+                <span class="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold z-30 bg-black/85 backdrop-blur-md text-pink-300 border border-pink-500/30">
+                    ⚡ ${video.duration || '0:45'}
+                </span>
+            </div>
+            <div class="flex space-x-3 px-3.5 flex-1">
+                ${avatarHtml}
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1.5 mb-1.5">
+                        <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-pink-500/15 text-pink-400 border border-pink-500/25">
+                            <i class="fas fa-bolt text-[8px]"></i> Reel & Short
+                        </span>
+                        <span class="text-[10px] text-zinc-500 font-medium">${video.category || 'Reel'}</span>
+                    </div>
+                    <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-pink-200 transition-colors">${video.title}</h3>
+                    <div class="flex items-center space-x-1.5 mt-1.5 text-zinc-400 hover:text-zinc-200 cursor-pointer w-fit" onclick="event.stopPropagation(); location.href='channel.html?name=${encodeURIComponent(video.channel)}'">
+                        <p class="text-xs truncate font-medium text-zinc-300">${video.channel}</p>
+                        <img src="img/icons.svg" class="w-3.5 h-3.5 flex-shrink-0" alt="Verified" title="Verified Creator">
+                        <span class="text-[11px] text-zinc-500 font-normal">(${formatCompactNumber(subsCount)} subs)</span>
+                    </div>
+                    <div class="flex items-center flex-wrap gap-x-2 gap-y-0.5 text-xs text-zinc-400 mt-1.5">
+                        <span>${formatCompactNumber(video.views || 0)} views</span>
+                        <span class="text-zinc-600">•</span>
+                        <span class="inline-flex items-center gap-1 text-pink-400 font-medium"><i class="fas fa-heart text-[10px]"></i> ${formatCompactNumber(effectiveLikes)}</span>
+                        <span class="text-zinc-600">•</span>
+                        <span>${timeAgo(video.timestamp)}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        return card;
+    }
+
+    // Helper to construct a standard big video card
+    function renderStandardBigCard(video, channelsMap) {
+        const cMap = channelsMap || cachedChannelsMap || {};
+        const badgeLabel = video.qualityBadge || (video.duration && video.duration.length > 5 ? "✦ Masterclass" : "✦ Verified HD");
+        const qualityBadgeHtml = `
+            <div class="flex items-center gap-1.5 mb-1.5">
+                <span class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                    <i class="fas fa-check-circle text-[8px]"></i> ${badgeLabel}
+                </span>
+                <span class="text-[10px] text-zinc-500 font-medium">${video.category || 'Curated'}</span>
+            </div>
+        `;
+
+        let avatarHtml = `<div class="flex-shrink-0 bg-zinc-800 text-zinc-300 border border-white/10 w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs mt-0.5">${(video.channel || 'J')[0]}</div>`;
+        if (cMap[video.channel] && cMap[video.channel].avatarUrl) {
+            avatarHtml = `<img src="${cMap[video.channel].avatarUrl}" class="flex-shrink-0 w-9 h-9 rounded-full object-cover border border-white/10 mt-0.5" alt="${video.channel}" loading="lazy">`;
+        }
+
+        const ytId = getYoutubeId(video.videoUrl);
+        const card = document.createElement('div');
+        card.className = "cursor-pointer group relative video-card-custom bg-[#12151c] rounded-2xl pb-3.5 h-full flex flex-col border border-white/[0.06] hover:border-white/[0.14] transition-all";
+        card.onclick = () => location.href = `watch.html?id=${video.id}`;
+        
+        const durationBadge = `<span class="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md text-[11px] font-semibold z-30 bg-black/80 backdrop-blur-md text-zinc-200 border border-white/10">${video.duration || 'Video'}</span>`;
+
+        const channelData = cMap[video.channel];
+        const subsCount = typeof getEffectiveSubscribers === 'function' ? getEffectiveSubscribers(channelData) : (channelData ? (channelData.subscribers || 0) : 0);
+        const effectiveLikes = typeof getEffectiveLikes === 'function' ? getEffectiveLikes(video) : (video.likes || 0);
+
+        card.innerHTML = `
+            <div class="relative aspect-video thumbnail-wrapper bg-[#181c26] rounded-t-2xl overflow-hidden mb-3">
+                <img src="${video.thumbnail}" alt="${video.title.replace(/"/g, '&quot;')}" loading="lazy" decoding="async" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+                <span class="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/75 backdrop-blur-md text-zinc-200 border border-white/10 z-20 flex items-center gap-1">
+                    <i class="fas fa-sparkles text-amber-400 text-[8px]"></i> Curated
+                </span>
+                <div class="video-preview-container absolute inset-0 w-full h-full bg-black z-20 pointer-events-none hidden"></div>
+                <div class="play-icon-overlay absolute inset-0 flex items-center justify-center bg-black/25 group-hover:bg-black/40 transition-all duration-200 z-10">
+                    <div class="w-11 h-11 bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 scale-90 group-hover:scale-100 shadow-xl">
+                        <i class="fas fa-play text-xs ml-0.5"></i>
+                    </div>
+                </div>
+                ${durationBadge}
+            </div>
+            <div class="flex space-x-3 px-3.5 flex-1">
+                ${avatarHtml}
+                <div class="flex-1 min-w-0">
+                    ${qualityBadgeHtml}
+                    <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
+                    <div class="flex items-center space-x-1.5 mt-1.5 text-zinc-400 hover:text-zinc-200 cursor-pointer w-fit" onclick="event.stopPropagation(); location.href='channel.html?name=${encodeURIComponent(video.channel)}'">
+                        <p class="text-xs truncate font-medium text-zinc-300">${video.channel}</p>
+                        <img src="img/icons.svg" class="w-3.5 h-3.5 flex-shrink-0" alt="Verified" title="Verified Creator">
+                        <span class="text-[11px] text-zinc-500 font-normal">(${formatCompactNumber(subsCount)} subs)</span>
+                    </div>
+                    <div class="flex items-center flex-wrap gap-x-2 gap-y-0.5 text-xs text-zinc-400 mt-1.5">
+                        <span>${formatCompactNumber(video.views || 0)} views</span>
+                        <span class="text-zinc-600">•</span>
+                        <span class="inline-flex items-center gap-1 text-zinc-300 font-medium"><i class="far fa-thumbs-up text-[10px] text-red-400"></i> ${formatCompactNumber(effectiveLikes)}</span>
+                        <span class="text-zinc-600">•</span>
+                        <span>${timeAgo(video.timestamp)}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Hover to play and prefetch
+        let hoverTimeout;
+        card.addEventListener('mouseenter', () => {
+            hoverTimeout = setTimeout(() => {
+                if (ytId) {
+                    const previewContainer = card.querySelector('.video-preview-container');
+                    if (previewContainer && previewContainer.innerHTML === '') {
+                        previewContainer.innerHTML = `<iframe class='w-full h-full pointer-events-none' src='https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0&controls=0&modestbranding=1&showinfo=0' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe>`;
+                    }
+                    if (previewContainer) previewContainer.classList.remove('hidden');
+                    const playOverlay = card.querySelector('.play-icon-overlay');
+                    if (playOverlay) playOverlay.classList.add('hidden');
+                }
+                if (!document.querySelector(`link[href="watch.html?id=${video.id}"]`)) {
+                    const link = document.createElement('link');
+                    link.rel = 'prefetch';
+                    link.href = `watch.html?id=${video.id}`;
+                    document.head.appendChild(link);
+                }
+            }, 400);
+        });
+        
+        card.addEventListener('mouseleave', () => {
+            clearTimeout(hoverTimeout);
+            const previewContainer = card.querySelector('.video-preview-container');
+            if (previewContainer) {
+                previewContainer.innerHTML = '';
+                previewContainer.classList.add('hidden');
+            }
+            const playIcon = card.querySelector('.play-icon-overlay');
+            if (playIcon) playIcon.classList.remove('hidden');
+        });
+        
+        return card;
+    }
+
+    function createFeedCard(item, channelsMap) {
+        if (isShortVideo(item)) {
+            return renderReelFeedCard(item, channelsMap);
+        }
+        return renderStandardBigCard(item, channelsMap);
+    }
+
+    // Append next progressive batch to ensure zero lag with thousands of videos & reels
+    function appendNextBatch() {
+        if (currentRenderIndex >= activeVideosPool.length) {
+            updateStatsBanner(activeVideosPool.length, activeVideosPool.length);
+            const notice = document.getElementById("all-loaded-notice");
+            const spinner = document.getElementById("loading-more-spinner");
+            const loadBtn = document.getElementById("load-more-btn");
+            if (notice) notice.classList.remove("hidden");
+            if (spinner) spinner.classList.add("hidden");
+            if (loadBtn) loadBtn.classList.add("hidden");
+            if (infiniteScrollObserver) infiniteScrollObserver.disconnect();
+            return;
+        }
+
+        const nextSlice = activeVideosPool.slice(currentRenderIndex, currentRenderIndex + CHUNK_SIZE);
+        currentRenderIndex += nextSlice.length;
+
+        const fragment = document.createDocumentFragment();
+        nextSlice.forEach(item => {
+            if (currentCategory === "shorts") {
+                const shortCard = document.createElement('div');
+                shortCard.className = "group relative aspect-[9/16] rounded-2xl overflow-hidden cursor-pointer bg-zinc-900 border border-zinc-800/80 shadow-md hover:shadow-red-600/20 hover:border-red-500/40 transition-all duration-300 flex flex-col justify-end";
+                shortCard.onclick = () => location.href = `shorts.html?id=${item.id}`;
+                shortCard.innerHTML = `
+                    <img src="${item.thumbnail}" alt="${item.title.replace(/"/g, '&quot;')}" loading="lazy" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                    <div class="absolute top-2.5 left-2.5 z-20">
+                        <span class="bg-black/70 backdrop-blur-md text-red-500 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 border border-white/10">
+                            <i class="fas fa-bolt text-[9px]"></i> Reel
+                        </span>
+                    </div>
+                    <div class="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors flex items-center justify-center z-10">
+                        <div class="w-10 h-10 rounded-full bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 transition-all shadow-lg">
+                            <i class="fas fa-play text-xs ml-0.5"></i>
+                        </div>
+                    </div>
+                    <div class="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black via-black/70 to-transparent z-20 pointer-events-none"></div>
+                    <div class="relative p-2.5 sm:p-3 z-30 pointer-events-none">
+                        <h3 class="text-xs font-bold text-white line-clamp-2 leading-snug drop-shadow mb-1 group-hover:text-red-400 transition-colors">
+                            ${item.title}
+                        </h3>
+                        <p class="text-[10px] text-zinc-400 font-medium">
+                            ${formatCompactNumber(item.views || 0)} views
+                        </p>
+                    </div>
+                `;
+                fragment.appendChild(shortCard);
+            } else {
+                fragment.appendChild(createFeedCard(item, cachedChannelsMap));
+            }
+        });
+
+        if (currentCategory === "shorts") {
+            if (topVideoGrid) topVideoGrid.appendChild(fragment);
+        } else {
+            if (bottomVideoGrid) bottomVideoGrid.appendChild(fragment);
+        }
+
+        updateStatsBanner(currentRenderIndex, activeVideosPool.length);
+
+        const loadBtn = document.getElementById("load-more-btn");
+        const notice = document.getElementById("all-loaded-notice");
+        if (currentRenderIndex >= activeVideosPool.length) {
+            if (notice) notice.classList.remove("hidden");
+            if (loadBtn) loadBtn.classList.add("hidden");
+            if (infiniteScrollObserver) infiniteScrollObserver.disconnect();
+        } else {
+            if (loadBtn) loadBtn.classList.remove("hidden");
+            if (notice) notice.classList.add("hidden");
+        }
+    }
+
+    function updateStatsBanner(renderedCount, totalCount) {
+        const counterEl = document.getElementById("content-counter-text");
+        const modeBadge = document.getElementById("viewing-mode-badge");
+        if (!counterEl) return;
+
+        const reelsCount = activeVideosPool.filter(v => isShortVideo(v)).length;
+        const videosCount = totalCount - reelsCount;
+
+        if (totalCount === 0) {
+            counterEl.innerHTML = `No items found`;
+            return;
+        }
+
+        counterEl.innerHTML = `Showing <span class="font-bold text-white">${Math.min(renderedCount, totalCount).toLocaleString()}</span> of <span class="font-bold text-white">${totalCount.toLocaleString()}</span> items <span class="text-zinc-400 font-normal">(${videosCount.toLocaleString()} Videos • ${reelsCount.toLocaleString()} Reels)</span>`;
+
+        if (modeBadge) {
+            if (currentCategory === "all") {
+                modeBadge.innerHTML = `<i class="fas fa-layer-group text-[10px] text-emerald-400"></i> All Videos & Reels Viewable Together (${totalCount.toLocaleString()})`;
+            } else if (currentCategory === "shorts") {
+                modeBadge.innerHTML = `<i class="fas fa-bolt text-[10px] text-pink-400"></i> Reels & Shorts Only (${reelsCount.toLocaleString()})`;
+            } else if (currentCategory === "videos_only") {
+                modeBadge.innerHTML = `<i class="fas fa-film text-[10px] text-blue-400"></i> Standard Videos Only (${videosCount.toLocaleString()})`;
+            } else {
+                modeBadge.innerHTML = `<i class="fas fa-filter text-[10px] text-amber-400"></i> Category: ${currentCategory} (${totalCount.toLocaleString()})`;
+            }
+        }
+    }
+
+    function setupInfiniteScroll() {
+        if (infiniteScrollObserver) {
+            infiniteScrollObserver.disconnect();
+        }
+        const sentinel = document.getElementById("infinite-scroll-sentinel");
+        const spinner = document.getElementById("loading-more-spinner");
+        const loadBtn = document.getElementById("load-more-btn");
+
+        if (loadBtn) {
+            loadBtn.onclick = () => {
+                appendNextBatch();
+            };
+        }
+
+        if (sentinel && 'IntersectionObserver' in window) {
+            infiniteScrollObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting && currentRenderIndex < activeVideosPool.length) {
+                        if (spinner) spinner.classList.remove("hidden");
+                        setTimeout(() => {
+                            appendNextBatch();
+                            if (spinner) spinner.classList.add("hidden");
+                        }, 100);
+                    }
+                });
+            }, { rootMargin: '400px' });
+            infiniteScrollObserver.observe(sentinel);
+        }
+    }
+
+    // Render Videos Grid: Ensures ALL videos and Reels in Cloud Firestore are viewable together
     async function renderVideos(filterCategory = "all") {
         currentCategory = filterCategory;
-        // Fetch videos and channels in parallel for maximum speed
+        
+        // Fetch full library from Cloud Firestore and channel directory
         const [videosData, channelsMap] = await Promise.all([
             filterCategory === "history" ? getHistory() : getVideos(),
             getChannels()
         ]);
+        cachedChannelsMap = channelsMap || {};
 
         let videosToRender = [];
         if (filterCategory === "history") {
-            videosToRender = (videosData || []).filter(v => !isShortVideo(v));
+            videosToRender = videosData || [];
         } else if (filterCategory === "playlists") {
-            videosToRender = (videosData || []).filter(v => v.playlist && v.playlist.trim() !== "" && !isShortVideo(v));
+            videosToRender = (videosData || []).filter(v => v.playlist && v.playlist.trim() !== "");
         } else if (filterCategory === "shorts") {
-            // Only shorts in the dedicated shorts view
+            // Dedicated Reels/Shorts view: all reels from Firestore
             videosToRender = (videosData || []).filter(v => isShortVideo(v));
+        } else if (filterCategory === "videos_only") {
+            // Videos only: standard long-form videos
+            videosToRender = (videosData || []).filter(v => !isShortVideo(v));
+        } else if (filterCategory === "all") {
+            // ALL videos and ALL Reels saved in Firestore are viewable together!
+            videosToRender = (videosData || []);
         } else {
-            // Standard category views: strictly exclude Shorts so Shorts never mix with big videos
-            videosToRender = filterCategory === "all" 
-                ? (videosData || []).filter(v => !isShortVideo(v))
-                : (videosData || []).filter(v => v.category && v.category.toLowerCase() === filterCategory.toLowerCase() && !v.playlist && !isShortVideo(v));
+            // Topic category: matching videos and reels in that category
+            videosToRender = (videosData || []).filter(v => v.category && v.category.toLowerCase() === filterCategory.toLowerCase() && !v.playlist);
         }
 
         if (videoGrid) videoGrid.innerHTML = "";
+        activeVideosPool = videosToRender;
+        currentRenderIndex = 0;
+
+        const notice = document.getElementById("all-loaded-notice");
+        const loadBtn = document.getElementById("load-more-btn");
+        if (notice) notice.classList.add("hidden");
+        if (loadBtn) loadBtn.classList.add("hidden");
 
         // If user specifically selected the "Shorts" filter tab
         if (filterCategory === "shorts") {
@@ -248,44 +566,17 @@ document.addEventListener("DOMContentLoaded", async () => {
                 topVideoGrid.className = "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4";
                 topVideoGrid.innerHTML = "";
                 if (videosToRender.length === 0) {
-                    topVideoGrid.innerHTML = `<p class="col-span-full text-zinc-500 text-center py-10">No shorts found.</p>`;
+                    topVideoGrid.innerHTML = `<p class="col-span-full text-zinc-500 text-center py-10">No shorts or reels found in Firestore.</p>`;
+                    updateStatsBanner(0, 0);
                     return;
                 }
-                const fragment = document.createDocumentFragment();
-                videosToRender.forEach(v => {
-                    const shortCard = document.createElement('div');
-                    shortCard.className = "group relative aspect-[9/16] rounded-2xl overflow-hidden cursor-pointer bg-zinc-900 border border-zinc-800/80 shadow-md hover:shadow-red-600/20 hover:border-red-500/40 transition-all duration-300 flex flex-col justify-end";
-                    shortCard.onclick = () => location.href = `shorts.html?id=${v.id}`;
-                    shortCard.innerHTML = `
-                        <img src="${v.thumbnail}" alt="${v.title.replace(/"/g, '&quot;')}" loading="lazy" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
-                        <div class="absolute top-2.5 left-2.5 z-20">
-                            <span class="bg-black/70 backdrop-blur-md text-red-500 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 border border-white/10">
-                                <i class="fas fa-bolt text-[9px]"></i> Shorts
-                            </span>
-                        </div>
-                        <div class="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors flex items-center justify-center z-10">
-                            <div class="w-10 h-10 rounded-full bg-red-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 transition-all shadow-lg">
-                                <i class="fas fa-play text-xs ml-0.5"></i>
-                            </div>
-                        </div>
-                        <div class="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black via-black/70 to-transparent z-20 pointer-events-none"></div>
-                        <div class="relative p-2.5 sm:p-3 z-30 pointer-events-none">
-                            <h3 class="text-xs font-bold text-white line-clamp-2 leading-snug drop-shadow mb-1 group-hover:text-red-400 transition-colors">
-                                ${v.title}
-                            </h3>
-                            <p class="text-[10px] text-zinc-400 font-medium">
-                                ${formatCompactNumber(v.views || 0)} views
-                            </p>
-                        </div>
-                    `;
-                    fragment.appendChild(shortCard);
-                });
-                topVideoGrid.appendChild(fragment);
             }
+            appendNextBatch();
+            setupInfiniteScroll();
             return;
         }
 
-        // Standard videos view: restore 3-column big grid
+        // Standard combined view: 3-column grid
         if (topVideoGrid) {
             topVideoGrid.className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-6 sm:gap-x-4 sm:gap-y-8";
             topVideoGrid.innerHTML = "";
@@ -296,158 +587,51 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         if (videosToRender.length === 0) {
-            if (topVideoGrid) topVideoGrid.innerHTML = `<p class="col-span-full text-zinc-500 text-center py-10">No videos found.</p>`;
+            if (topVideoGrid) topVideoGrid.innerHTML = `<p class="col-span-full text-zinc-500 text-center py-10">No videos or reels found matching your selection.</p>`;
             if (shortsShelf) shortsShelf.classList.add("hidden");
+            updateStatsBanner(0, 0);
             return;
         }
 
-        // Interleave videos so not all videos of one channel are together
-        if (filterCategory === "all") {
-            const channelGroups = {};
-            videosToRender.forEach(v => {
-                if (!channelGroups[v.channel]) channelGroups[v.channel] = [];
-                channelGroups[v.channel].push(v);
-            });
-            
-            const interleaved = [];
-            let added = true;
-            while (added) {
-                added = false;
-                for (const channel in channelGroups) {
-                    const chunk = channelGroups[channel].splice(0, 2);
-                    if (chunk.length > 0) {
-                        interleaved.push(...chunk);
-                        added = true;
-                    }
-                }
-            }
-            videosToRender = interleaved;
-        }
-
-        // Shuffle the videos to show a random order on each reload, while keeping the same number of videos
-        for (let i = videosToRender.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [videosToRender[i], videosToRender[j]] = [videosToRender[j], videosToRender[i]];
-        }
-
-        // Helper to construct a standard big video card
-        function renderStandardBigCard(video) {
-            let qualityBadgeHtml = "";
-            if (video.contentQuality) {
-                const isGood = video.contentQuality === "Good Video";
-                const badgeColor = isGood ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-red-500/20 text-red-400 border-red-500/30";
-                const badgeIcon = isGood ? "fa-circle-check" : "fa-triangle-exclamation";
-                qualityBadgeHtml = `
-                    <span class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 font-bold rounded border ${badgeColor} mb-1">
-                        <i class="fas ${badgeIcon} text-[8px]"></i> ${video.contentQuality}
-                    </span>
-                `;
-            }
-
-            let avatarHtml = `<div class="flex-shrink-0 bg-zinc-700 w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm mt-0.5">${video.channel[0]}</div>`;
-            if (channelsMap[video.channel] && channelsMap[video.channel].avatarUrl) {
-                avatarHtml = `<img src="${channelsMap[video.channel].avatarUrl}" class="flex-shrink-0 w-9 h-9 rounded-full object-cover mt-0.5" alt="${video.channel}" loading="lazy">`;
-            }
-
-            const ytId = getYoutubeId(video.videoUrl);
-            const card = document.createElement('div');
-            card.className = "cursor-pointer group relative video-card-custom bg-zinc-800 rounded-xl pb-3 h-full flex flex-col";
-            card.onclick = () => location.href = `watch.html?id=${video.id}`;
-            
-            const durationBadge = `<span class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-xs font-semibold z-30 ${getDurationBadgeClass(video.duration)}">${video.duration}</span>`;
-
-            const channelData = channelsMap[video.channel];
-            const subsCount = typeof getEffectiveSubscribers === 'function' ? getEffectiveSubscribers(channelData) : (channelData ? (channelData.subscribers || 0) : 0);
-            const effectiveLikes = typeof getEffectiveLikes === 'function' ? getEffectiveLikes(video) : (video.likes || 0);
-
-            card.innerHTML = `
-                <div class="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-3">
-                    <img src="${video.thumbnail}" alt="${video.title.replace(/"/g, '&quot;')}" loading="lazy" decoding="async" class="w-full h-full object-cover group-hover:scale-105 transition duration-200">
-                    <div class="video-preview-container absolute inset-0 w-full h-full bg-black z-20 pointer-events-none hidden"></div>
-                    <div class="play-icon-overlay absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all duration-200 z-10">
-                        <div class="w-12 h-12 bg-red-600/90 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 scale-75 group-hover:scale-100 shadow-lg">
-                            <i class="fas fa-play text-sm ml-0.5 text-white"></i>
-                        </div>
-                    </div>
-                    ${durationBadge}
-                </div>
-                <div class="flex space-x-3 px-3 flex-1">
-                    ${avatarHtml}
-                    <div class="flex-1 min-w-0">
-                        ${qualityBadgeHtml}
-                        <h3 class="font-semibold text-sm line-clamp-2 leading-snug text-zinc-100 group-hover:text-white">${video.title}</h3>
-                        <div class="flex items-center space-x-1.5 mt-1 text-zinc-400 hover:text-zinc-200 cursor-pointer w-fit" onclick="event.stopPropagation(); location.href='channel.html?name=${encodeURIComponent(video.channel)}'">
-                            <p class="text-xs truncate font-medium text-zinc-300">${video.channel}</p>
-                            <img src="img/icons.svg" class="w-3 h-3 flex-shrink-0" alt="Verified" title="Verified">
-                            <span class="text-[11px] text-zinc-400 font-normal">(${formatCompactNumber(subsCount)} subs)</span>
-                        </div>
-                        <div class="flex items-center flex-wrap gap-x-2 gap-y-0.5 text-xs text-zinc-400 mt-1">
-                            <span>${formatCompactNumber(video.views || 0)} views</span>
-                            <span>•</span>
-                            <span class="inline-flex items-center gap-1 text-zinc-300 font-medium"><i class="far fa-thumbs-up text-[10px] text-red-400"></i> ${formatCompactNumber(effectiveLikes)}</span>
-                            <span>•</span>
-                            <span>${timeAgo(video.timestamp)}</span>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            // Hover to play and prefetch
-            let hoverTimeout;
-            card.addEventListener('mouseenter', () => {
-                hoverTimeout = setTimeout(() => {
-                    if (ytId) {
-                        const previewContainer = card.querySelector('.video-preview-container');
-                        if (previewContainer && previewContainer.innerHTML === '') {
-                            previewContainer.innerHTML = `<iframe class='w-full h-full pointer-events-none' src='https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0&controls=0&modestbranding=1&showinfo=0' frameborder='0' allow='autoplay; encrypted-media' allowfullscreen></iframe>`;
-                        }
-                        if (previewContainer) previewContainer.classList.remove('hidden');
-                        const playOverlay = card.querySelector('.play-icon-overlay');
-                        if (playOverlay) playOverlay.classList.add('hidden');
-                    }
-                    if (!document.querySelector(`link[href="watch.html?id=${video.id}"]`)) {
-                        const link = document.createElement('link');
-                        link.rel = 'prefetch';
-                        link.href = `watch.html?id=${video.id}`;
-                        document.head.appendChild(link);
-                    }
-                }, 400);
-            });
-            
-            card.addEventListener('mouseleave', () => {
-                clearTimeout(hoverTimeout);
-                const previewContainer = card.querySelector('.video-preview-container');
-                if (previewContainer) {
-                    previewContainer.innerHTML = '';
-                    previewContainer.classList.add('hidden');
-                }
-                const playIcon = card.querySelector('.play-icon-overlay');
-                if (playIcon) playIcon.classList.remove('hidden');
-            });
-            
-            return card;
-        }
-
-        // Place first 6 big videos at the top
-        const topSlice = videosToRender.slice(0, 6);
-        const bottomSlice = videosToRender.slice(6);
+        // Place first 6 items in top grid
+        const initialTopSlice = activeVideosPool.slice(0, 6);
+        currentRenderIndex = initialTopSlice.length;
 
         const topFragment = document.createDocumentFragment();
-        topSlice.forEach(v => topFragment.appendChild(renderStandardBigCard(v)));
+        initialTopSlice.forEach(item => {
+            topFragment.appendChild(createFeedCard(item, cachedChannelsMap));
+        });
         if (topVideoGrid) {
             topVideoGrid.appendChild(topFragment);
         }
 
-        // Place Shorts Shelf in the MIDDLE between top-video-grid and bottom-video-grid
+        // Place Shorts Shelf in the MIDDLE
         renderShortsShelf();
 
-        // Place remaining big videos in bottom grid
-        if (bottomSlice.length > 0 && bottomVideoGrid) {
-            const bottomFragment = document.createDocumentFragment();
-            bottomSlice.forEach(v => bottomFragment.appendChild(renderStandardBigCard(v)));
-            bottomVideoGrid.appendChild(bottomFragment);
-        }
+        // Place next initial batch into bottom grid
+        appendNextBatch();
+
+        // Setup progressive observer for the rest of the 3,000+ videos and 6,000+ reels
+        setupInfiniteScroll();
     }
+
+    // Auto-update feed when new videos or reels are saved into Cloud Firestore
+    document.addEventListener('jtube:videosUpdated', async (e) => {
+        if (currentCategory === "all" || currentCategory === "shorts" || currentCategory === "videos_only") {
+            const freshVideos = e.detail;
+            if (Array.isArray(freshVideos) && freshVideos.length > 0) {
+                // Update active pool and counters
+                let filtered = freshVideos;
+                if (currentCategory === "shorts") filtered = freshVideos.filter(v => isShortVideo(v));
+                else if (currentCategory === "videos_only") filtered = freshVideos.filter(v => !isShortVideo(v));
+                
+                if (filtered.length !== activeVideosPool.length) {
+                    activeVideosPool = filtered;
+                    updateStatsBanner(currentRenderIndex, activeVideosPool.length);
+                }
+            }
+        }
+    });
 
     historyBtn.addEventListener("click", async (e) => {
         e.preventDefault();
@@ -478,13 +662,44 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     async function renderCategories() {
-        const categories = await getCategories();
-        categoryBar.innerHTML = `<button class="category-btn whitespace-nowrap bg-white text-black px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="all">All</button>`;
-        categoryBar.innerHTML += `<button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 text-red-400 hover:text-white px-4 py-1.5 rounded-lg text-sm font-bold transition flex items-center gap-1.5" data-category="shorts"><i class="fas fa-bolt text-red-500"></i> Shorts</button>`;
+        const rawCategories = await getCategories();
+        const categories = (rawCategories || []).filter(c => c && c.name && c.name !== "Cartoon" && c.name !== "Entertainment");
+        
+        categoryBar.innerHTML = `
+            <button class="category-btn whitespace-nowrap active-category bg-white text-zinc-900 px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition flex items-center gap-1.5 shadow-sm" data-category="all">
+                <i class="fas fa-layer-group text-[11px]"></i> All (Videos & Reels)
+            </button>
+            <button class="category-btn whitespace-nowrap bg-white/[0.05] hover:bg-white/[0.1] text-zinc-300 hover:text-white border border-white/[0.08] px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium transition flex items-center gap-1.5" data-category="videos_only">
+                <i class="fas fa-film text-blue-400 text-xs"></i> Videos Only
+            </button>
+            <button class="category-btn whitespace-nowrap bg-white/[0.05] hover:bg-white/[0.1] text-zinc-300 hover:text-white border border-white/[0.08] px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium transition flex items-center gap-1.5" data-category="shorts">
+                <i class="fas fa-bolt text-pink-400 text-xs"></i> Reels & Shorts
+            </button>
+        `;
+
         categories.forEach(cat => {
-            categoryBar.innerHTML += `<button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="${cat.name}">${cat.name}</button>`;
+            let catIcon = "fa-folder";
+            const name = cat.name.toLowerCase();
+            if (name.includes("program") || name.includes("code")) catIcon = "fa-code";
+            else if (name.includes("ai") || name.includes("machine")) catIcon = "fa-brain";
+            else if (name.includes("cyber") || name.includes("security")) catIcon = "fa-shield-halved";
+            else if (name.includes("science")) catIcon = "fa-atom";
+            else if (name.includes("islam") || name.includes("faith")) catIcon = "fa-moon";
+            else if (name.includes("tech")) catIcon = "fa-microchip";
+            else if (name.includes("motivation") || name.includes("podcast")) catIcon = "fa-lightbulb";
+
+            categoryBar.innerHTML += `
+                <button class="category-btn whitespace-nowrap bg-white/[0.05] hover:bg-white/[0.1] text-zinc-300 hover:text-white border border-white/[0.08] px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium transition flex items-center gap-1.5" data-category="${cat.name}">
+                    <i class="fas ${catIcon} text-[11px] text-zinc-400"></i> ${cat.name}
+                </button>
+            `;
         });
-        categoryBar.innerHTML += `<button class="category-btn whitespace-nowrap bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded-lg text-sm font-medium transition" data-category="playlists">Playlists</button>`;
+
+        categoryBar.innerHTML += `
+            <button class="category-btn whitespace-nowrap bg-white/[0.05] hover:bg-white/[0.1] text-zinc-300 hover:text-white border border-white/[0.08] px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium transition flex items-center gap-1.5" data-category="playlists">
+                <i class="fas fa-layer-group text-xs text-zinc-400"></i> Playlists
+            </button>
+        `;
 
         const newCategoryBtns = document.querySelectorAll(".category-btn");
         newCategoryBtns.forEach(btn => {
@@ -494,13 +709,16 @@ document.addEventListener("DOMContentLoaded", async () => {
                 pageTitle.classList.add("hidden");
                 categoryBar.classList.remove("hidden");
                 
-                newCategoryBtns.forEach(b => b.classList.replace("bg-white", "bg-zinc-800"));
-                newCategoryBtns.forEach(b => b.classList.replace("text-black", "text-white"));
+                newCategoryBtns.forEach(b => {
+                    b.classList.remove("active-category", "bg-white", "text-zinc-900", "font-semibold");
+                    b.classList.add("bg-white/[0.05]", "text-zinc-300");
+                });
                 
-                e.target.classList.replace("bg-zinc-800", "bg-white");
-                e.target.classList.replace("text-white", "text-black");
+                const target = e.currentTarget || e.target;
+                target.classList.remove("bg-white/[0.05]", "text-zinc-300");
+                target.classList.add("active-category", "bg-white", "text-zinc-900", "font-semibold");
 
-                const cat = e.target.dataset.category;
+                const cat = target.dataset.category;
                 await renderVideos(cat);
             });
         });
@@ -516,11 +734,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         const isShort = isShortVideo(video);
 
         const avatarHtml = channelData && channelData.avatarUrl
-            ? `<img src="${channelData.avatarUrl}" class="flex-shrink-0 w-9 h-9 rounded-full object-cover mt-0.5" alt="${video.channel}" loading="lazy">`
-            : `<div class="flex-shrink-0 bg-zinc-700 w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm mt-0.5">${video.channel[0]}</div>`;
+            ? `<img src="${channelData.avatarUrl}" class="flex-shrink-0 w-9 h-9 rounded-full object-cover border border-white/10 mt-0.5" alt="${video.channel}" loading="lazy">`
+            : `<div class="flex-shrink-0 bg-zinc-800 text-zinc-300 border border-white/10 w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs mt-0.5">${video.channel[0]}</div>`;
         
         const card = document.createElement('div');
-        card.className = "cursor-pointer group relative video-card-custom bg-zinc-800 rounded-xl pb-3 h-full flex flex-col";
+        card.className = "cursor-pointer group relative video-card-custom bg-[#12151c] rounded-2xl pb-3.5 h-full flex flex-col border border-white/[0.06] hover:border-white/[0.14] transition-all";
         card.onclick = () => location.href = isShort ? `shorts.html?id=${video.id}` : `watch.html?id=${video.id}`;
         
         const durationBadge = isShort
@@ -980,6 +1198,54 @@ document.addEventListener("DOMContentLoaded", async () => {
                 cycleThemePreference();
             }
         });
+    });
+
+    // Quality Charter Modal Handlers
+    const qualityCharterModal = document.getElementById("quality-charter-modal");
+    const openQualityCharterBtns = [
+        document.getElementById("open-quality-charter-btn"),
+        document.getElementById("banner-quality-charter-btn")
+    ];
+    const closeQualityCharterBtn = document.getElementById("close-quality-charter-btn");
+    const dismissQualityCharterBtn = document.getElementById("dismiss-quality-charter-btn");
+
+    function openQualityModal() {
+        if (qualityCharterModal) qualityCharterModal.classList.remove("hidden");
+    }
+    function closeQualityModal() {
+        if (qualityCharterModal) qualityCharterModal.classList.add("hidden");
+    }
+
+    openQualityCharterBtns.forEach(btn => {
+        if (btn) btn.addEventListener("click", openQualityModal);
+    });
+    if (closeQualityCharterBtn) closeQualityCharterBtn.addEventListener("click", closeQualityModal);
+    if (dismissQualityCharterBtn) dismissQualityCharterBtn.addEventListener("click", closeQualityModal);
+    if (qualityCharterModal) {
+        qualityCharterModal.addEventListener("click", (e) => {
+            if (e.target === qualityCharterModal) closeQualityModal();
+        });
+    }
+
+    // Keyboard shortcut (Ctrl+K or '/') to focus search
+    document.addEventListener("keydown", (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            if (searchInput) {
+                searchInput.focus();
+                searchInput.select();
+            }
+        } else if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+            e.preventDefault();
+            if (searchInput) {
+                searchInput.focus();
+                searchInput.select();
+            }
+        } else if (e.key === 'Escape') {
+            closeQualityModal();
+            if (watchTimeModal) watchTimeModal.classList.add("hidden");
+            if (searchDropdown) searchDropdown.classList.add('hidden');
+        }
     });
 
     // Render videos on page load (videos will not auto-reload; reload browser to fetch fresh videos)
