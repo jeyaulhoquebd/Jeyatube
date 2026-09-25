@@ -99,7 +99,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 } else if (password === "Jeyaul" || password === "admin123") {
                     unlockStudio(email);
                 } else {
-                    showLoginError("Firebase Auth is unavailable. Check credentials.");
+                    showLoginError("Authentication is currently unavailable. Check credentials.");
                 }
             } catch (err) {
                 console.error("Admin sign in error:", err);
@@ -318,15 +318,15 @@ document.addEventListener("DOMContentLoaded", async () => {
                     </td>
                     <td class="px-5 py-3.5 text-center whitespace-nowrap">
                         <div class="flex items-center justify-center gap-1">
-                            <button onclick="openEditVideoModal('${video.id}')" title="Edit video metadata in Firestore"
+                            <button onclick="openEditVideoModal('${video.id}')" title="Edit video metadata"
                                     class="text-zinc-400 hover:text-white hover:bg-zinc-800 p-2 rounded-lg transition cursor-pointer">
                                 <i class="fas fa-edit text-xs"></i>
                             </button>
                             <a href="watch.html?id=${video.id}" target="_blank" title="Watch video"
-                               class="text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 p-2 rounded-lg transition cursor-pointer inline-block">
+                                class="text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 p-2 rounded-lg transition cursor-pointer inline-block">
                                 <i class="fas fa-external-link-alt text-xs"></i>
                             </a>
-                            <button onclick="deleteVideoHandler('${video.id}')" title="Delete video from Firestore"
+                            <button onclick="deleteVideoHandler('${video.id}')" title="Delete video"
                                     class="text-zinc-500 hover:text-red-400 hover:bg-red-500/10 p-2 rounded-lg transition cursor-pointer">
                                 <i class="fas fa-trash-alt text-xs"></i>
                             </button>
@@ -402,23 +402,23 @@ document.addEventListener("DOMContentLoaded", async () => {
             const count = selectedVideoIds.size;
             if (count === 0) return;
 
-            const confirmMsg = `Are you sure you want to permanently delete ${count} selected video(s) from Firestore?\n\nThis will remove them from the database permanently.`;
+            const confirmMsg = `Are you sure you want to permanently delete ${count} selected video(s)?\n\nThis will remove them permanently.`;
             if (!confirm(confirmMsg)) return;
 
             try {
                 btnDeleteSelected.disabled = true;
                 btnDeleteSelected.innerHTML = '<i class="fas fa-spinner fa-spin text-xs"></i><span>Deleting...</span>';
-                showActionStatus(`<i class="fas fa-spinner fa-spin mr-2"></i>Deleting ${count} video(s) from Firestore...`, "loading");
+                showActionStatus(`<i class="fas fa-spinner fa-spin mr-2"></i>Deleting ${count} video(s)...`, "loading");
 
                 const idsToDelete = Array.from(selectedVideoIds);
                 await deleteBatchVideos(idsToDelete);
 
                 selectedVideoIds.clear();
-                showActionStatus(`✓ Successfully deleted ${count} video(s) permanently from Firestore.`, "success");
+                showActionStatus(`✓ Successfully deleted ${count} video(s).`, "success");
                 await loadAdminDashboard();
             } catch (err) {
                 console.error("Batch delete error:", err);
-                showActionStatus(`Failed to delete videos from Firestore: ${err.message || err}`, "error");
+                showActionStatus(`Failed to delete videos: ${err.message || err}`, "error");
             } finally {
                 if (btnDeleteSelected) {
                     btnDeleteSelected.disabled = false;
@@ -432,16 +432,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.deleteVideoHandler = async function(id) {
         const video = adminVideos.find(v => v.id === id);
         const videoTitle = video ? `"${video.title}"` : "this video";
-        if (confirm(`Are you sure you want to delete ${videoTitle} permanently from Firestore?`)) {
+        if (confirm(`Are you sure you want to delete ${videoTitle} permanently?`)) {
             try {
-                showActionStatus(`<i class="fas fa-spinner fa-spin mr-2"></i>Deleting video from Firestore...`, "loading");
+                showActionStatus(`<i class="fas fa-spinner fa-spin mr-2"></i>Deleting video...`, "loading");
                 await deleteVideo(id);
                 selectedVideoIds.delete(id);
-                showActionStatus(`✓ Video successfully deleted from Firestore.`, "success");
+                showActionStatus(`✓ Video successfully deleted.`, "success");
                 await loadAdminDashboard();
             } catch (err) {
                 console.error("Delete video error:", err);
-                showActionStatus(`Failed to delete video from Firestore: ${err.message || err}`, "error");
+                showActionStatus(`Failed to delete video: ${err.message || err}`, "error");
             }
         }
     };
@@ -963,8 +963,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         const videos = await fetchYouTubeVideos(targetPlaylistId);
         if (videos && videos.length > 0) {
-            showProgress(60, `Found ${videos.length} videos (>1 min). Saving to Firestore...`);
-            ytStatus.textContent = `Found ${videos.length} videos longer than 1 minute. Saving to database...`;
+            showProgress(60, `Found ${videos.length} videos (>1 min). Saving...`);
+            ytStatus.textContent = `Found ${videos.length} videos longer than 1 minute. Saving...`;
 
             // Check existing videos to avoid duplicates
             const existingVideos = await getVideos();
@@ -1062,7 +1062,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         usersTableBody.innerHTML = `
             <tr>
                 <td colspan="6" class="p-8 text-center text-zinc-500">
-                    <i class="fas fa-spinner fa-spin mr-2"></i>Loading Firebase Auth &amp; Firestore Users...
+                    <i class="fas fa-spinner fa-spin mr-2"></i>Loading Users...
                 </td>
             </tr>
         `;
@@ -1417,7 +1417,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             try {
                 btnForceYtSync.disabled = true;
                 btnForceYtSync.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Syncing...</span>';
-                showOverviewBanner('<i class="fas fa-spinner fa-spin mr-2"></i>Syncing all configured YouTube channels with Firestore...', 'loading');
+                showOverviewBanner('<i class="fas fa-spinner fa-spin mr-2"></i>Syncing all configured YouTube channels...', 'loading');
 
                 if (typeof autoSyncYouTubeChannels === 'function') {
                     await autoSyncYouTubeChannels(true);
@@ -1583,12 +1583,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                 await saveVideo(updatedVideo);
                 if (editVidStatus) {
                     editVidStatus.className = "text-xs font-bold p-3 rounded-xl bg-green-950/70 border border-green-700 text-green-300 block";
-                    editVidStatus.textContent = "✓ Video updated successfully in Cloud Firestore!";
+                    editVidStatus.textContent = "✓ Video updated successfully!";
                 }
                 setTimeout(async () => {
                     closeEditModal();
                     await loadAdminDashboard();
-                    showActionStatus(`✓ Video "${updatedVideo.title}" was saved to Firestore.`, "success");
+                    showActionStatus(`✓ Video "${updatedVideo.title}" was saved.`, "success");
                 }, 800);
             } catch (err) {
                 console.error("Save edit video error:", err);
@@ -1599,7 +1599,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             } finally {
                 if (saveBtn) {
                     saveBtn.disabled = false;
-                    saveBtn.innerHTML = '<i class="fas fa-save"></i><span>Save to Firestore</span>';
+                    saveBtn.innerHTML = '<i class="fas fa-save"></i><span>Save Changes</span>';
                 }
             }
         });
@@ -1776,8 +1776,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                             </div>
                             <h4 class="text-xs font-bold text-white line-clamp-2 leading-snug group-hover:text-red-400 transition" title="${title}">${title}</h4>
                             <div class="mt-2 flex items-center gap-1.5 text-[10px] text-emerald-400 font-medium">
-                                <i class="fas fa-database text-[9px]"></i>
-                                <span>Saved in Firestore &amp; Live</span>
+                                <i class="fas fa-check-circle text-[9px]"></i>
+                                <span>Saved &amp; Live</span>
                             </div>
                         </div>
                         <div class="mt-3 pt-2.5 border-t border-zinc-800/70 flex items-center justify-between text-[11px]">
@@ -1883,7 +1883,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const reelsInChannel = data.reelsCount || (data.videos ? data.videos.filter(v => (typeof isShortVideo === 'function') ? isShortVideo(v) : Boolean(v.isShort || v.isReel)).length : 0);
                 const vidsInChannel = data.videosCount || (data.videos ? Math.max(0, data.videos.length - reelsInChannel) : 0);
 
-                showSyncStatus(`✓ Successfully synced ${channelName}! Saved ${vidsInChannel} videos and ${reelsInChannel} Reels to Firestore, now live on website.`, 'success');
+                showSyncStatus(`✓ Successfully synced ${channelName}! Saved ${vidsInChannel} videos and ${reelsInChannel} Reels, now live on website.`, 'success');
                 
                 // 2. Display on website
                 if (typeof document !== 'undefined' && data.videos) {
@@ -1945,18 +1945,18 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 if (progFill) progFill.style.width = '100%';
                 if (progPct) progPct.textContent = '100%';
-                if (progText) progText.innerHTML = '<i class="fas fa-check-circle text-emerald-400 mr-2"></i>Daily Ingestion &amp; Firestore Save Complete!';
+                if (progText) progText.innerHTML = '<i class="fas fa-check-circle text-emerald-400 mr-2"></i>Daily Ingestion &amp; Save Complete!';
 
                 if (res.ok) {
                     const data = await res.json();
                     if (data.videos && data.videos.length > 0 && typeof saveBatchVideos === 'function') {
-                        // 1. First save video & Reel links to Firestore
+                        // 1. First save video & Reel links
                         await saveBatchVideos(data.videos);
                     }
                     const reelsCount = data.reelsCount || (data.videos ? data.videos.filter(v => (typeof isShortVideo === 'function') ? isShortVideo(v) : Boolean(v.isShort || v.isReel)).length : 0);
                     const videosCount = data.videosCount || (data.videos ? Math.max(0, data.videos.length - reelsCount) : 0);
 
-                    showSyncStatus(`✓ All 36 channels synced! Successfully saved ${videosCount} videos and ${reelsCount} Reels to Firestore, now live on website.`, 'success');
+                    showSyncStatus(`✓ All 36 channels synced! Successfully saved ${videosCount} videos and ${reelsCount} Reels, now live on website.`, 'success');
                     
                     // 2. Display on website
                     if (typeof document !== 'undefined' && data.videos) {
@@ -1993,7 +1993,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             await loadDailySyncHub();
             btnRefreshSyncCatalog.disabled = false;
             btnRefreshSyncCatalog.innerHTML = '<i class="fas fa-redo"></i><span>Refresh Ingested Feed</span>';
-            showSyncStatus('✓ Daily feed refreshed from in-memory cache and Firestore.', 'success');
+            showSyncStatus('✓ Daily feed refreshed from in-memory cache and local storage.', 'success');
         });
     }
 
@@ -2053,7 +2053,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
 
-    // ===== AI STUDIO & GEMINI 3.8 SUITE CONTROLLER =====
+    // ===== AI STUDIO & INTELLIGENCE SUITE CONTROLLER =====
     function initAISuite() {
         checkAIBrainStatus();
         setupModerationTool();
@@ -2069,7 +2069,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const res = await fetch('/api/ai/brain-status');
             if (res.ok) {
                 const data = await res.json();
-                console.log('Gemini 3.8 Brain Status:', data);
+                console.log('AI Brain Status:', data);
             }
         } catch (err) {
             console.warn('AI Brain status check:', err);
@@ -2096,7 +2096,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 btnRunMod.disabled = true;
                 btnRunMod.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Auditing...</span>';
                 resultBox.classList.remove('hidden');
-                resultBox.innerHTML = '<span class="text-zinc-500">Auditing with Gemini 3.8 Flash...</span>';
+                resultBox.innerHTML = '<span class="text-zinc-500">Auditing with AI Shield...</span>';
 
                 try {
                     const res = await fetch('/api/ai/moderate', {
@@ -2138,7 +2138,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             btnScanComments.addEventListener('click', async () => {
                 btnScanComments.disabled = true;
                 btnScanComments.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Scanning Comments...</span>';
-                queueList.innerHTML = '<div class="text-center py-6 text-zinc-500 text-xs"><i class="fas fa-spinner fa-spin mr-2"></i>Auditing catalog comments with Gemini...</div>';
+                queueList.innerHTML = '<div class="text-center py-6 text-zinc-500 text-xs"><i class="fas fa-spinner fa-spin mr-2"></i>Auditing catalog comments with AI...</div>';
 
                 // Fetch recent comments from local/catalog videos
                 try {
@@ -2223,7 +2223,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
 
                 btnClassify.disabled = true;
-                btnClassify.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Analyzing with Gemini...</span>';
+                btnClassify.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Analyzing with AI...</span>';
                 output.innerHTML = '<p class="text-zinc-500 text-center py-6"><i class="fas fa-spinner fa-spin mr-2"></i>Running neural classification...</p>';
 
                 try {
@@ -2270,7 +2270,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     output.innerHTML = `<p class="text-red-400 text-center py-6">Error: ${err.message || err}</p>`;
                 } finally {
                     btnClassify.disabled = false;
-                    btnClassify.innerHTML = '<i class="fas fa-magic"></i><span>Classify Content with Gemini</span>';
+                    btnClassify.innerHTML = '<i class="fas fa-magic"></i><span>Classify Content with AI</span>';
                 }
             });
         }
@@ -2314,10 +2314,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const btn = document.getElementById('btn-generate-script');
                 if (btn) {
                     btn.disabled = true;
-                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Generating Script with Gemini 3.8...</span>';
+                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Generating Script with AI...</span>';
                 }
 
-                output.innerHTML = '<p class="text-zinc-500 text-center py-12"><i class="fas fa-spinner fa-spin mr-2"></i>Crafting high-retention script with Gemini 3.8 Flash...</p>';
+                output.innerHTML = '<p class="text-zinc-500 text-center py-12"><i class="fas fa-spinner fa-spin mr-2"></i>Crafting high-retention script with AI Assistant...</p>';
 
                 try {
                     const res = await fetch('/api/ai/generate-script', {
@@ -2439,7 +2439,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Optimizing SEO...</span>';
                 }
 
-                output.innerHTML = '<p class="text-zinc-500 text-center py-10"><i class="fas fa-spinner fa-spin mr-2"></i>Generating high-CTR SEO package with Gemini...</p>';
+                output.innerHTML = '<p class="text-zinc-500 text-center py-10"><i class="fas fa-spinner fa-spin mr-2"></i>Generating high-CTR SEO package with AI Assistant...</p>';
 
                 try {
                     const res = await fetch('/api/ai/optimize-seo', {
@@ -2517,7 +2517,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 // Append thinking bubble
                 const aiDiv = document.createElement('div');
                 aiDiv.className = 'text-zinc-400';
-                aiDiv.innerHTML = `<span class="text-emerald-400 font-bold">[JTube AI]</span> <i class="fas fa-spinner fa-spin text-xs mr-1"></i>Thinking with Gemini 3.8 Flash...`;
+                aiDiv.innerHTML = `<span class="text-emerald-400 font-bold">[JTube AI]</span> <i class="fas fa-spinner fa-spin text-xs mr-1"></i>Thinking with AI Assistant...`;
                 history.appendChild(aiDiv);
                 history.scrollTop = history.scrollHeight;
 
@@ -2530,9 +2530,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                     if (res.ok) {
                         const data = await res.json();
-                        aiDiv.innerHTML = `<span class="text-emerald-400 font-bold">[JTube AI]</span> ${escapeHtml(data.response || 'I am processing your query.')}`;
+                        aiDiv.innerHTML = `<span class="text-emerald-400 font-bold">[JTube AI]</span> ${escapeHtml(data.response || data.text || 'I am processing your query.')}`;
                     } else {
-                        aiDiv.innerHTML = `<span class="text-red-400 font-bold">[JTube AI]</span> Unable to reach Gemini 3.8 service.`;
+                        aiDiv.innerHTML = `<span class="text-red-400 font-bold">[JTube AI]</span> Unable to reach AI Assistant service.`;
                     }
                 } catch (err) {
                     aiDiv.innerHTML = `<span class="text-red-400 font-bold">[JTube AI]</span> Error: ${escapeHtml(err.message || err)}`;

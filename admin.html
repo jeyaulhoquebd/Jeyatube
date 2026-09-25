@@ -144,8 +144,8 @@
                 </button>
                 <button class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold text-left text-zinc-400" data-tab="ai-system">
                     <i class="fas fa-brain w-5 text-center text-purple-400"></i>
-                    <span>AI Studio &amp; Gemini</span>
-                    <span class="ml-auto bg-purple-950/80 text-purple-400 border border-purple-800/60 text-[10px] font-bold px-2 py-0.5 rounded-full">Gemini 3.8</span>
+                    <span>AI Studio</span>
+                    <span class="ml-auto bg-purple-950/80 text-purple-400 border border-purple-800/60 text-[10px] font-bold px-2 py-0.5 rounded-full">Intelligent</span>
                 </button>
 
                 <p class="text-[10px] font-bold uppercase tracking-widest text-zinc-600 px-3 mt-4 mb-2">Content</p>
@@ -231,7 +231,7 @@
 
                 <!-- 5 Key Metric Cards with Dedicated Saved Videos & Saved Reels -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
-                    <!-- Saved Videos in Firestore Card -->
+                    <!-- Saved Videos Card -->
                     <div class="glass-card p-4 relative overflow-hidden group hover:border-zinc-700 transition">
                         <div class="flex items-center justify-between mb-2">
                             <span class="text-xs font-semibold text-zinc-400">Saved Videos</span>
@@ -241,12 +241,12 @@
                         </div>
                         <div class="text-2xl font-black text-white mb-1" id="kpi-saved-videos">0</div>
                         <div class="text-[11px] text-zinc-500 flex items-center gap-1">
-                            <i class="fas fa-database text-blue-400 text-[9px]"></i>
-                            <span>Longform in Firestore</span>
+                            <i class="fas fa-play-circle text-blue-400 text-[9px]"></i>
+                            <span>Saved Longform</span>
                         </div>
                     </div>
 
-                    <!-- Saved Reels in Firestore Card -->
+                    <!-- Saved Reels Card -->
                     <div class="glass-card p-4 relative overflow-hidden group hover:border-zinc-700 transition">
                         <div class="flex items-center justify-between mb-2">
                             <span class="text-xs font-semibold text-zinc-400">Saved Reels</span>
@@ -257,7 +257,7 @@
                         <div class="text-2xl font-black text-white mb-1" id="kpi-saved-reels">0</div>
                         <div class="text-[11px] text-zinc-500 flex items-center gap-1">
                             <i class="fas fa-mobile-alt text-red-400 text-[9px]"></i>
-                            <span>Shorts in Firestore</span>
+                            <span>Saved Shorts</span>
                         </div>
                     </div>
 
@@ -360,8 +360,8 @@
                         <div class="p-3 bg-zinc-900/60 rounded-xl border border-zinc-800 flex items-start gap-3">
                             <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 mt-1.5 flex-shrink-0 animate-pulse"></div>
                             <div>
-                                <h4 class="text-xs font-bold text-white">Cloud Firestore</h4>
-                                <p class="text-[11px] text-zinc-400 mt-0.5">Database online &amp; real-time listener active</p>
+                                <h4 class="text-xs font-bold text-white">Storage Engine</h4>
+                                <p class="text-[11px] text-zinc-400 mt-0.5">Secure internal storage active</p>
                             </div>
                         </div>
 
@@ -483,7 +483,7 @@
                 <div class="mb-6 flex items-center justify-between flex-wrap gap-3">
                     <div>
                         <h1 class="text-2xl font-black text-white">Manage Videos</h1>
-                        <p class="text-sm text-zinc-500 mt-1">Select and delete videos individually or in bulk from Firestore.</p>
+                        <p class="text-sm text-zinc-500 mt-1">Select and delete videos individually or in bulk.</p>
                     </div>
                     <div class="flex items-center space-x-3">
                         <div class="bg-zinc-800 border border-zinc-700 px-4 py-2 rounded-xl text-sm font-bold text-zinc-300">
@@ -708,7 +708,7 @@
                         <div class="mt-4 p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/50">
                             <p class="text-[11px] text-zinc-500 leading-relaxed">
                                 <i class="fas fa-info-circle text-zinc-600 mr-1"></i>
-                                Only videos <strong class="text-zinc-400">longer than 1 minute</strong> will be imported. Video links, thumbnails, titles and metadata are saved directly to Cloud Firestore for ultra-fast website loading. Duplicate videos are automatically skipped.
+                                Only videos <strong class="text-zinc-400">longer than 1 minute</strong> will be imported. Video links, thumbnails, titles and metadata are saved directly for ultra-fast website loading. Duplicate videos are automatically skipped.
                             </p>
                         </div>
                     </form>
@@ -833,9 +833,9 @@
                     </div>
                 </div>
 
-                <!-- 5 Sync & Firestore KPI Cards -->
+                <!-- 5 Sync KPI Cards -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-                    <!-- Total Saved Videos (Firestore) -->
+                    <!-- Total Saved Videos -->
                     <div class="glass-card p-4">
                         <div class="flex items-center justify-between mb-2">
                             <span class="text-xs font-semibold text-zinc-400">Saved Videos</span>
@@ -845,12 +845,12 @@
                         </div>
                         <div class="text-2xl font-black text-white mb-1" id="kpi-sync-saved-videos">0 Videos</div>
                         <div class="text-[11px] text-zinc-500 flex items-center gap-1">
-                            <i class="fas fa-database text-blue-400 text-[9px]"></i>
-                            <span>Longform in Firestore</span>
+                            <i class="fas fa-play-circle text-blue-400 text-[9px]"></i>
+                            <span>Saved Longform</span>
                         </div>
                     </div>
 
-                    <!-- Total Saved Reels (Firestore) -->
+                    <!-- Total Saved Reels -->
                     <div class="glass-card p-4">
                         <div class="flex items-center justify-between mb-2">
                             <span class="text-xs font-semibold text-zinc-400">Saved Reels</span>
@@ -861,7 +861,7 @@
                         <div class="text-2xl font-black text-white mb-1" id="kpi-sync-saved-reels">0 Reels</div>
                         <div class="text-[11px] text-zinc-500 flex items-center gap-1">
                             <i class="fas fa-mobile-alt text-red-400 text-[9px]"></i>
-                            <span>Shorts in Firestore</span>
+                            <span>Saved Shorts</span>
                         </div>
                     </div>
 
@@ -874,7 +874,7 @@
                             </div>
                         </div>
                         <div class="text-2xl font-black text-white mb-1" id="kpi-sync-total-saved">0 Total</div>
-                        <div class="text-[11px] text-zinc-500">Active documents in Firestore</div>
+                        <div class="text-[11px] text-zinc-500">Active catalog items</div>
                     </div>
 
                     <!-- Tracked Channels -->
@@ -912,7 +912,7 @@
                             <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
                             <div>
                                 <span class="text-xs font-bold text-white uppercase tracking-wider">Sync &amp; Persistence Workflow:</span>
-                                <span class="text-xs text-zinc-400 ml-1.5">New YouTube uploads &amp; Reels are discovered, saved to Firestore, and displayed on JTube.</span>
+                                <span class="text-xs text-zinc-400 ml-1.5">New YouTube uploads &amp; Reels are discovered, saved, and displayed on JTube.</span>
                             </div>
                         </div>
                         <div class="flex items-center gap-2 text-xs font-semibold flex-wrap">
@@ -921,7 +921,7 @@
                             </span>
                             <i class="fas fa-arrow-right text-zinc-600 text-[10px]"></i>
                             <span class="px-2.5 py-1 rounded-lg bg-emerald-950/70 text-emerald-300 border border-emerald-700/60 flex items-center gap-1.5">
-                                <i class="fas fa-database text-emerald-400"></i> 2. Save Links to Firestore
+                                <i class="fas fa-check-circle text-emerald-400"></i> 2. Save Links
                             </span>
                             <i class="fas fa-arrow-right text-zinc-600 text-[10px]"></i>
                             <span class="px-2.5 py-1 rounded-lg bg-blue-950/70 text-blue-300 border border-blue-700/60 flex items-center gap-1.5">
@@ -942,7 +942,7 @@
                                     <i class="fas fa-bolt text-amber-400 text-xs"></i>
                                     <span>Latest Uploads Ingested From YouTube Channels</span>
                                 </h3>
-                                <p class="text-xs text-zinc-400 mt-0.5">Videos and Reels discovered from connected channels, saved to Firestore, and displayed live on your website.</p>
+                                <p class="text-xs text-zinc-400 mt-0.5">Videos and Reels discovered from connected channels, saved, and displayed live on your website.</p>
                             </div>
                             <div class="flex items-center gap-2 flex-wrap">
                                 <input type="text" id="daily-feed-search" placeholder="Search daily uploads..." 
@@ -1056,8 +1056,8 @@
                 <div class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
                         <div class="flex items-center gap-2">
-                            <h1 class="text-2xl font-black text-white tracking-tight">AI Studio Command &amp; Gemini 3.8 Flash</h1>
-                            <span class="bg-purple-500/20 text-purple-400 border border-purple-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">gemini-3.8-flash</span>
+                            <h1 class="text-2xl font-black text-white tracking-tight">AI Studio Command &amp; Intelligence Core</h1>
+                            <span class="bg-purple-500/20 text-purple-400 border border-purple-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">AI Engine Active</span>
                         </div>
                         <p class="text-sm text-zinc-400 mt-1">Enterprise-grade AI suite for content moderation, video categorization, creator scripting, and search SEO optimization.</p>
                     </div>
@@ -1073,13 +1073,13 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                     <div class="glass-card p-4">
                         <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs font-semibold text-zinc-400">Core AI Model</span>
+                            <span class="text-xs font-semibold text-zinc-400">Core AI Engine</span>
                             <div class="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center text-sm border border-purple-500/20">
                                 <i class="fas fa-brain"></i>
                             </div>
                         </div>
-                        <div class="text-base font-black text-white mb-1">gemini-3.8-flash</div>
-                        <div class="text-[11px] text-zinc-500">Google GenAI Official SDK</div>
+                        <div class="text-base font-black text-white mb-1">Intelligent Neural Core</div>
+                        <div class="text-[11px] text-zinc-500">Autonomous Processing Pipeline</div>
                     </div>
                     <div class="glass-card p-4">
                         <div class="flex items-center justify-between mb-2">
@@ -1098,8 +1098,8 @@
                                 <i class="fas fa-tags"></i>
                             </div>
                         </div>
-                        <div class="text-base font-black text-white mb-1">Heuristic + Gemini</div>
-                        <div class="text-[11px] text-zinc-500">Accurate taxonomy &amp; tags</div>
+                        <div class="text-base font-black text-white mb-1">Automated Taxonomy</div>
+                        <div class="text-[11px] text-zinc-500">Accurate classification &amp; tags</div>
                     </div>
                     <div class="glass-card p-4">
                         <div class="flex items-center justify-between mb-2">
@@ -1124,7 +1124,7 @@
                                     <i class="fas fa-shield-virus text-red-400 text-xs"></i>
                                     <span>AI Content Moderation &amp; Safety Audit</span>
                                 </h3>
-                                <p class="text-xs text-zinc-400 mt-0.5">Evaluate user comments, descriptions, and community text using Gemini's safety guidelines.</p>
+                                <p class="text-xs text-zinc-400 mt-0.5">Evaluate user comments, descriptions, and community text using automated safety guidelines.</p>
                             </div>
                             <div class="flex items-center gap-2">
                                 <button id="btn-scan-catalog-comments" type="button"
@@ -1139,7 +1139,7 @@
                             <!-- Left: Interactive Moderation Tester -->
                             <div class="space-y-3 bg-zinc-900/60 p-4 rounded-xl border border-zinc-800">
                                 <label class="label">Test Comment or Video Description for Toxicity</label>
-                                <textarea id="ai-mod-input" rows="3" class="input-field text-xs resize-none" placeholder="Paste any text to check with Gemini 3.8 Flash..."></textarea>
+                                <textarea id="ai-mod-input" rows="3" class="input-field text-xs resize-none" placeholder="Paste any text to check with AI safety filter..."></textarea>
                                 <div class="flex items-center justify-between">
                                     <span id="ai-mod-badge" class="text-xs font-bold hidden"></span>
                                     <button type="button" id="btn-run-ai-mod" class="btn-primary text-xs font-bold py-2 px-4 ml-auto flex items-center gap-1.5">
@@ -1155,7 +1155,7 @@
                                 <div>
                                     <div class="flex items-center justify-between mb-2">
                                         <h4 class="text-xs font-bold text-white">Automated Moderation Queue</h4>
-                                        <span class="text-[10px] text-zinc-500">Live Database Checks</span>
+                                        <span class="text-[10px] text-zinc-500">Live Safety Checks</span>
                                     </div>
                                     <div id="ai-mod-queue-list" class="space-y-2 max-h-52 overflow-y-auto pr-1">
                                         <div class="text-center py-6 text-zinc-500 text-xs">
@@ -1191,14 +1191,14 @@
                                 </div>
                                 <button type="button" id="btn-run-classifier" class="btn-blue text-xs font-bold py-2.5 px-5 flex items-center gap-2">
                                     <i class="fas fa-magic"></i>
-                                    <span>Classify Content with Gemini</span>
+                                    <span>Classify Content with AI</span>
                                 </button>
                             </div>
                             <div class="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between">
                                 <div>
                                     <h4 class="text-xs font-bold text-white mb-2">Classification &amp; Tagging Output</h4>
                                     <div id="ai-classifier-output" class="text-xs text-zinc-400 leading-relaxed space-y-2.5">
-                                        <p class="text-zinc-500 text-center py-8">Input title above and click Classify to run Gemini classification.</p>
+                                        <p class="text-zinc-500 text-center py-8">Input title above and click Classify to run AI classification.</p>
                                     </div>
                                 </div>
                                 <div id="ai-classifier-actions" class="hidden pt-3 border-t border-zinc-800 flex justify-end">
@@ -1218,7 +1218,7 @@
                                 <i class="fas fa-pen-fancy text-purple-400 text-xs"></i>
                                 <span>AI Creator Script &amp; Production Studio</span>
                             </h3>
-                            <p class="text-xs text-zinc-400 mt-0.5">Generate high-retention video outlines, hooks, scenes, and descriptions using Gemini 3.8 Flash.</p>
+                            <p class="text-xs text-zinc-400 mt-0.5">Generate high-retention video outlines, hooks, scenes, and descriptions with AI Studio Assistant.</p>
                         </div>
                         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <form id="ai-script-form" class="space-y-4">
@@ -1327,14 +1327,14 @@
                                     <i class="fas fa-terminal text-amber-400 text-xs"></i>
                                     <span>JAsk Studio Admin Console</span>
                                 </h3>
-                                <p class="text-xs text-zinc-400 mt-0.5">Direct chat with the JTube AI Assistant powered by Gemini 3.8 Flash.</p>
+                                <p class="text-xs text-zinc-400 mt-0.5">Direct chat with the JTube AI Assistant.</p>
                             </div>
-                            <span class="text-[11px] font-mono text-zinc-500">model: gemini-3.8-flash</span>
+                            <span class="text-[11px] font-mono text-zinc-500">AI Assistant</span>
                         </div>
                         <div class="space-y-4">
                             <div id="ai-terminal-history" class="bg-zinc-950 p-4 rounded-xl border border-zinc-800 max-h-64 overflow-y-auto space-y-3 font-mono text-xs">
                                 <div class="text-zinc-400">
-                                    <span class="text-emerald-400 font-bold">[JTube AI]</span> Hello Admin! I am JAsk, powered by Gemini 3.8 Flash. I track 36 featured YouTube channels and catalog performance. Ask me anything!
+                                    <span class="text-emerald-400 font-bold">[JTube AI]</span> Hello Admin! I am JAsk, your AI Assistant. I track 36 featured YouTube channels and catalog performance. Ask me anything!
                                 </div>
                             </div>
                             <form id="ai-terminal-form" class="flex gap-2">
@@ -1361,7 +1361,7 @@
                     </div>
                     <div>
                         <h2 class="text-lg font-black text-white">Edit Video Metadata</h2>
-                        <p class="text-xs text-zinc-400">Update video details, thumbnail, classification, and stats in Firestore.</p>
+                        <p class="text-xs text-zinc-400">Update video details, thumbnail, classification, and stats.</p>
                     </div>
                 </div>
                 <button type="button" id="close-edit-modal-btn" class="text-zinc-400 hover:text-white p-2 rounded-lg hover:bg-zinc-800 transition cursor-pointer">
@@ -1448,7 +1448,7 @@
                     </button>
                     <button type="submit" id="save-edit-btn" class="btn-success text-xs font-bold px-5 py-2.5 rounded-xl flex items-center gap-2 cursor-pointer">
                         <i class="fas fa-save"></i>
-                        <span>Save to Firestore</span>
+                        <span>Save Changes</span>
                     </button>
                 </div>
             </form>

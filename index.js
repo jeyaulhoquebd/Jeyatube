@@ -383,6 +383,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         return card;
     }
 
+    // Dynamic Feed Looping & Rotating Cycle State
+    let feedReloadCycle = parseInt(sessionStorage.getItem('jtube_feed_cycle_offset') || '0', 10);
+    feedReloadCycle = (feedReloadCycle + 1) % 1000;
+    sessionStorage.setItem('jtube_feed_cycle_offset', String(feedReloadCycle));
+
+    function applyDynamicLoopRotation(list) {
+        if (!Array.isArray(list) || list.length <= 1) return list;
+        const step = 4;
+        const offset = (feedReloadCycle * step) % list.length;
+        if (offset === 0) return [...list];
+        return [...list.slice(offset), ...list.slice(0, offset)];
+    }
+
     function createFeedCard(item, channelsMap) {
         if (isShortVideo(item)) {
             return renderReelFeedCard(item, channelsMap);
@@ -390,21 +403,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         return renderStandardBigCard(item, channelsMap);
     }
 
-    // Append next progressive batch to ensure zero lag with thousands of videos & reels
+    // Append next progressive batch to ensure zero lag and continuous loop
     function appendNextBatch() {
-        if (currentRenderIndex >= activeVideosPool.length) {
-            updateStatsBanner(activeVideosPool.length, activeVideosPool.length);
-            const notice = document.getElementById("all-loaded-notice");
-            const spinner = document.getElementById("loading-more-spinner");
-            const loadBtn = document.getElementById("load-more-btn");
-            if (notice) notice.classList.remove("hidden");
-            if (spinner) spinner.classList.add("hidden");
-            if (loadBtn) loadBtn.classList.add("hidden");
-            if (infiniteScrollObserver) infiniteScrollObserver.disconnect();
-            return;
-        }
+        if (!activeVideosPool || activeVideosPool.length === 0) return;
 
-        const nextSlice = activeVideosPool.slice(currentRenderIndex, currentRenderIndex + CHUNK_SIZE);
+        const poolLength = activeVideosPool.length;
+        const nextSlice = [];
+        for (let i = 0; i < CHUNK_SIZE; i++) {
+            const indexInPool = (currentRenderIndex + i) % poolLength;
+            nextSlice.push(activeVideosPool[indexInPool]);
+        }
         currentRenderIndex += nextSlice.length;
 
         const fragment = document.createDocumentFragment();
@@ -451,14 +459,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         const loadBtn = document.getElementById("load-more-btn");
         const notice = document.getElementById("all-loaded-notice");
-        if (currentRenderIndex >= activeVideosPool.length) {
-            if (notice) notice.classList.remove("hidden");
-            if (loadBtn) loadBtn.classList.add("hidden");
-            if (infiniteScrollObserver) infiniteScrollObserver.disconnect();
-        } else {
-            if (loadBtn) loadBtn.classList.remove("hidden");
-            if (notice) notice.classList.add("hidden");
+        if (loadBtn) {
+            loadBtn.classList.remove("hidden");
+            const loopPass = Math.floor(currentRenderIndex / poolLength);
+            loadBtn.innerHTML = loopPass > 0 
+                ? `<i class="fas fa-arrows-rotate text-xs animate-spin"></i> <span>Cycling Continuously (Loop Cycle ${loopPass + 1})</span>`
+                : `<i class="fas fa-arrows-rotate text-xs"></i> <span>Cycle More Videos</span>`;
         }
+        if (notice) notice.classList.add("hidden");
     }
 
     function updateStatsBanner(renderedCount, totalCount) {
@@ -474,13 +482,18 @@ document.addEventListener("DOMContentLoaded", async () => {
             return;
         }
 
-        counterEl.innerHTML = `Showing <span class="font-bold text-white">${Math.min(renderedCount, totalCount).toLocaleString()}</span> of <span class="font-bold text-white">${totalCount.toLocaleString()}</span> items <span class="text-zinc-400 font-normal">(${videosCount.toLocaleString()} Videos • ${reelsCount.toLocaleString()} Reels)</span>`;
+        const loopCount = Math.floor(renderedCount / Math.max(1, totalCount));
+        const loopBadge = loopCount > 0 
+            ? ` <span class="text-amber-400 font-semibold">• Loop ${loopCount + 1}</span>` 
+            : ``;
+
+        counterEl.innerHTML = `Showing <span class="font-bold text-white">${renderedCount.toLocaleString()}</span> cycled <span class="text-zinc-400 font-normal">(${videosCount.toLocaleString()} Videos • ${reelsCount.toLocaleString()} Reels)</span>${loopBadge}`;
 
         if (modeBadge) {
             if (currentCategory === "all") {
-                modeBadge.innerHTML = `<i class="fas fa-layer-group text-[10px] text-emerald-400"></i> All Videos & Reels Viewable Together (${totalCount.toLocaleString()})`;
+                modeBadge.innerHTML = `<i class="fas fa-layer-group text-[10px] text-emerald-400"></i> All Videos &amp; Reels Viewable Together (${totalCount.toLocaleString()})`;
             } else if (currentCategory === "shorts") {
-                modeBadge.innerHTML = `<i class="fas fa-bolt text-[10px] text-pink-400"></i> Reels & Shorts Only (${reelsCount.toLocaleString()})`;
+                modeBadge.innerHTML = `<i class="fas fa-bolt text-[10px] text-pink-400"></i> Reels &amp; Shorts Only (${reelsCount.toLocaleString()})`;
             } else if (currentCategory === "videos_only") {
                 modeBadge.innerHTML = `<i class="fas fa-film text-[10px] text-blue-400"></i> Standard Videos Only (${videosCount.toLocaleString()})`;
             } else {
@@ -506,12 +519,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (sentinel && 'IntersectionObserver' in window) {
             infiniteScrollObserver = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
-                    if (entry.isIntersecting && currentRenderIndex < activeVideosPool.length) {
+                    if (entry.isIntersecting && activeVideosPool && activeVideosPool.length > 0) {
                         if (spinner) spinner.classList.remove("hidden");
                         setTimeout(() => {
                             appendNextBatch();
                             if (spinner) spinner.classList.add("hidden");
-                        }, 100);
+                        }, 120);
                     }
                 });
             }, { rootMargin: '400px' });
@@ -535,18 +548,23 @@ document.addEventListener("DOMContentLoaded", async () => {
             videosToRender = videosData || [];
         } else if (filterCategory === "playlists") {
             videosToRender = (videosData || []).filter(v => v.playlist && v.playlist.trim() !== "");
+            videosToRender = applyDynamicLoopRotation(videosToRender);
         } else if (filterCategory === "shorts") {
             // Dedicated Reels/Shorts view: all reels from Firestore
             videosToRender = (videosData || []).filter(v => isShortVideo(v));
+            videosToRender = applyDynamicLoopRotation(videosToRender);
         } else if (filterCategory === "videos_only") {
             // Videos only: standard long-form videos
             videosToRender = (videosData || []).filter(v => !isShortVideo(v));
+            videosToRender = applyDynamicLoopRotation(videosToRender);
         } else if (filterCategory === "all") {
             // ALL videos and ALL Reels saved in Firestore are viewable together!
             videosToRender = (videosData || []);
+            videosToRender = applyDynamicLoopRotation(videosToRender);
         } else {
             // Topic category: matching videos and reels in that category
             videosToRender = (videosData || []).filter(v => v.category && v.category.toLowerCase() === filterCategory.toLowerCase() && !v.playlist);
+            videosToRender = applyDynamicLoopRotation(videosToRender);
         }
 
         if (videoGrid) videoGrid.innerHTML = "";
@@ -566,7 +584,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 topVideoGrid.className = "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4";
                 topVideoGrid.innerHTML = "";
                 if (videosToRender.length === 0) {
-                    topVideoGrid.innerHTML = `<p class="col-span-full text-zinc-500 text-center py-10">No shorts or reels found in Firestore.</p>`;
+                    topVideoGrid.innerHTML = `<p class="col-span-full text-zinc-500 text-center py-10">No shorts or reels found.</p>`;
                     updateStatsBanner(0, 0);
                     return;
                 }
@@ -942,7 +960,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Update real-time sync badge
         const syncBadge = document.getElementById('shorts-sync-badge');
         if (syncBadge && typeof AIVideoBrain !== 'undefined' && AIVideoBrain.lastTrained) {
-            syncBadge.innerHTML = `<i class="fas fa-arrows-rotate text-[9px] text-green-400"></i> AI Synced: ${timeAgo(AIVideoBrain.lastTrained)} • Saved in Firestore`;
+            syncBadge.innerHTML = `<i class="fas fa-arrows-rotate text-[9px] text-green-400"></i> Synced: ${timeAgo(AIVideoBrain.lastTrained)}`;
         }
 
         carousel.innerHTML = shorts.map(v => `

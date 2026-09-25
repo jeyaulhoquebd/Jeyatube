@@ -73,6 +73,25 @@ header {
     transform: scale(1.03) !important;
 }
 
+/* Smooth Hover Transition, Scale Up & Soft Glow Effect for #top-video-grid */
+#top-video-grid .video-card-custom,
+#top-video-grid > div {
+    transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.25, 1), 
+                box-shadow 0.28s cubic-bezier(0.2, 0.8, 0.25, 1), 
+                border-color 0.22s ease,
+                background-color 0.22s ease !important;
+    will-change: transform, box-shadow;
+}
+
+#top-video-grid .video-card-custom:hover,
+#top-video-grid > div:hover {
+    transform: translateY(-4px) scale(1.025) !important;
+    border-color: rgba(239, 68, 68, 0.45) !important;
+    box-shadow: 0 14px 28px -4px rgba(0, 0, 0, 0.75), 
+                0 0 20px 2px rgba(239, 68, 68, 0.25), 
+                0 0 40px 4px rgba(239, 68, 68, 0.12) !important;
+}
+
 /* Active Category Button */
 .category-btn {
     border: 1px solid rgba(255, 255, 255, 0.06);

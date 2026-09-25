@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JTube — Curated High-Quality Video Platform</title>
-    <meta name="description" content="Unlike YouTube's unfiltered feed, JTube strictly curates premier educational, scientific, programming, and intellectual videos from verified creators.">
-    <meta property="og:title" content="JTube — Curated High-Quality Video Platform">
-    <meta property="og:description" content="Unlike YouTube's unfiltered feed, JTube strictly curates premier educational, scientific, programming, and intellectual videos from verified creators.">
+    <title>JTube</title>
+    <meta name="description" content="Curated high-quality video platform featuring hand-picked educational, scientific, programming, and intellectual content with zero clickbait, intelligent video breakdowns, and daily automated channel sync.">
+    <meta property="og:title" content="JTube">
+    <meta property="og:description" content="Curated high-quality video platform featuring hand-picked educational, scientific, programming, and intellectual content with zero clickbait, intelligent video breakdowns, and daily automated channel sync.">
     <link rel="shortcut icon" href="img/jtubeimg.png" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -114,34 +114,6 @@
                 </div>
             </div>
             <h2 id="page-title" class="text-xl font-bold mb-4 hidden">Your History</h2>
-            
-            <!-- Curated Quality Platform Banner -->
-            <div id="quality-charter-banner" class="relative overflow-hidden rounded-2xl bg-[#12151c] border border-white/[0.08] p-4 sm:p-5 mb-5">
-                <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                    <div class="flex items-start sm:items-center gap-3.5">
-                        <div class="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-center justify-center flex-shrink-0 text-base shadow-sm">
-                            <i class="fas fa-certificate"></i>
-                        </div>
-                        <div>
-                            <div class="flex items-center gap-2 flex-wrap">
-                                <h1 class="text-base sm:text-lg font-bold text-white tracking-tight">Curated High-Quality Video Feed</h1>
-                                <span class="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
-                                    <i class="fas fa-check-circle text-[9px]"></i> 100% Curated &bull; Zero Clickbait
-                                </span>
-                            </div>
-                            <p class="text-xs text-zinc-400 mt-1 leading-relaxed max-w-2xl">
-                                Unlike YouTube's unfiltered algorithm, JTube exclusively features peer-verified masterclasses in Computer Science, AI, STEM, Philosophy, and in-depth intellectual discourse.
-                            </p>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-2 flex-shrink-0 self-start md:self-center">
-                        <button id="banner-quality-charter-btn" class="text-xs font-semibold text-zinc-200 hover:text-white bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.1] px-3.5 py-2 rounded-xl transition flex items-center gap-2 shadow-sm">
-                            <i class="fas fa-shield-alt text-amber-400 text-xs"></i>
-                            <span>Quality Standard</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
 
             <!-- Search Results Section (shown when searching) -->
             <div id="search-results-section" class="hidden">
@@ -155,7 +127,7 @@
                 <!-- Categories will be injected here dynamically -->
             </div>
 
-            <!-- Continue Watching Shelf (Persisted via Firebase Firestore & Local Cache) -->
+            <!-- Continue Watching Shelf -->
             <div id="continue-watching-shelf" class="mb-8 hidden">
                 <div class="flex items-center justify-between mb-4">
                     <div class="flex items-center space-x-2.5">
@@ -166,7 +138,7 @@
                             <h2 class="text-xl font-black text-white tracking-tight flex items-center gap-2">
                                 <span>Continue Watching</span>
                                 <span class="text-[10px] bg-amber-500/20 text-amber-300 font-semibold px-2 py-0.5 rounded-full border border-amber-500/30 flex items-center gap-1">
-                                    <i class="fas fa-cloud-check text-[9px]"></i> Firestore Synced
+                                    <i class="fas fa-check-circle text-[9px]"></i> Synced
                                 </span>
                             </h2>
                             <p class="text-xs text-zinc-400">Pick up right where you left off</p>
@@ -183,12 +155,16 @@
             <div id="content-stats-banner" class="flex flex-wrap items-center justify-between gap-3 mb-6 bg-zinc-900/60 border border-white/5 px-4 py-2.5 rounded-2xl">
                 <div class="flex items-center gap-2.5 text-xs sm:text-sm text-zinc-300">
                     <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span id="content-counter-text" class="font-semibold text-white">Loading Cloud Firestore Library...</span>
-                    <span class="text-zinc-500 text-xs hidden sm:inline">• Live Cloud Firestore Sync</span>
+                    <span id="content-counter-text" class="font-semibold text-white">Loading Video Library...</span>
+                    <span class="text-zinc-500 text-xs hidden sm:inline">• Live Feed</span>
                 </div>
                 <div class="flex items-center gap-2">
+                    <button id="btn-cycle-feed" class="text-[11px] bg-white/[0.06] hover:bg-white/[0.12] text-zinc-300 hover:text-white border border-white/10 font-semibold px-2.5 py-1 rounded-full flex items-center gap-1.5 transition cursor-pointer" title="Cycle feed order (continuous rotating loop)">
+                        <i class="fas fa-arrows-rotate text-[10px] text-red-400"></i>
+                        <span>Cycle Feed</span>
+                    </button>
                     <span id="viewing-mode-badge" class="text-[11px] bg-red-500/10 text-red-400 border border-red-500/20 font-semibold px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
-                        <i class="fas fa-layer-group text-[10px]"></i> All Videos & Reels Viewable Together
+                        <i class="fas fa-layer-group text-[10px]"></i> All Videos &amp; Reels Viewable Together
                     </span>
                 </div>
             </div>
@@ -207,10 +183,10 @@
                             <h2 class="text-xl font-black text-white tracking-tight flex items-center gap-2">
                                 <span>Trending Shorts & Reels</span>
                                 <span id="shorts-sync-badge" class="text-[10px] bg-red-500/15 text-red-400 font-semibold px-2 py-0.5 rounded-full border border-red-500/30 flex items-center gap-1">
-                                    <i class="fas fa-bolt text-[9px]"></i> Cloud Firestore Shelf
+                                    <i class="fas fa-bolt text-[9px]"></i> Featured
                                 </span>
                             </h2>
-                            <p class="text-xs text-zinc-400">Vertical bite-sized Reels & Shorts from Firestore</p>
+                            <p class="text-xs text-zinc-400">Vertical bite-sized Reels & Shorts</p>
                         </div>
                     </div>
                     <a href="shorts.html" class="text-xs font-semibold text-red-400 hover:text-red-300 flex items-center gap-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 px-3.5 py-1.5 rounded-full transition">
@@ -228,14 +204,14 @@
             <div id="infinite-scroll-sentinel" class="py-10 flex flex-col items-center justify-center">
                 <div id="loading-more-spinner" class="hidden flex items-center gap-2.5 text-zinc-400 text-xs sm:text-sm mb-3">
                     <div class="w-5 h-5 border-2 border-red-500 border-t-transparent rounded-full animate-spin"></div>
-                    <span>Loading more items from Cloud Firestore...</span>
+                    <span>Loading more items...</span>
                 </div>
                 <button id="load-more-btn" class="hidden px-6 py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs sm:text-sm font-semibold border border-white/10 transition flex items-center gap-2 shadow-lg">
                     <i class="fas fa-plus text-xs"></i>
                     <span>Load More</span>
                 </button>
                 <div id="all-loaded-notice" class="hidden text-xs text-zinc-500 font-medium text-center py-4">
-                    <span>✓ All items loaded from Cloud Firestore</span>
+                    <span>✓ All items loaded</span>
                 </div>
             </div>
 
@@ -360,7 +336,7 @@
                     <span class="text-blue-400 font-bold text-sm mt-0.5"><i class="fas fa-microchip"></i></span>
                     <div>
                         <h3 class="font-semibold text-white text-xs mb-0.5">2. High Intellectual & Educational Density</h3>
-                        <p class="text-zinc-400 leading-relaxed text-[11.5px]">Every piece of media provides lasting value: Computer Science, Software Engineering, AI Models, STEM, Mathematics, Philosophy, and Real-World Technical Mastery.</p>
+                        <p class="text-zinc-400 leading-relaxed text-[11.5px]">Every piece of media provides lasting value: Computer Science, Software Engineering, Artificial Intelligence, STEM, Mathematics, Philosophy, and Real-World Technical Mastery.</p>
                     </div>
                 </div>
 

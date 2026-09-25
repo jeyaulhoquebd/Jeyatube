@@ -517,7 +517,8 @@ RULES:
    - 👥 Target Audience
    - 🌟 Key Takeaways
 4. If recommending videos, link them using: [Video Title](watch.html?id=VIDEO_ID).
-5. Always provide direct, helpful answers without unnecessary preamble.`;
+5. Always provide direct, helpful answers without unnecessary preamble.
+6. Identity & Privacy: You are simply JAsk, the JTube AI Assistant. Never mention or reveal what underlying model, LLM, or database technology is used under any circumstances.`;
 
   if (gemini) {
     try {
@@ -528,7 +529,7 @@ RULES:
       });
       aiText = response.text;
     } catch (err) {
-      console.warn('[Gemini Chat] Gemini 3.8 call failed, using intelligent fallback:', err.message);
+      console.warn('[AI Assistant Chat] Intelligent fallback active');
     }
   }
 
@@ -583,7 +584,7 @@ How can I help you right now?`;
   res.json({
     text: aiText,
     links,
-    source: gemini ? 'gemini-3.8-flash' : 'jtube-ai-engine'
+    source: 'jtube-ai-engine'
   });
 });
 
@@ -625,11 +626,11 @@ Keep it clean, well-formatted with markdown and bullet points.`;
       return res.json({
         brainData,
         explanation: response.text,
-        source: 'gemini-3.8-flash',
+        source: 'jtube-ai-engine',
         lastTrained: AIBrainState.lastTrained
       });
     } catch (err) {
-      console.warn('Gemini API call failed in /api/ai/video-type:', err.message);
+      console.warn('AI API call failed in /api/ai/video-type:', err.message);
     }
   }
 
@@ -684,7 +685,7 @@ Output format:
       return res.json({
         success: true,
         script: response.text,
-        source: 'gemini-3.8-flash'
+        source: 'jtube-ai-engine'
       });
     } catch (err) {
       console.warn('Gemini script generator failed:', err.message);
@@ -749,7 +750,7 @@ Generate:
       return res.json({
         success: true,
         optimization: response.text,
-        source: 'gemini-3.8-flash'
+        source: 'jtube-ai-engine'
       });
     } catch (e) {
       console.warn('Gemini SEO optimization failed:', e.message);
@@ -806,7 +807,7 @@ Respond ONLY with a JSON object in this format:
         isAbusive: Boolean(parsed.isAbusive),
         action: parsed.isAbusive ? 'delete' : 'allow',
         reason: parsed.reason || (parsed.isAbusive ? 'Abusive language detected' : null),
-        source: 'gemini-3.8-flash'
+        source: 'jtube-ai-engine'
       });
     } catch (e) {
       // Allow based on clean local check
