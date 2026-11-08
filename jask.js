@@ -93,147 +93,33 @@ const JAsk = (() => {
         return questions;
     }
 
-    // Send message to Groq API and get AI response
+    // Ask JAsk through the JTube server. The Groq API key lives only on the server,
+    // and the server searches the full video catalog for relevant recommendations.
     async function askGroq(userMessage, currentVideo) {
-        const apiKey = typeof ENV !== 'undefined' ? ENV.GROQ_API_KEY : null;
-        if (!apiKey) {
-            return { text: "⚠️ AI configuration is missing. Please add your Groq API key to env.js.", links: [] };
-        }
-
-        await loadVideoLibrary();
-        const relevantVideos = findRelevantVideos(userMessage, allVideos);
-
-        // Build a smaller knowledge context string from relevant videos ONLY
-        function buildRelevantVideoKnowledgeBase(videos) {
-            if (!videos || videos.length === 0) return "No other specific videos found for this query.";
-            return videos.map((v) => {
-                const desc = (v.description || '').substring(0, 100).replace(/\n/g, ' ');
-                return `${v.id}|${v.title}|${v.channel}|${v.category || ''}|${v.views || 0}|${desc}`;
-            }).join('\n');
-        }
-        
-        const videoKB = buildRelevantVideoKnowledgeBase(relevantVideos);
-
-        // Extract 5-minute AI trained video brain insights
-        let brainContext = "";
-        if (typeof AIVideoBrain !== 'undefined' && currentVideo) {
-            const brainData = (AIVideoBrain.catalog && AIVideoBrain.catalog[currentVideo.id]) || AIVideoBrain.classify(currentVideo);
-            brainContext = `
-5-MINUTE TRAINED AI BRAIN CLASSIFICATION:
-- Genre & Video Type: ${brainData.genre} (${brainData.isShort ? 'Short Reel' : 'Standard Video'})
-- Platform Category: ${brainData.category}
-- Target Audience: ${brainData.targetAudience}
-- Presentation Depth: ${brainData.depth}
-- Core Themes: ${brainData.tags.join(', ') || 'General'}`;
-        }
-
-        // Build system prompt with relevant video knowledge
-        const systemPrompt = `You are JAsk, the AI assistant for JTube video platform. Be friendly, concise, use emojis.
-
-CURRENT VIDEO:
-Title: "${currentVideo.title}"
-Channel: "${currentVideo.channel}"
-Category: "${currentVideo.category || 'General'}"
-Description: "${(currentVideo.description || '').substring(0, 300)}"
-${brainContext}
-
-RELEVANT JTUBE VIDEOS (format: ID|Title|Channel|Category|Views|Description):
-${videoKB}
-
-RULES:
-1. When asked "what kind of video is this" or to find out what kind of video it is, provide an authoritative breakdown covering: Genre & Format, Main Topics, Target Audience, and Key Value.
-2. Answer about current video using its title/description and AI Brain Classification.
-3. When user asks for a video, find matching ones from the RELEVANT JTUBE VIDEOS list and link them as: [Title](watch.html?id=ID)
-4. Always use that exact link format for JTube videos.
-5. Never invent video IDs that don't exist above.
-6. You can answer general questions but relate to JTube content when possible.`;
-
-        // Add user message without duplicating the relevant videos hint
-        let enrichedMessage = userMessage;
-
-        // Maintain conversation context (keep last 6 messages for context)
-        conversationHistory.push({ role: "user", content: enrichedMessage });
-        if (conversationHistory.length > 8) {
-            conversationHistory = conversationHistory.slice(-8);
-        }
-
-        const messages = [
-            { role: "system", content: systemPrompt },
-            ...conversationHistory
-        ];
-
-        const candidateModels = [
-            "qwen/qwen3.8-27b",
-            "openai/gpt-oss-120b",
-            "openai/gpt-oss-20b",
-            "qwen/qwen3.6-27b",
-            "groq/compound-mini"
-        ];
-
+        const cv = currentVideo || {};
+        conversationHistory.push({ role: "user", content: String(userMessage).slice(0, 1500) });
+        if (conversationHistory.length > 8) conversationHistory = conversationHistory.slice(-8);
         try {
-            let aiText = null;
-            let lastError = null;
-
-            for (const model of candidateModels) {
-                try {
-                    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Authorization": `Bearer ${apiKey}`
-                        },
-                        body: JSON.stringify({
-                            model: model,
-                            messages: messages,
-                            temperature: 0.7,
-                            max_tokens: 800,
-                            stream: false
-                        })
-                    });
-
-                    if (response.ok) {
-                        const data = await response.json();
-                        aiText = data.choices?.[0]?.message?.content;
-                        if (aiText) break;
-                    } else {
-                        const errData = await response.json().catch(() => ({}));
-                        console.warn(`Groq model ${model} failed (${response.status}):`, errData);
-                        lastError = errData;
+            const response = await fetch("/api/jask/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    message: userMessage,
+                    history: conversationHistory.slice(0, -1),
+                    currentVideo: {
+                        id: cv.id, title: cv.title, channel: cv.channel,
+                        category: cv.category, description: (cv.description || "").slice(0, 400)
                     }
-                } catch (e) {
-                    console.warn(`Failed calling Groq model ${model}:`, e);
-                    lastError = e;
-                }
+                })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                return { text: data.error || "⚠️ JAsk is busy right now. Please try again in a moment.", links: [] };
             }
-
-            if (!aiText) {
-                console.error("All Groq models failed. Last error:", lastError);
-                return { text: "⚠️ Sorry, I'm having trouble connecting right now. Please try again in a moment.", links: [] };
-            }
-
-            // Save AI response to history
+            const aiText = data.text || "";
             conversationHistory.push({ role: "assistant", content: aiText });
-
-            // Parse video links from response
-            const links = [];
-            const linkRegex = /\[([^\]]+)\]\(watch\.html\?id=([^)]+)\)/g;
-            let match;
-            while ((match = linkRegex.exec(aiText)) !== null) {
-                const linkedVideo = allVideos.find(v => v.id === match[2]);
-                if (linkedVideo) {
-                    links.push({
-                        title: match[1],
-                        id: match[2],
-                        thumbnail: linkedVideo.thumbnail,
-                        channel: linkedVideo.channel,
-                        views: linkedVideo.views
-                    });
-                }
-            }
-
-            return { text: aiText, links };
+            return { text: aiText, links: Array.isArray(data.links) ? data.links : [] };
         } catch (error) {
-            console.error("JAsk API call failed:", error);
             return { text: "⚠️ Network error. Please check your connection and try again.", links: [] };
         }
     }

@@ -1,6 +1,6 @@
-const ENV = {
-    YOUTUBE_API_KEY: 'AIzaSyABb-TXwcK1-KI-nBZyv2Tr2PDyiP9jkEw',
-    TELEGRAM_BOT_TOKEN: '8977635481:AAH2iv7weZCQH30RaT5XNXQSC5KQR3nqsN0',
-    TELEGRAM_CHAT_ID: '8654581323',
-    GROQ_API_KEY: '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'
-};
+// Public client configuration ONLY.
+// Never put API keys, bot tokens or passwords in this file — it is downloaded by every visitor.
+// Secrets (YOUTUBE_API_KEY, GROQ_API_KEY, TELEGRAM_BOT_TOKEN, ...) live in the server's environment (.env).
+const ENV = Object.freeze({
+    API_BASE: ''
+});

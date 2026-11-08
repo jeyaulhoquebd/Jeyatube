@@ -312,7 +312,8 @@ function applyTheme() {
     
     // Default is dark UI as primary style.
     // Light is active ONLY if user explicitly chose 'light' OR if 'auto' AND system prefers light.
-    const isLight = pref === 'light' || (pref === 'auto' && systemPrefersLight);
+    const locked = document.documentElement.getAttribute('data-theme-lock');
+    const isLight = locked ? locked === 'light' : (pref === 'light' || (pref === 'auto' && systemPrefersLight));
     
     const root = document.documentElement;
     const body = document.body;
@@ -724,8 +725,40 @@ async function clearAllContinueWatching() {
 }
 
 // In-memory cache & persistent localStorage helper for instant loading
+// ===== HTML SAFETY HELPERS =====
+function escapeHtml(str) {
+    return String(str == null ? '' : str)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// Titles/descriptions are rendered with innerHTML in many places. Replace characters that
+// could break out of HTML text/attributes with visually near-identical Unicode characters.
+function safeText(str) {
+    return String(str == null ? '' : str)
+        .replace(/</g, '\uFF1C').replace(/>/g, '\uFF1E')
+        .replace(/"/g, '\u201D').replace(/'/g, '\u2019').replace(/`/g, '\u2018');
+}
+
+function safeUrl(url) {
+    const u = String(url || '').trim();
+    return /^(https:\/\/|data:image\/(png|jpe?g|gif|webp);base64,|\/|[\w.-]+\.(html|png|jpe?g|svg|webp)(\?|$))/i.test(u) ? u.replace(/"/g, '%22').replace(/'/g, '%27').replace(/</g, '%3C').replace(/>/g, '%3E') : '';
+}
+
+function sanitizeVideoFields(v) {
+    if (!v || typeof v !== 'object') return v;
+    ['title', 'channel', 'category', 'description', 'playlist', 'duration', 'time'].forEach(k => {
+        if (typeof v[k] === 'string') v[k] = safeText(v[k]);
+    });
+    if (v.thumbnail) v.thumbnail = safeUrl(v.thumbnail);
+    if (v.videoUrl) v.videoUrl = safeUrl(v.videoUrl);
+    if (v.id) v.id = String(v.id).replace(/[^\w-]/g, '');
+    return v;
+}
+
 function sanitizeAndCurateVideos(videosList) {
     if (!Array.isArray(videosList)) return [];
+    videosList.forEach(sanitizeVideoFields);
     const excludedChannels = new Set(["Fun With Gopal", "Bismillah Agro", "Basic Bhai", "Studio of Creative Arts Ltd"]);
     return videosList.filter(v => {
         if (!v || !v.title) return false;
@@ -753,6 +786,107 @@ function sanitizeAndCurateVideos(videosList) {
         }
         return v;
     });
+}
+
+// ===== JTUBE SERVER CATALOG =====
+// The server keeps the complete library of every featured YouTube channel
+// (all past uploads + new uploads within minutes). The browser loads it page by page.
+const JTubeServer = { available: null, lastLoaded: 0, newest: 0, loading: null, stats: null, channelsLoaded: false, pollTimer: null };
+
+async function fetchCatalogPage(params = {}) {
+    if (JTubeServer.available === false && !params.__retry) return null;
+    try {
+        const qs = new URLSearchParams();
+        Object.entries(params).forEach(([k, v]) => {
+            if (k !== '__retry' && v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+        });
+        const res = await fetch('/api/videos?' + qs.toString(), { headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (!data || !Array.isArray(data.items)) throw new Error('Bad payload');
+        data.items.forEach(sanitizeVideoFields);
+        JTubeServer.available = true;
+        data.items.forEach(v => { if ((v.timestamp || 0) > JTubeServer.newest) JTubeServer.newest = v.timestamp; });
+        return data;
+    } catch (e) {
+        if (JTubeServer.available === null) JTubeServer.available = false;
+        return null;
+    }
+}
+
+async function fetchCatalogStats() {
+    try {
+        const res = await fetch('/api/catalog/stats');
+        if (!res.ok) return null;
+        JTubeServer.stats = await res.json();
+        return JTubeServer.stats;
+    } catch (e) { return null; }
+}
+
+function mergeVideoLists(...lists) {
+    const map = new Map();
+    lists.forEach(list => (list || []).forEach(v => { if (v && v.id && !map.has(v.id)) map.set(v.id, v); }));
+    return Array.from(map.values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+}
+
+async function loadServerCatalogVideos(force = false) {
+    if (JTubeServer.available === false && !force) return null;
+    if (!force && JTubeServer.lastLoaded && (Date.now() - JTubeServer.lastLoaded) < 5 * 60 * 1000 && _cache.videos && _cache.videos.length) {
+        return _cache.videos;
+    }
+    if (JTubeServer.loading) return JTubeServer.loading;
+    JTubeServer.loading = (async () => {
+        const [latest, shorts] = await Promise.all([
+            fetchCatalogPage({ type: 'video', limit: 100, page: 1 }),
+            fetchCatalogPage({ type: 'short', limit: 60, page: 1 })
+        ]);
+        if (!latest) return null;
+        const merged = mergeVideoLists(latest.items, shorts ? shorts.items : []);
+        _cache.videos = merged;
+        _cache.videosTimestamp = Date.now();
+        _hasFetchedFromFirestore = true;
+        JTubeServer.lastLoaded = Date.now();
+        try { saveToStorage('videos', merged.slice(0, 100)); } catch (e) {}
+        startServerLivePolling();
+        return merged;
+    })();
+    try { return await JTubeServer.loading; } finally { JTubeServer.loading = null; }
+}
+
+// Poll for brand-new uploads every minute so open pages update automatically
+function startServerLivePolling() {
+    if (JTubeServer.pollTimer || typeof window === 'undefined') return;
+    JTubeServer.pollTimer = setInterval(async () => {
+        if (document.hidden || !JTubeServer.newest) return;
+        const res = await fetchCatalogPage({ since: JTubeServer.newest, limit: 50 });
+        if (!res || !res.items.length) return;
+        _cache.videos = mergeVideoLists(res.items, _cache.videos || []);
+        document.dispatchEvent(new CustomEvent('jtube:newUploads', { detail: res.items }));
+        document.dispatchEvent(new CustomEvent('jtube:videosUpdated', { detail: _cache.videos }));
+        if (typeof showToast === 'function') {
+            showToast(`${res.items.length} new upload${res.items.length > 1 ? 's' : ''} just arrived on JTube`, 'info');
+        }
+    }, 60 * 1000);
+}
+
+async function loadServerChannels() {
+    if (JTubeServer.channelsLoaded || JTubeServer.available === false) return null;
+    try {
+        const res = await fetch('/api/channels/featured');
+        if (!res.ok) return null;
+        const data = await res.json();
+        JTubeServer.channelsLoaded = true;
+        return Array.isArray(data.channels) ? data.channels : null;
+    } catch (e) { return null; }
+}
+
+// Admin writes go to the server (it verifies the HttpOnly admin session cookie)
+async function adminServerRequest(path, body) {
+    if (typeof window === 'undefined' || !window.JTUBE_ADMIN_SESSION) return null;
+    try {
+        const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        return res.ok ? await res.json() : null;
+    } catch (e) { return null; }
 }
 
 function loadFromStorage(key, fallback) {
@@ -864,24 +998,48 @@ function getCurrentUser() {
     return currentUser || (typeof window !== 'undefined' ? window.currentUser : null);
 }
 
-function authenticateLocally(email, password) {
+async function hashLocalPassword(password, salt) {
+    const data = new TextEncoder().encode(salt + ':' + password);
+    if (typeof crypto !== 'undefined' && crypto.subtle) {
+        const buf = await crypto.subtle.digest('SHA-256', data);
+        return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    return null;
+}
+
+function randomSalt() {
+    const a = new Uint8Array(16);
+    (typeof crypto !== 'undefined' && crypto.getRandomValues) ? crypto.getRandomValues(a) : a.forEach((_, i) => a[i] = Math.floor(Math.random() * 256));
+    return Array.from(a).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Viewer accounts are stored only in this browser. Passwords are salted + hashed (never plain text).
+// Admin access is NOT granted here — the admin studio authenticates against the server.
+async function authenticateLocally(email, password) {
+    const key = String(email || '').toLowerCase().trim();
     const users = loadFromStorage('app_users', {});
-    const existing = users[email.toLowerCase()];
+    const existing = users[key];
     if (existing) {
-        if (existing.password && existing.password !== password) {
-            const err = new Error("Invalid password.");
+        let ok = false;
+        if (existing.passwordHash && existing.salt) {
+            ok = (await hashLocalPassword(password, existing.salt)) === existing.passwordHash;
+        } else if (typeof existing.password === 'string') {
+            // Legacy plain-text record: verify once, then upgrade to a hash
+            ok = existing.password === password;
+            if (ok) {
+                existing.salt = randomSalt();
+                existing.passwordHash = await hashLocalPassword(password, existing.salt);
+                delete existing.password;
+                users[key] = existing;
+                saveToStorage('app_users', users);
+            }
+        }
+        if (!ok) {
+            const err = new Error("Invalid email or password.");
             err.code = "auth/wrong-password";
             throw err;
         }
-        currentUser = { uid: existing.uid, email: existing.email, displayName: existing.displayName || existing.name || email.split('@')[0] };
-        saveToStorage('current_user', currentUser);
-        if (typeof window !== 'undefined') window.currentUser = currentUser;
-        document.dispatchEvent(new CustomEvent('authStateChanged', { detail: currentUser }));
-        return { user: currentUser };
-    }
-    // Master admin credentials check
-    if (email === "admin@jtube.com" && (password === "Jeyaul" || password === "admin123")) {
-        currentUser = { uid: 'admin_master_1', email: 'admin@jtube.com', displayName: 'JTube Admin' };
+        currentUser = { uid: existing.uid, email: existing.email, displayName: existing.displayName || existing.name || key.split('@')[0] };
         saveToStorage('current_user', currentUser);
         if (typeof window !== 'undefined') window.currentUser = currentUser;
         document.dispatchEvent(new CustomEvent('authStateChanged', { detail: currentUser }));
@@ -893,33 +1051,10 @@ function authenticateLocally(email, password) {
 }
 
 async function loginWithEmail(email, password) {
-    if (auth) {
-        try {
-            return await auth.signInWithEmailAndPassword(email, password);
-        } catch (err) {
-            return authenticateLocally(email, password);
-        }
-    }
     return authenticateLocally(email, password);
 }
 
 async function registerWithEmail(email, password, name) {
-    if (auth) {
-        try {
-            const cred = await auth.createUserWithEmailAndPassword(email, password);
-            await cred.user.updateProfile({ displayName: name });
-            if (db) {
-                await db.collection("users").doc(cred.user.uid).set({
-                    name: name,
-                    email: email,
-                    createdAt: Date.now()
-                }).catch(() => {});
-            }
-            return cred.user;
-        } catch (err) {
-            if (err.code === 'auth/email-already-in-use') throw err;
-        }
-    }
     // Local registration fallback
     const users = loadFromStorage('app_users', {});
     if (users[email.toLowerCase()]) {
@@ -933,9 +1068,15 @@ async function registerWithEmail(email, password, name) {
         email: email.toLowerCase(),
         name: name,
         displayName: name || email.split('@')[0],
-        password: password,
         createdAt: Date.now()
     };
+    if (!password || String(password).length < 6) {
+        const err = new Error("Password must be at least 6 characters.");
+        err.code = "auth/weak-password";
+        throw err;
+    }
+    newUser.salt = randomSalt();
+    newUser.passwordHash = await hashLocalPassword(password, newUser.salt);
     users[email.toLowerCase()] = newUser;
     saveToStorage('app_users', users);
     currentUser = { uid: newUser.uid, email: newUser.email, displayName: newUser.displayName };
@@ -946,11 +1087,7 @@ async function registerWithEmail(email, password, name) {
 }
 
 async function loginWithGoogle() {
-    if (auth && googleProvider) {
-        try {
-            return await auth.signInWithPopup(googleProvider);
-        } catch (err) {}
-    }
+    // No Google OAuth client is configured: create a local guest viewer session.
     currentUser = {
         uid: 'user_session_' + Date.now(),
         email: 'viewer@jtube.local',
@@ -963,9 +1100,6 @@ async function loginWithGoogle() {
 }
 
 async function logoutUser() {
-    if (auth) {
-        try { await auth.signOut(); } catch (e) {}
-    }
     currentUser = null;
     if (typeof window !== 'undefined') window.currentUser = null;
     try {
@@ -1185,6 +1319,12 @@ async function fetchVideosFromFirestore() {
 }
 
 async function getVideos() {
+    // 0. Full library from the JTube server (when running on the Node server)
+    const serverVideos = await loadServerCatalogVideos();
+    if (serverVideos && serverVideos.length > 0) {
+        return sanitizeAndCurateVideos(serverVideos);
+    }
+
     initVideosRealtimeSync();
 
     // 1. If we have already fetched the full Firestore database in memory, return it instantly
@@ -1234,7 +1374,7 @@ async function getVideoById(videoId) {
     const local = stored.find(v => v.id === videoId);
     if (local) return local;
 
-    // 2. Direct Firestore lookup with fast timeout
+    // 2. Local store lookup with fast timeout
     try {
         const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
         const doc = await Promise.race([db.collection("videos").doc(videoId).get(), timeoutPromise]);
@@ -1243,60 +1383,25 @@ async function getVideoById(videoId) {
         console.warn("Firestore video lookup failed", err);
     }
 
-    // 3. Fallback: If it's a YouTube ID, fetch from YouTube and save to Firebase FIRST!
-    const cleanYtId = videoId.startsWith("yt_") ? videoId.substring(3) : (videoId.length === 11 ? videoId : null);
-    if (cleanYtId && typeof ENV !== 'undefined' && ENV.YOUTUBE_API_KEY) {
-        try {
-            const ytRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${cleanYtId}&key=${ENV.YOUTUBE_API_KEY}`);
-            const ytData = await ytRes.json();
-            if (ytData.items && ytData.items.length > 0) {
-                const item = ytData.items[0];
-                const snippet = item.snippet;
-                const dIso = item.contentDetails?.duration || "";
-                const totalSeconds = parseDurationToSeconds(dIso);
-                const h = Math.floor(totalSeconds / 3600);
-                const m = Math.floor((totalSeconds % 3600) / 60);
-                const s = totalSeconds % 60;
-                const durationText = h > 0 
-                    ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}` 
-                    : `${m}:${s.toString().padStart(2, '0')}`;
-
-                const freshYtVideo = {
-                    id: videoId.startsWith("yt_") ? videoId : `yt_${cleanYtId}`,
-                    title: snippet.title,
-                    channel: snippet.channelTitle || "YouTube Creator",
-                    category: "General",
-                    playlist: "",
-                    views: parseInt(item.statistics?.viewCount || 0),
-                    time: "Just now",
-                    duration: durationText,
-                    thumbnail: snippet.thumbnails?.maxres?.url || snippet.thumbnails?.high?.url || snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url || "",
-                    videoUrl: `https://www.youtube.com/watch?v=${cleanYtId}`,
-                    description: snippet.description || "Saved from YouTube",
-                    likes: parseInt(item.statistics?.likeCount || 0),
-                    baseLikes: parseInt(item.statistics?.likeCount || 0),
-                    liked: false,
-                    likedBy: [],
-                    isShort: totalSeconds <= 60,
-                    comments: [],
-                    timestamp: Date.now()
-                };
-
-                // Save to video library first, then return
-                await saveVideo(freshYtVideo);
-                console.log(`Saved video ${cleanYtId} to library.`);
-                return freshYtVideo;
+    // 3. Ask the JTube server (it holds the full catalog and can fetch from YouTube with its own key)
+    try {
+        const res = await fetch('/api/videos/' + encodeURIComponent(videoId));
+        if (res.ok) {
+            const v = sanitizeVideoFields(await res.json());
+            if (v && v.id) {
+                if (!_cache.videos) _cache.videos = [];
+                if (!_cache.videos.some(x => x.id === v.id)) _cache.videos.push(v);
+                return v;
             }
-        } catch (e) {
-            console.warn("Could not auto-fetch video details:", e);
         }
-    }
+    } catch (e) {}
 
     return initialVideos.find(v => v.id === videoId) || null;
 }
 
 async function saveVideo(video) {
     if (!video.timestamp) video.timestamp = Date.now();
+    if (video.source !== 'catalog') adminServerRequest('/api/admin/videos', video);
     const isReelContent = isShortVideo(video);
     if (isReelContent) {
         video.isShort = true;
@@ -1328,6 +1433,8 @@ async function saveVideo(video) {
 
 async function saveBatchVideos(videosArray) {
     if (!Array.isArray(videosArray) || videosArray.length === 0) return;
+    const adminNew = videosArray.filter(v => v && v.source !== 'catalog');
+    if (adminNew.length) adminServerRequest('/api/admin/videos', { videos: adminNew });
     const batchSize = 450;
     for (let i = 0; i < videosArray.length; i += batchSize) {
         const batch = db.batch();
@@ -1365,6 +1472,7 @@ async function saveBatchVideos(videosArray) {
 
 async function deleteVideo(id) {
     if (!id) return;
+    adminServerRequest('/api/admin/videos/delete', { ids: [id] });
     // 1. Delete from Firestore (both collections)
     await Promise.all([
         db.collection("videos").doc(id).delete().catch(() => {}),
@@ -1386,6 +1494,7 @@ async function deleteVideo(id) {
 
 async function deleteBatchVideos(idsArray) {
     if (!Array.isArray(idsArray) || idsArray.length === 0) return { success: true, count: 0 };
+    adminServerRequest('/api/admin/videos/delete', { ids: idsArray });
     
     // 1. Batch delete from Firestore in chunks of up to 450 (Firestore batch limit is 500)
     const batchSize = 450;
@@ -1457,7 +1566,40 @@ async function fetchChannelsFromFirestore() {
     }
 }
 
+async function mergeServerChannelsInto(map) {
+    const list = await loadServerChannels();
+    if (!list) return map;
+    const out = { ...(map || {}) };
+    list.forEach(c => {
+        const prev = out[c.name] || {};
+        const local = Array.isArray(prev.subscribedBy) ? prev.subscribedBy.length : 0;
+        out[c.name] = {
+            ...prev,
+            ytChannelId: c.ytChannelId,
+            category: c.category,
+            avatarUrl: c.avatarUrl || prev.avatarUrl || '',
+            coverUrl: c.coverUrl || prev.coverUrl || '',
+            description: c.description || prev.description || '',
+            handle: c.handle || prev.handle || '',
+            totalVideos: c.totalVideos || 0,
+            videosInCatalog: c.videosInCatalog || 0,
+            baseSubscribers: c.subscribers || prev.baseSubscribers || 0,
+            subscribers: (c.subscribers || prev.baseSubscribers || 0) + local,
+            verified: true
+        };
+    });
+    _cache.channels = out;
+    _cache.channelsTimestamp = Date.now();
+    saveToStorage('channels', out);
+    return out;
+}
+
 async function getChannels() {
+    if (!JTubeServer.channelsLoaded && JTubeServer.available !== false) {
+        const base = _cache.channels || loadFromStorage('channels', null) || initialChannels || {};
+        const merged = await mergeServerChannelsInto(base);
+        if (merged && Object.keys(merged).length) return merged;
+    }
     if (_cache.channels && Object.keys(_cache.channels).length > 0) {
         if (!isCacheValid('channels')) {
             fetchChannelsFromFirestore();
@@ -1627,6 +1769,23 @@ async function fetchCategoriesFromFirestore() {
 }
 
 async function getCategories() {
+    if (!JTubeServer.stats && JTubeServer.available !== false) {
+        const stats = await fetchCatalogStats();
+        if (stats && stats.categories) {
+            const base = (_cache.categories && _cache.categories.length) ? _cache.categories : (loadFromStorage('categories', null) || defaultCats);
+            const have = new Set(base.map(c => (c.name || '').toLowerCase()));
+            const extra = Object.keys(stats.categories)
+                .filter(n => n && !have.has(n.toLowerCase()))
+                .sort((a, b) => stats.categories[b] - stats.categories[a])
+                .map((n, i) => ({ id: n.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name: n, order: 100 + i }));
+            // Server categories first (they contain videos), then the rest
+            const withCounts = [...base].sort((a, b) => (stats.categories[b.name] || 0) - (stats.categories[a.name] || 0));
+            _cache.categories = [...extra, ...withCounts].filter(c => stats.categories[c.name] || !extra.length);
+            if (!_cache.categories.length) _cache.categories = base;
+            _cache.categoriesTimestamp = Date.now();
+            return _cache.categories;
+        }
+    }
     if (_cache.categories && _cache.categories.length > 0) {
         if (!isCacheValid('categories')) {
             fetchCategoriesFromFirestore();
@@ -1673,9 +1832,10 @@ function getYoutubeId(url) {
 function parseLinks(text) {
     if (!text) return "";
     // Regular expression to find URLs
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    return text.replace(urlRegex, function(url) {
-        return `<a href="${url}" target="_blank" class="text-blue-400 hover:text-blue-300 font-semibold underline break-all">${url}</a>`;
+    const urlRegex = /(https?:\/\/[^\s<]+)/g;
+    const safe = escapeHtml(text);
+    return safe.replace(urlRegex, function(url) {
+        return `<a href="${url}" target="_blank" rel="noopener nofollow" class="text-blue-400 hover:text-blue-300 font-semibold underline break-all">${url}</a>`;
     });
 }
 
@@ -1884,6 +2044,8 @@ function computeRelativeTime(timestamp) {
 
 async function syncChannelByName(channelName, force = false) {
     if (!channelName) return false;
+    // The JTube server already syncs every channel continuously
+    if (JTubeServer.available === true) return true;
 
     try {
         const channels = await getChannels();
@@ -1999,6 +2161,12 @@ async function syncChannelByName(channelName, force = false) {
 }
 
 async function autoSyncYouTubeChannels(force = false) {
+    // When the JTube server is available it syncs YouTube itself (every few minutes);
+    // the page only needs to pull new uploads.
+    if (JTubeServer.available !== false) {
+        const vids = await loadServerCatalogVideos(force);
+        if (vids) return { synced: true, source: 'server' };
+    }
     try {
         console.log("[JTube Sync] Checking for new daily videos and Reels across featured YouTube channels...");
         
@@ -2190,6 +2358,11 @@ async function getShortVideos() {
 
 // Direct Firestore Catalog Counter for Admin Dashboard
 async function getFirestoreCatalogCounts() {
+    // Prefer the server's full-library statistics
+    if (JTubeServer.available !== false) {
+        const stats = await fetchCatalogStats();
+        if (stats) return { total: stats.total, videos: stats.videos, reels: stats.shorts, views: stats.views || 0 };
+    }
     try {
         const snapshot = await db.collection("videos").get();
         let videosCount = 0;
@@ -2441,12 +2614,7 @@ const AIVideoBrain = {
                 }
             }
 
-            // 3. Send to server-side AI Brain endpoint
-            fetch('/api/ai/train', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ videos })
-            }).catch(() => {});
+            // 3. The server trains its own AI brain from the full catalog (no upload needed)
 
             // 4. Dispatch events for UI badges & shorts refresh
             if (typeof window !== 'undefined') {
@@ -2755,5 +2923,11 @@ if (typeof window !== 'undefined') {
     window.isRegularVideo = isRegularVideo;
     window.getFirestoreCatalogCounts = getFirestoreCatalogCounts;
     window.autoSyncYouTubeChannels = autoSyncYouTubeChannels;
+    window.fetchCatalogPage = fetchCatalogPage;
+    window.fetchCatalogStats = fetchCatalogStats;
+    window.JTubeServer = JTubeServer;
+    window.escapeHtml = escapeHtml;
+    window.safeText = safeText;
+    window.safeUrl = safeUrl;
     window.syncChannelByName = syncChannelByName;
 }

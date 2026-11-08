@@ -1,67 +1,52 @@
 document.addEventListener("DOMContentLoaded", () => {
     const devForm = document.getElementById("developer-form");
     const submitBtn = document.getElementById("dev-submit-btn");
+    const originalBtnHtml = submitBtn ? submitBtn.innerHTML : "Submit";
+
+    function notify(message, type) {
+        if (typeof showToast === "function") return showToast(message, type);
+        const el = document.createElement("div");
+        el.textContent = message;
+        el.className = "fixed bottom-6 left-1/2 -translate-x-1/2 z-[999] px-5 py-3 rounded-xl text-sm font-semibold shadow-2xl " +
+            (type === "success" ? "bg-emerald-600 text-white" : "bg-red-600 text-white");
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 3500);
+    }
+
+    if (!devForm) return;
 
     devForm.addEventListener("submit", async (e) => {
         e.preventDefault();
+        const val = id => (document.getElementById(id)?.value || "").trim();
+        const payload = {
+            name: val("dev-name"),
+            email: val("dev-email"),
+            whatsapp: val("dev-whatsapp"),
+            github: val("dev-github"),
+            picture: val("dev-picture"),
+            message: val("dev-message")
+        };
 
-        const name = document.getElementById("dev-name").value;
-        const email = document.getElementById("dev-email").value;
-        const whatsapp = document.getElementById("dev-whatsapp").value;
-        const github = document.getElementById("dev-github").value;
-        const picture = document.getElementById("dev-picture").value;
-        const message = document.getElementById("dev-message").value;
-
-        // Construct the message for Telegram
-        const textMessage = `
-🚀 *New Developer Application* 🚀
-*Name:* ${name}
-*Email:* ${email}
-*WhatsApp:* ${whatsapp}
-*GitHub:* ${github}
-${picture ? `*Picture URL:* ${picture}\n` : ''}
-*Message:* ${message ? message : 'N/A'}
-        `.trim();
-
-        // Get credentials from env.js
-        const botToken = typeof ENV !== 'undefined' ? ENV.TELEGRAM_BOT_TOKEN : null;
-        const chatId = typeof ENV !== 'undefined' ? ENV.TELEGRAM_CHAT_ID : null;
-
-        if (!botToken || !chatId) {
-            showToast("Telegram configuration is missing in env.js!", "error");
-            return;
-        }
-
-        const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
-
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+        submitBtn.disabled = true;
         try {
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
-            submitBtn.disabled = true;
-
-            const response = await fetch(url, {
+            // The Telegram bot token is kept on the server; the browser never sees it.
+            const response = await fetch("/api/developer/apply", {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    chat_id: chatId,
-                    text: textMessage,
-                    parse_mode: "Markdown"
-                })
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
             });
-
+            const data = await response.json().catch(() => ({}));
             if (response.ok) {
-                showToast("Application submitted successfully!", "success");
+                notify("Application submitted successfully!", "success");
                 devForm.reset();
             } else {
-                console.error("Telegram API Error:", await response.text());
-                showToast("Failed to submit application. Please try again later.", "error");
+                notify(data.error || "Failed to submit application. Please try again later.", "error");
             }
         } catch (error) {
-            console.error("Network Error:", error);
-            showToast("An error occurred while submitting.", "error");
+            notify("An error occurred while submitting.", "error");
         } finally {
-            submitBtn.innerHTML = '<i class="fab fa-telegram-plane"></i> Submit Application';
+            submitBtn.innerHTML = originalBtnHtml;
             submitBtn.disabled = false;
         }
     });

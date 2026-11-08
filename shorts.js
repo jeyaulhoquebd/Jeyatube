@@ -53,27 +53,55 @@ document.addEventListener("DOMContentLoaded", async () => {
         return (match && match[2].length === 11) ? match[2] : null;
     }
 
-    // Load Shorts
-    async function initShorts() {
-        const allVideos = await getVideos();
-        // Filter videos that are short (duration <= 120s or tagged with #shorts)
-        shortsList = allVideos.filter(v => isShortVideo(v));
+    // Load Shorts — paged from the server's full library of YouTube Shorts
+    const shortsFeed = { page: 0, hasMore: false, total: 0, loading: false, server: false };
 
-        if (shortsList.length === 0) {
-            // Fallback: take the 10 shortest videos if none explicitly matched
-            shortsList = [...allVideos].sort((a, b) => parseDurationInSeconds(a.duration) - parseDurationInSeconds(b.duration)).slice(0, 10);
+    async function loadMoreShorts() {
+        if (!shortsFeed.server || shortsFeed.loading || !shortsFeed.hasMore) return;
+        shortsFeed.loading = true;
+        try {
+            const res = await fetchCatalogPage({ type: 'short', limit: 30, page: shortsFeed.page + 1 });
+            if (!res) return;
+            shortsFeed.page = res.page;
+            shortsFeed.hasMore = res.hasMore;
+            shortsFeed.total = res.total;
+            const seen = new Set(shortsList.map(v => v.id));
+            shortsList.push(...sanitizeAndCurateVideos(res.items).filter(v => !seen.has(v.id)));
+        } finally {
+            shortsFeed.loading = false;
+        }
+    }
+
+    function preloadThumb(video) {
+        if (video && video.thumbnail) { const img = new Image(); img.src = video.thumbnail; }
+    }
+
+    async function initShorts() {
+        const first = typeof fetchCatalogPage === 'function' ? await fetchCatalogPage({ type: 'short', limit: 30, page: 1 }) : null;
+        let allVideos = [];
+        if (first && first.items.length) {
+            shortsFeed.server = true;
+            shortsFeed.page = first.page;
+            shortsFeed.hasMore = first.hasMore;
+            shortsFeed.total = first.total;
+            shortsList = sanitizeAndCurateVideos(first.items);
+        } else {
+            allVideos = await getVideos();
+            shortsList = allVideos.filter(v => isShortVideo(v));
+            if (shortsList.length === 0) {
+                shortsList = [...allVideos].sort((a, b) => parseDurationInSeconds(a.duration) - parseDurationInSeconds(b.duration)).slice(0, 10);
+            }
         }
 
-        // Check if specific video ID in URL
+        // Open a specific Short when linked directly
         const params = new URLSearchParams(window.location.search);
-        const targetId = params.get("id");
+        const targetId = (params.get("id") || "").replace(/[^\w-]/g, "");
         if (targetId) {
             const foundIndex = shortsList.findIndex(s => s.id === targetId);
             if (foundIndex !== -1) {
                 currentIndex = foundIndex;
             } else {
-                // If not in shorts list, find in all videos and prepend
-                const targetVideo = allVideos.find(v => v.id === targetId);
+                const targetVideo = allVideos.find(v => v.id === targetId) || await getVideoById(targetId);
                 if (targetVideo) {
                     shortsList.unshift(targetVideo);
                     currentIndex = 0;
@@ -96,8 +124,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         // Counter
         if (shortsCounter) {
-            shortsCounter.textContent = `${currentIndex + 1} / ${shortsList.length}`;
+            const total = shortsFeed.server ? Math.max(shortsFeed.total, shortsList.length) : shortsList.length;
+            shortsCounter.textContent = `${(currentIndex + 1).toLocaleString()} / ${total.toLocaleString()}`;
         }
+        preloadThumb(shortsList[currentIndex + 1]);
+        if (shortsFeed.server && currentIndex >= shortsList.length - 5) loadMoreShorts();
 
         // Background thumbnail blur
         if (bgBlur) {
@@ -165,9 +196,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (progressInterval) clearInterval(progressInterval);
         loadingSpinner.classList.remove("hidden");
         loadingSpinner.style.opacity = "1";
-        playerMount.innerHTML = "";
 
-        const ytId = getYoutubeId(video.videoUrl);
+        const ytId = getYoutubeId(video.videoUrl) || (video.videoId && /^[\w-]{11}$/.test(video.videoId) ? video.videoId : null);
+
+        // Reuse the existing YouTube player for instant, smooth switching between Shorts
+        if (ytId && ytPlayer && typeof ytPlayer.loadVideoById === 'function' && playerMount.querySelector('iframe')) {
+            if (progressBar) progressBar.style.width = '0%';
+            ytPlayer.loadVideoById({ videoId: ytId, suggestedQuality: 'hd1080' });
+            if (isMuted) ytPlayer.mute(); else ytPlayer.unMute();
+            startProgressTracker();
+            return;
+        }
+        playerMount.innerHTML = "";
 
         if (ytId) {
             // YouTube Embed
@@ -248,10 +288,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                 },
                 onStateChange: (event) => {
                     if (event.data === YT.PlayerState.ENDED) {
-                        // Loop short
+                        // Loop the Short
+                        event.target.seekTo(0, true);
                         event.target.playVideo();
                     }
                     if (event.data === YT.PlayerState.PLAYING) {
+                        loadingSpinner.classList.add("hidden");
                         isPlaying = true;
                     } else if (event.data === YT.PlayerState.PAUSED) {
                         isPlaying = false;
@@ -332,7 +374,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // Next Short
-    function nextShort() {
+    async function nextShort() {
+        if (currentIndex >= shortsList.length - 1 && shortsFeed.hasMore) await loadMoreShorts();
         if (currentIndex < shortsList.length - 1) {
             currentIndex++;
             renderCurrentShort();
@@ -546,9 +589,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             commentsListContainer.innerHTML = comments.map(c => {
                 const name = c.userName || c.username || c.author || "User";
-                const initial = (name[0] || "U").toUpperCase();
-                const timeText = typeof timeAgo === 'function' ? timeAgo(c.timestamp) : 'Recently';
-                const safeText = String(c.text || '').replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const initial = escapeHtml((name[0] || "U").toUpperCase());
+                const timeText = escapeHtml(typeof timeAgo === 'function' ? timeAgo(c.timestamp) : 'Recently');
+                const safeText = escapeHtml(c.text || '');
                 return `
                 <div class="flex space-x-2.5 items-start">
                     <div class="w-7 h-7 rounded-full bg-zinc-700 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
@@ -556,7 +599,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     </div>
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center space-x-1.5">
-                            <span class="text-xs font-bold text-zinc-200">${name}</span>
+                            <span class="text-xs font-bold text-zinc-200">${escapeHtml(name)}</span>
                             <span class="text-[10px] text-zinc-500">${timeText}</span>
                         </div>
                         <p class="text-xs text-zinc-300 mt-0.5 break-words">${safeText}</p>

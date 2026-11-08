@@ -64,6 +64,11 @@ node_modules/
 
 # dotenv environment variables file
 .env
+.env.*
+!.env.example
+
+# JTube server runtime data (video catalog, admin credentials, session secret)
+data/
 
 # dataconnect generated files
 .dataconnect
