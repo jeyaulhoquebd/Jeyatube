@@ -8,7 +8,8 @@
     "start": "node server.js",
     "build": "echo 'Build complete'",
     "lint": "node scripts/check.js",
-    "hash-password": "node scripts/hash-password.js"
+    "hash-password": "node scripts/hash-password.js",
+    "reset-admin": "node scripts/reset-admin.js"
   },
   "dependencies": {
     "@google/genai": "^2.21.0",

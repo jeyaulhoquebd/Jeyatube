@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme-lock="dark" class="dark-theme">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,18 +11,38 @@
 </head>
 <body class="bg-zinc-900 text-white font-sans antialiased min-h-screen flex flex-col">
 
-    <header class="bg-zinc-900 flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-        <a href="index.html" class="flex items-center space-x-1 text-2xl font-black tracking-tighter brand-font"><span class="bg-gradient-to-br from-red-600 to-red-800 text-white px-2.5 py-0.5 rounded-lg shadow-lg shadow-red-600/20">J</span><span class="brand-logo-text">Tube</span></a>
+    <header class="sticky top-0 z-40 bg-zinc-950/85 backdrop-blur-xl flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-b border-white/[.06]">
+        <div class="flex items-center gap-3">
+            <a href="index.html" class="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-300 hover:text-white" aria-label="Back to home"><i class="fas fa-arrow-left text-sm"></i></a>
+            <a href="index.html" class="flex items-center gap-1 text-2xl font-black tracking-tighter brand-font"><span class="bg-gradient-to-br from-red-600 to-red-800 text-white px-2.5 py-0.5 rounded-lg shadow-lg shadow-red-600/20">J</span><span class="brand-logo-text">Tube</span></a>
+        </div>
+        <span id="playlist-total" class="text-xs text-zinc-400 font-semibold"></span>
     </header>
 
-    <main class="flex-1 w-full max-w-6xl mx-auto p-6">
-        <h1 class="text-2xl font-bold mb-6">Course Playlists</h1>
-        
-        <div id="playlists-loading" class="text-center py-20 text-zinc-500">Loading playlists...</div>
-        
-        <div id="playlists-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 hidden">
-            <!-- Playlists load here -->
+    <main class="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6">
+        <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
+            <div>
+                <h1 class="text-2xl sm:text-3xl font-black tracking-tight">Course Playlists</h1>
+                <p class="text-sm text-zinc-400 mt-1">Complete courses and series from every JTube channel — watch them in order.</p>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-2">
+                <div class="relative">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-xs"></i>
+                    <input id="playlist-search" class="w-full sm:w-64 bg-zinc-900 border border-zinc-800 focus:border-red-500 rounded-xl pl-9 pr-3 py-2.5 text-sm outline-none" placeholder="Search playlists…">
+                </div>
+                <select id="playlist-channel" class="bg-zinc-900 border border-zinc-800 focus:border-red-500 rounded-xl px-3 py-2.5 text-sm outline-none sm:w-56">
+                    <option value="">All channels</option>
+                </select>
+            </div>
         </div>
+
+        <div id="playlists-loading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div class="aspect-video rounded-xl bg-zinc-800/60 animate-pulse"></div><div class="aspect-video rounded-xl bg-zinc-800/60 animate-pulse"></div>
+            <div class="aspect-video rounded-xl bg-zinc-800/60 animate-pulse"></div><div class="aspect-video rounded-xl bg-zinc-800/60 animate-pulse"></div>
+        </div>
+
+        <div id="playlists-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-5 gap-y-8 hidden"></div>
+        <div class="flex justify-center py-10"><button id="playlist-more" class="hidden px-6 py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold border border-white/10"><i class="fas fa-plus text-xs mr-1.5"></i>Load more</button></div>
 
         <!-- Video Modal for Playlist View (YouTube Style) -->
         <div id="playlist-modal" class="fixed inset-0 z-[100] bg-[#0f0f0f] hidden flex-col sm:flex-row overflow-hidden">
@@ -59,23 +79,13 @@
                     </div>
                     
                     <!-- Action Buttons -->
-                    <div class="flex items-center space-x-2 mt-auto sm:mt-0">
-                        <button class="flex-1 bg-white text-black font-bold py-2 px-4 rounded-full flex items-center justify-center space-x-2 hover:bg-zinc-200 transition">
-                            <i class="fas fa-play"></i>
-                            <span>Play all</span>
+                    <div class="flex items-center gap-2 mt-auto sm:mt-0">
+                        <button id="pl-play-all" class="flex-1 bg-white text-black font-bold py-2.5 px-4 rounded-full flex items-center justify-center gap-2 hover:bg-zinc-200 transition">
+                            <i class="fas fa-play"></i><span>Play all</span>
                         </button>
-                        <button class="w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition">
-                            <i class="fas fa-random"></i>
-                        </button>
-                        <button class="w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition">
-                            <i class="fas fa-plus"></i>
-                        </button>
-                        <button class="w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition">
-                            <i class="fas fa-share"></i>
-                        </button>
-                        <button class="w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition">
-                            <i class="fas fa-ellipsis-v"></i>
-                        </button>
+                        <button id="pl-shuffle" class="w-11 h-11 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition" title="Shuffle"><i class="fas fa-random"></i></button>
+                        <button id="pl-share" class="w-11 h-11 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition" title="Copy link"><i class="fas fa-share"></i></button>
+                        <a id="pl-youtube" target="_blank" rel="noopener" class="w-11 h-11 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition" title="Open on YouTube"><i class="fab fa-youtube"></i></a>
                     </div>
                 </div>
             </div>
@@ -89,9 +99,7 @@
         </div>
     </main>
 
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js" defer></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js" defer></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js" defer></script>
+    <script src="env.js" defer></script>
     <script src="seed-data.js" defer></script>
     <script src="data.js" defer></script>
     <script src="playlists.js" defer></script>

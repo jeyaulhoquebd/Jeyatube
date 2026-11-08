@@ -1,603 +1,257 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme-lock="dark" class="dark-theme">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JTubeGroup — Community Chat</title>
-    <meta name="description" content="Join the JTube community group chat. Share videos, chat with other viewers, and talk to Jaks AI!">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>JTube Community</title>
+    <meta name="description" content="Chat with the JTube community, share videos and ask JAsk AI.">
     <link rel="shortcut icon" href="img/jtubeimg.png" type="image/x-icon">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
     <link rel="stylesheet" href="style.css">
     <style>
-        /* ===== JtubeGroup Modern Card-Based Design System ===== */
-        html, body.group-page {
-            height: 100% !important;
-            height: 100dvh !important;
-            max-height: 100% !important;
-            max-height: 100dvh !important;
-            overflow: hidden !important;
-            margin: 0 !important;
-            padding: 0 !important;
+        :root {
+            --g-bg: #0a0a0d;
+            --g-panel: #111116;
+            --g-panel-2: #17171d;
+            --g-border: rgba(255,255,255,.07);
+            --g-border-2: rgba(255,255,255,.12);
+            --g-accent: #6366f1;
+            --g-accent-2: #8b5cf6;
         }
+        html, body { height: 100%; }
+        body.group-page {
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+            background:
+                radial-gradient(900px 500px at 0% 0%, rgba(99,102,241,.10), transparent 60%),
+                radial-gradient(800px 500px at 100% 100%, rgba(139,92,246,.08), transparent 60%),
+                var(--g-bg) !important;
+            color: #e4e4e7;
+            -webkit-font-smoothing: antialiased;
+            overflow: hidden;
+        }
+        .g-shell { height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
+        .g-panel { background: linear-gradient(180deg, rgba(23,23,29,.92), rgba(17,17,22,.92)); border: 1px solid var(--g-border); }
+        #chat-scroll { overscroll-behavior: contain; scroll-behavior: smooth; }
+        #chat-scroll::-webkit-scrollbar, .thin-scroll::-webkit-scrollbar { width: 6px; }
+        #chat-scroll::-webkit-scrollbar-thumb, .thin-scroll::-webkit-scrollbar-thumb { background: #27272a; border-radius: 99px; }
 
-        .group-page {
-            background-color: #09090b;
-            background-image: 
-                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.08) 0px, transparent 45%),
-                radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.06) 0px, transparent 45%),
-                radial-gradient(at 50% 50%, rgba(24, 24, 27, 0.5) 0px, transparent 100%);
+        .msg { position: relative; display: flex; gap: .75rem; padding: .35rem .75rem; border-radius: .9rem; transition: background .15s; }
+        .msg:hover { background: rgba(255,255,255,.025); }
+        .msg.compact { padding-top: .1rem; padding-bottom: .1rem; }
+        .msg.compact .msg-avatar { visibility: hidden; height: 0; }
+        .msg-avatar { width: 2.25rem; height: 2.25rem; border-radius: .8rem; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: .85rem; color: #fff; }
+        .msg-body { min-width: 0; flex: 1; }
+        .msg-text { font-size: .925rem; line-height: 1.55; color: #e4e4e7; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: anywhere; }
+        .msg-text a { color: #a5b4fc; text-decoration: underline; text-underline-offset: 2px; }
+        .msg-text strong { color: #fff; }
+        .msg.mine .msg-name { color: #a5b4fc; }
+        .msg.ai { background: linear-gradient(135deg, rgba(99,102,241,.10), rgba(139,92,246,.06)); border: 1px solid rgba(99,102,241,.22); margin: .35rem 0; }
+        .msg.highlight { animation: flash 1.6s ease; }
+        @keyframes flash { 0%, 40% { background: rgba(99,102,241,.18); } 100% { background: transparent; } }
+        .msg-actions { position: absolute; top: -.9rem; right: .75rem; display: none; gap: .15rem; background: var(--g-panel-2); border: 1px solid var(--g-border-2); border-radius: .7rem; padding: .15rem; box-shadow: 0 8px 20px rgba(0,0,0,.4); z-index: 5; }
+        .msg:hover .msg-actions, .msg:focus-within .msg-actions { display: flex; }
+        @media (hover: none) { .msg-actions { position: static; display: flex; background: transparent; border: none; box-shadow: none; padding: 0; margin-top: .25rem; } }
+        .act { width: 1.9rem; height: 1.9rem; border-radius: .5rem; display: inline-flex; align-items: center; justify-content: center; color: #a1a1aa; font-size: .8rem; }
+        .act:hover { background: rgba(255,255,255,.08); color: #fff; }
+        .act.danger:hover { color: #fca5a5; background: rgba(239,68,68,.15); }
+        .like-chip { display: inline-flex; align-items: center; gap: .3rem; font-size: .72rem; font-weight: 700; padding: .1rem .5rem; border-radius: 999px; background: rgba(239,68,68,.1); color: #fca5a5; border: 1px solid rgba(239,68,68,.25); margin-top: .35rem; cursor: pointer; }
+        .like-chip.liked { background: rgba(239,68,68,.22); color: #fff; }
+        .reply-quote { font-size: .75rem; color: #a1a1aa; border-left: 3px solid rgba(99,102,241,.6); padding: .15rem .6rem; margin-bottom: .3rem; border-radius: .2rem; background: rgba(99,102,241,.06); cursor: pointer; display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .day-sep { display: flex; align-items: center; gap: .75rem; margin: 1.1rem .75rem .5rem; font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #71717a; }
+        .day-sep::before, .day-sep::after { content: ''; flex: 1; height: 1px; background: var(--g-border); }
+        .video-card { display: flex; gap: .7rem; margin-top: .5rem; padding: .5rem; border-radius: .9rem; background: rgba(0,0,0,.35); border: 1px solid var(--g-border-2); max-width: 26rem; transition: border-color .2s, transform .2s; text-decoration: none !important; }
+        .video-card:hover { border-color: rgba(99,102,241,.5); transform: translateY(-1px); }
+        .composer { background: var(--g-panel-2); border: 1px solid var(--g-border-2); border-radius: 1.1rem; transition: border-color .2s, box-shadow .2s; }
+        .composer:focus-within { border-color: rgba(99,102,241,.55); box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+        #chat-input { resize: none; max-height: 9rem; }
+        .g-input { width: 100%; background: rgba(9,9,11,.8); border: 1px solid var(--g-border-2); border-radius: .75rem; padding: .7rem .9rem; font-size: .9rem; color: #f4f4f5; outline: none; transition: border-color .2s, box-shadow .2s; }
+        .g-input:focus { border-color: var(--g-accent); box-shadow: 0 0 0 3px rgba(99,102,241,.18); }
+        .g-btn { background: linear-gradient(135deg, var(--g-accent), var(--g-accent-2)); color: #fff; font-weight: 700; border-radius: .8rem; transition: filter .2s, transform .15s; box-shadow: 0 10px 24px -12px rgba(99,102,241,.8); }
+        .g-btn:hover { filter: brightness(1.1); }
+        .g-btn:disabled { opacity: .55; cursor: not-allowed; filter: none; }
+        .tab-auth { padding: .55rem 0; font-size: .85rem; font-weight: 700; color: #a1a1aa; border-bottom: 2px solid transparent; }
+        .tab-auth.active { color: #fff; border-color: var(--g-accent); }
+        .typing-dot { width: .4rem; height: .4rem; border-radius: 99px; background: #a5b4fc; animation: bounce 1.2s infinite ease-in-out; }
+        .typing-dot:nth-child(2) { animation-delay: .2s; } .typing-dot:nth-child(3) { animation-delay: .4s; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(.6); opacity: .4; } 40% { transform: scale(1); opacity: 1; } }
+        #members-panel { transition: transform .25s ease; }
+        @media (max-width: 1023px) {
+            #members-panel { position: fixed; top: 0; right: 0; bottom: 0; width: 18rem; z-index: 60; transform: translateX(100%); background: #0c0c10; }
+            #members-panel.open { transform: none; box-shadow: -30px 0 60px rgba(0,0,0,.6); }
         }
-
-        #chat-container {
-            height: 100% !important;
-            min-height: 0 !important;
-            max-height: 100% !important;
-        }
-
-        #chat-messages {
-            flex: 1 1 0% !important;
-            min-height: 0 !important;
-            overflow-y: auto !important;
-            overscroll-behavior: contain;
-            scroll-behavior: smooth;
-        }
-        
-        /* Chat scrollbar */
-        #chat-messages::-webkit-scrollbar { width: 6px; }
-        #chat-messages::-webkit-scrollbar-track { background: transparent; }
-        #chat-messages::-webkit-scrollbar-thumb { background: rgba(63, 63, 70, 0.6); border-radius: 9999px; }
-        #chat-messages::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.5); }
-
-        /* Card enter animation */
-        .msg-card-enter { 
-            animation: msgCardSlide 0.25s cubic-bezier(0.16, 1, 0.3, 1) both; 
-        }
-        @keyframes msgCardSlide {
-            from { opacity: 0; transform: translateY(10px) scale(0.98); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-
-        /* Typing dots */
-        .typing-dot { animation: typingBounce 1.2s infinite ease-in-out; }
-        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
-        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
-        @keyframes typingBounce {
-            0%, 80%, 100% { transform: scale(0.7); opacity: 0.3; }
-            40% { transform: scale(1); opacity: 1; }
-        }
-
-        /* Hover glow on send button */
-        #send-btn:not(:disabled):hover { 
-            box-shadow: 0 0 24px rgba(99, 102, 241, 0.5); 
-        }
-
-        /* Video preview cards in chat */
-        .chat-video-preview { 
-            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1); 
-        }
-        .chat-video-preview:hover { 
-            transform: translateY(-2px); 
-            box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(99, 102, 241, 0.4); 
-        }
-
-        /* Members drawer */
-        .members-drawer {
-            transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
-        }
-        .members-drawer.hidden-drawer {
-            transform: translateX(100%);
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        /* Composer card focus */
-        .composer-card:focus-within {
-            border-color: rgba(99, 102, 241, 0.5);
-            box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.2), 0 12px 28px -6px rgba(0,0,0,0.5);
-        }
-
-        /* Welcome hero card pattern */
-        .welcome-hero-card {
-            background: linear-gradient(145deg, rgba(24, 24, 27, 0.95), rgba(15, 15, 20, 0.98));
-            box-shadow: 0 10px 30px -10px rgba(0,0,0,0.6);
-        }
+        .modal-bg { background: rgba(0,0,0,.65); backdrop-filter: blur(6px); }
+        @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
     </style>
 </head>
-<body class="group-page text-zinc-100 font-sans antialiased h-screen h-[100dvh] max-h-screen flex flex-col overflow-hidden m-0 p-0">
+<body class="group-page">
+<div class="g-shell">
 
-    <!-- ===== TOP HEADER BAR ===== -->
-    <header class="bg-zinc-950/85 backdrop-blur-xl flex items-center justify-between px-3 sm:px-6 py-2.5 sm:py-3 border-b border-zinc-800/80 sticky top-0 z-50">
-        <div class="flex items-center space-x-3">
-            <a href="index.html" class="flex items-center space-x-1.5 text-xl sm:text-2xl font-black tracking-tighter brand-font group">
-                <span class="bg-gradient-to-br from-red-600 to-red-800 text-white px-2.5 py-0.5 rounded-lg shadow-md shadow-red-600/30 group-hover:scale-105 transition-transform">J</span>
-                <span class="brand-logo-text">Tube</span>
+    <!-- Header -->
+    <header class="flex items-center justify-between gap-3 px-3 sm:px-5 py-2.5 border-b border-white/[.06] bg-black/30 backdrop-blur-xl z-40">
+        <div class="flex items-center gap-2.5 min-w-0">
+            <a href="index.html" class="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-300 hover:text-white" aria-label="Back to JTube">
+                <i class="fas fa-arrow-left text-sm"></i>
             </a>
-            <div class="hidden sm:flex items-center gap-1.5 bg-indigo-500/10 border border-indigo-500/25 text-indigo-300 text-[10px] font-bold px-2.5 py-1 rounded-full tracking-wider uppercase">
-                <i class="fas fa-users text-indigo-400"></i> JtubeGroup
+            <a href="index.html" class="flex items-center gap-1.5 text-xl font-black tracking-tighter">
+                <span class="bg-gradient-to-br from-red-500 to-red-700 text-white px-2 py-0.5 rounded-lg">J</span><span class="text-white hidden sm:inline">Tube</span>
+            </a>
+            <div class="min-w-0">
+                <h1 class="text-sm sm:text-base font-extrabold text-white leading-tight truncate">Community</h1>
+                <p class="text-[11px] text-zinc-400 flex items-center gap-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    <span id="online-count">connecting…</span>
+                </p>
             </div>
         </div>
-
-        <!-- Center Community Status Beacon (Visible on tablet & desktop) -->
-        <div class="hidden md:flex items-center gap-2 bg-zinc-900/90 border border-zinc-800 px-3.5 py-1 rounded-full text-xs font-medium text-zinc-300 shadow-sm">
-            <span class="relative flex h-2 w-2">
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <span class="text-zinc-200 font-semibold">Global Community</span>
-            <span class="text-zinc-600">•</span>
-            <span class="text-zinc-400" id="header-community-status">Live Video Sharing</span>
-        </div>
-
-        <div class="flex items-center gap-2">
-            <!-- AI Moderation Shield Card Badge -->
-            <button id="btn-ai-shield-rules" class="hidden sm:inline-flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-1.5 rounded-full font-semibold border border-emerald-500/30 hover:border-emerald-500/50 transition-all shadow-sm active:scale-95" title="AI Moderation Shield is Active">
-                <i class="fas fa-shield-halved text-emerald-400 text-xs"></i>
-                <span class="hidden lg:inline">AI Shield Active</span>
+        <div class="flex items-center gap-1.5 sm:gap-2">
+            <button id="btn-rules" class="h-9 px-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-xs font-bold flex items-center gap-1.5 hover:bg-emerald-500/20" title="Community rules">
+                <i class="fas fa-shield-halved"></i><span class="hidden md:inline">Protected</span>
             </button>
-
-            <!-- AI Brain Card Badge -->
-            <button id="btn-ai-brain-info" class="hidden sm:inline-flex items-center gap-1.5 text-xs text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 px-3 py-1.5 rounded-full font-semibold border border-indigo-500/30 hover:border-indigo-500/50 transition-all shadow-sm active:scale-95" title="AI Brain continuously learns all videos every 5 minutes">
-                <i class="fas fa-brain text-indigo-400 text-xs animate-pulse"></i>
-                <span id="header-ai-brain-text" class="hidden lg:inline">AI Brain (5m Sync)</span>
+            <button id="btn-members" class="h-9 px-3 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs font-bold flex items-center gap-1.5 hover:text-white lg:hidden" title="Members">
+                <i class="fas fa-users"></i><span id="member-count-btn"></span>
             </button>
-
-            <!-- Members Drawer Toggle -->
-            <button id="members-toggle" class="flex items-center gap-1.5 text-xs text-zinc-300 hover:text-white transition-all px-3 py-1.5 sm:py-2 bg-zinc-900/90 hover:bg-zinc-800 rounded-full font-medium border border-zinc-800 hover:border-zinc-700 shadow-sm active:scale-95">
-                <i class="fas fa-user-group text-indigo-400 text-xs"></i>
-                <span id="header-member-count" class="font-semibold">Members</span>
-            </button>
-
-            <!-- Home Link -->
-            <a href="index.html" class="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-all px-3 py-1.5 sm:py-2 bg-zinc-900/90 hover:bg-zinc-800 rounded-full font-medium border border-zinc-800 hover:border-zinc-700 shadow-sm active:scale-95" title="Return to Home">
-                <i class="fas fa-home text-zinc-400 text-xs"></i>
-                <span class="hidden sm:inline">Home</span>
-            </a>
+            <div id="user-chip" class="hidden items-center gap-2 h-9 pl-1.5 pr-1 rounded-xl bg-zinc-900 border border-zinc-800">
+                <span id="user-chip-avatar" class="w-6 h-6 rounded-lg flex items-center justify-center text-[11px] font-black text-white"></span>
+                <span id="user-chip-name" class="text-xs font-semibold text-zinc-200 max-w-[7rem] truncate hidden sm:inline"></span>
+                <button id="btn-logout" class="w-7 h-7 rounded-lg text-zinc-400 hover:text-red-300 hover:bg-red-500/10" title="Sign out"><i class="fas fa-right-from-bracket text-xs"></i></button>
+            </div>
         </div>
     </header>
 
-    <!-- ===== MAIN CONTENT ===== -->
-    <div class="flex-1 flex overflow-hidden relative min-h-0 w-full h-full">
-
-        <!-- ===== AUTH WALL (shown when not logged in) ===== -->
-        <div id="auth-warning" class="hidden absolute inset-0 z-40 flex items-center justify-center bg-zinc-950/95 backdrop-blur-xl p-4">
-            <div class="text-center max-w-md w-full bg-zinc-900/90 border border-zinc-800 p-8 rounded-3xl shadow-2xl">
-                <div class="w-20 h-20 mx-auto bg-gradient-to-br from-indigo-600/20 to-purple-600/20 rounded-2xl flex items-center justify-center mb-5 border border-indigo-500/25 shadow-lg shadow-indigo-500/10">
-                    <i class="fas fa-lock text-3xl text-indigo-400"></i>
-                </div>
-                <h2 class="text-2xl sm:text-3xl font-black mb-2 text-white brand-font">Community Members Only</h2>
-                <p class="text-zinc-400 mb-6 text-xs sm:text-sm leading-relaxed">Sign in with your Google Account to join the JTube community conversation, share playable video cards, and consult the Jaks AI assistant.</p>
-                <button id="group-google-auth-btn" class="inline-flex items-center justify-center gap-2.5 bg-white hover:bg-zinc-100 text-black px-6 py-3 rounded-full font-bold transition shadow-xl shadow-white/10 text-sm w-full max-w-[240px] mx-auto active:scale-95">
-                    <i class="fab fa-google text-red-600"></i> Sign In to Join
-                </button>
-            </div>
-        </div>
-
-        <!-- ===== LOADING STATE ===== -->
-        <div id="loading-state" class="flex-1 flex items-center justify-center">
-            <div class="text-center bg-zinc-900/70 border border-zinc-800/80 px-8 py-6 rounded-2xl shadow-lg">
-                <div class="w-10 h-10 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mx-auto mb-3"></div>
-                <p class="text-xs sm:text-sm font-medium text-zinc-400">Connecting to JtubeGroup...</p>
-            </div>
-        </div>
-
-        <!-- ===== CHAT CONTAINER ===== -->
-        <div id="chat-container" class="hidden flex-1 flex flex-col min-w-0 min-h-0 h-full overflow-hidden relative">
-            
-            <!-- Community Overview Subheader Card -->
-            <div class="bg-zinc-950/70 backdrop-blur-md px-4 sm:px-6 py-2.5 border-b border-zinc-800/70 flex items-center justify-between gap-3 flex-shrink-0">
-                <div class="flex items-center gap-3 min-w-0">
-                    <div class="relative flex-shrink-0">
-                        <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 flex items-center justify-center shadow-md shadow-indigo-500/25 ring-2 ring-indigo-500/20">
-                            <i class="fas fa-globe-americas text-white text-sm"></i>
-                        </div>
-                        <div class="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-zinc-950 shadow-sm"></div>
-                    </div>
-                    <div class="min-w-0">
-                        <div class="flex items-center gap-1.5 flex-wrap">
-                            <h2 class="font-bold text-sm sm:text-base leading-tight text-white truncate brand-font">JTube Global Community</h2>
-                            <span class="bg-indigo-500/15 text-indigo-400 border border-indigo-500/25 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Official</span>
-                        </div>
-                        <p id="chat-subtitle" class="text-[11px] text-zinc-400 mt-0.5 truncate flex items-center gap-2">
-                            <span class="inline-flex items-center gap-1 text-emerald-400 font-medium"><i class="fas fa-circle text-[6px]"></i> Live</span>
-                            <span class="text-zinc-700">•</span>
-                            <span id="subtitle-member-count">Community members active</span>
-                        </p>
-                    </div>
-                </div>
-
-                <div class="flex items-center gap-2 flex-shrink-0">
-                    <!-- Quick Video Share Button in Subheader -->
-                    <button type="button" id="btn-header-share-video" class="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold bg-indigo-600/15 hover:bg-indigo-600/25 text-indigo-300 hover:text-white border border-indigo-500/30 px-3 py-1.5 rounded-full transition active:scale-95 shadow-sm">
-                        <i class="fas fa-film text-indigo-400 text-xs"></i>
-                        <span>Share Video</span>
-                    </button>
-                    <!-- Header Avatars Pile -->
-                    <div class="flex items-center -space-x-2 pl-1" id="header-avatars">
-                        <!-- Dynamically populated -->
-                    </div>
-                </div>
-            </div>
-
-            <!-- Messages Feed Area (Card-based layout) -->
-            <div id="chat-messages" class="flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 pt-3 pb-8 space-y-3.5 scroll-smooth overscroll-contain">
-                <!-- Welcome Orientation Hero Card -->
-                <div class="flex justify-center my-2 sm:my-4">
-                    <div class="welcome-hero-card border border-zinc-800/90 rounded-3xl p-4 sm:p-6 max-w-2xl w-full text-center">
-                        <div class="w-12 h-12 mx-auto bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center mb-3 shadow-lg shadow-indigo-500/20 ring-4 ring-indigo-500/10">
-                            <i class="fas fa-sparkles text-white text-base"></i>
-                        </div>
-                        <h3 class="font-bold text-base sm:text-lg text-white mb-1 brand-font">Welcome to JtubeGroup Community</h3>
-                        <p class="text-xs text-zinc-400 leading-relaxed max-w-lg mx-auto mb-4">
-                            Connect with learners, share curated videos with instant playable cards, and chat with the continuous-learning Jaks AI assistant.
-                        </p>
-                        
-                        <!-- 3 Feature Highlights in Cards -->
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-left mb-3">
-                            <div class="bg-zinc-900/80 border border-zinc-800/80 p-3 rounded-2xl hover:border-indigo-500/40 transition">
-                                <div class="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-2">
-                                    <i class="fas fa-robot text-xs"></i>
-                                </div>
-                                <h4 class="text-xs font-bold text-zinc-200">Ask Jaks AI</h4>
-                                <p class="text-[10px] text-zinc-400 mt-0.5 leading-snug">Type <span class="text-indigo-400 font-mono font-semibold">@JaksAI</span> anytime to analyze videos or ask questions.</p>
+    <div class="flex-1 min-h-0 flex">
+        <!-- Chat column -->
+        <main class="flex-1 min-w-0 flex flex-col">
+            <div id="chat-scroll" class="flex-1 min-h-0 overflow-y-auto">
+                <div class="max-w-4xl mx-auto px-1 sm:px-4 pt-4 pb-6">
+                    <!-- Welcome -->
+                    <div class="mx-2 sm:mx-3 mb-4 p-5 rounded-2xl g-panel">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-xl shadow-lg shadow-indigo-900/40 flex-shrink-0">
+                                <i class="fas fa-comments"></i>
                             </div>
-                            <div class="bg-zinc-900/80 border border-zinc-800/80 p-3 rounded-2xl hover:border-indigo-500/40 transition">
-                                <div class="w-7 h-7 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 mb-2">
-                                    <i class="fas fa-video text-xs"></i>
-                                </div>
-                                <h4 class="text-xs font-bold text-zinc-200">Share Video Cards</h4>
-                                <p class="text-[10px] text-zinc-400 mt-0.5 leading-snug">Click the plus icon to post interactive video preview cards directly.</p>
-                            </div>
-                            <div class="bg-zinc-900/80 border border-zinc-800/80 p-3 rounded-2xl hover:border-indigo-500/40 transition">
-                                <div class="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-2">
-                                    <i class="fas fa-shield-halved text-xs"></i>
-                                </div>
-                                <h4 class="text-xs font-bold text-zinc-200">AI Shield Protected</h4>
-                                <p class="text-[10px] text-zinc-400 mt-0.5 leading-snug">Real-time automated filtering safeguards against harassment and abuse.</p>
+                            <div class="min-w-0">
+                                <h2 class="text-lg font-extrabold text-white">Welcome to the JTube Community</h2>
+                                <p class="text-sm text-zinc-400 mt-1">Talk about videos, share what you learn and help each other. Type <code class="px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-300 text-xs font-bold">/ask</code> before a question to get an answer from <span class="text-indigo-300 font-semibold">JAsk AI</span>.</p>
                             </div>
                         </div>
-
-                        <div class="inline-flex items-center gap-1.5 text-[11px] text-zinc-400 bg-zinc-900/90 border border-zinc-800 px-3 py-1.5 rounded-full">
-                            <i class="fas fa-lightbulb text-amber-400 text-xs"></i>
-                            <span>Tip: Click any prompt chip below to start asking questions!</span>
-                        </div>
                     </div>
-                </div>
-
-                <!-- Bottom scroll anchor spacer to guarantee unobstructed scrolling -->
-                <div id="chat-bottom-anchor" class="h-6 w-full flex-shrink-0 pointer-events-none"></div>
-            </div>
-
-            <!-- AI Typing Indicator Card -->
-            <div id="ai-typing" class="hidden px-4 sm:px-6 py-2.5 bg-zinc-950/80 backdrop-blur-md border-t border-zinc-800/60 flex items-center gap-3 flex-shrink-0">
-                <div class="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-md shadow-indigo-500/20">
-                    <i class="fas fa-robot text-white text-[10px]"></i>
-                </div>
-                <div class="flex items-center gap-2 bg-zinc-900/80 border border-zinc-800 px-3 py-1.5 rounded-full">
-                    <div class="flex space-x-1">
-                        <div class="w-1.5 h-1.5 bg-indigo-400 rounded-full typing-dot"></div>
-                        <div class="w-1.5 h-1.5 bg-indigo-400 rounded-full typing-dot"></div>
-                        <div class="w-1.5 h-1.5 bg-indigo-400 rounded-full typing-dot"></div>
+                    <div id="chat-loading" class="flex items-center justify-center gap-2 text-zinc-500 text-sm py-10">
+                        <i class="fas fa-spinner fa-spin"></i> Loading messages…
                     </div>
-                    <span class="text-xs text-indigo-300 font-medium">Jaks AI is thinking...</span>
+                    <div id="chat-empty" class="hidden text-center text-zinc-500 text-sm py-10">No messages yet — say hello! 👋</div>
+                    <div id="chat-messages" role="log" aria-live="polite"></div>
+                    <div id="ai-typing" class="hidden items-center gap-2 px-4 py-2 text-xs text-indigo-300">
+                        <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
+                        <span class="ml-1">JAsk AI is thinking…</span>
+                    </div>
                 </div>
             </div>
 
-            <!-- Scroll to Bottom Button -->
-            <button id="scroll-bottom-btn" class="hidden absolute right-6 bottom-32 bg-zinc-900/90 hover:bg-zinc-800 text-zinc-200 hover:text-white w-10 h-10 rounded-full flex items-center justify-center shadow-xl border border-zinc-700/80 transition-all z-20 active:scale-95" title="Scroll to bottom">
-                <i class="fas fa-chevron-down text-xs"></i>
+            <button id="btn-scroll-bottom" class="hidden absolute bottom-28 right-6 lg:right-80 z-30 w-10 h-10 rounded-full bg-indigo-600 text-white shadow-xl" aria-label="Scroll to newest">
+                <i class="fas fa-arrow-down"></i>
             </button>
 
-            <!-- Floating Input Composer Card Dock -->
-            <div class="bg-zinc-950/95 backdrop-blur-xl p-3 sm:p-4 border-t border-zinc-800/80 flex-shrink-0 z-20 shadow-2xl">
-                <div class="max-w-4xl mx-auto">
-                    <!-- Quick AI & Community Action Chips (Elevated Pill Bar) -->
-                    <div class="mb-2.5 flex items-center gap-1.5 overflow-x-auto pb-1" style="scrollbar-width:none;">
-                        <button type="button" class="group-action-chip text-[11px] font-semibold bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 hover:border-zinc-700 px-3 py-1.5 rounded-full whitespace-nowrap transition-all flex items-center gap-1.5 flex-shrink-0 active:scale-95 shadow-sm" data-insert="@JaksAI What kind of video is this?">
-                            <i class="fas fa-sparkles text-amber-400 text-[10px]"></i>
-                            <span>What kind of video is this?</span>
-                        </button>
-                        <button type="button" class="group-action-chip text-[11px] font-semibold bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 hover:border-zinc-700 px-3 py-1.5 rounded-full whitespace-nowrap transition-all flex items-center gap-1.5 flex-shrink-0 active:scale-95 shadow-sm" data-insert="@JaksAI Recommend popular coding tutorials">
-                            <i class="fas fa-code text-indigo-400 text-[10px]"></i>
-                            <span>Coding Tutorials</span>
-                        </button>
-                        <button type="button" class="group-action-chip text-[11px] font-semibold bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 hover:border-zinc-700 px-3 py-1.5 rounded-full whitespace-nowrap transition-all flex items-center gap-1.5 flex-shrink-0 active:scale-95 shadow-sm" data-insert="@JaksAI Recommend Islamic lectures & nasheeds">
-                            <i class="fas fa-moon text-emerald-400 text-[10px]"></i>
-                            <span>Islamic Lectures</span>
-                        </button>
-                        <button type="button" id="btn-open-video-picker" class="text-[11px] font-semibold bg-indigo-600/15 hover:bg-indigo-600/25 text-indigo-300 hover:text-white border border-indigo-500/30 hover:border-indigo-500/50 px-3 py-1.5 rounded-full whitespace-nowrap transition-all flex items-center gap-1.5 flex-shrink-0 active:scale-95 shadow-sm">
-                            <i class="fas fa-film text-indigo-400 text-[10px]"></i>
-                            <span>Share Video</span>
-                        </button>
-                        <button type="button" id="btn-view-safety" class="text-[11px] font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:border-emerald-500/50 px-3 py-1.5 rounded-full whitespace-nowrap transition-all flex items-center gap-1.5 flex-shrink-0 active:scale-95 shadow-sm">
-                            <i class="fas fa-shield-halved text-[10px]"></i>
-                            <span>AI Shield</span>
-                        </button>
-                    </div>
+            <!-- Composer / Auth -->
+            <div class="border-t border-white/[.06] bg-black/30 backdrop-blur-xl" style="padding-bottom: env(safe-area-inset-bottom)">
+                <div class="max-w-4xl mx-auto px-3 sm:px-6 py-3">
 
-                    <!-- Main Composer Card -->
-                    <div class="composer-card bg-zinc-900/90 border border-zinc-800/90 rounded-2xl p-2 sm:p-2.5 transition-all duration-200 relative shadow-lg">
-                        
-                        <!-- Mention Dropdown -->
-                        <div id="mention-dropdown" class="absolute bottom-full left-0 w-full sm:w-72 mb-2 bg-zinc-900/95 border border-zinc-700 rounded-2xl shadow-2xl hidden flex-col overflow-y-auto max-h-52 z-30 backdrop-blur-xl"></div>
-                        
-                        <!-- Quick Emoji Bar (Popup) -->
-                        <div id="emoji-popup" class="absolute bottom-full left-0 mb-2 bg-zinc-900/95 border border-zinc-700/90 p-3 rounded-2xl shadow-2xl backdrop-blur-xl hidden z-30 flex-wrap gap-1.5 max-w-xs">
-                            <div class="text-[10px] uppercase font-bold text-zinc-400 px-1 mb-1.5 w-full flex items-center justify-between border-b border-zinc-800 pb-1">
-                                <span class="flex items-center gap-1"><i class="far fa-smile text-amber-400"></i> Quick Reactions</span>
-                                <span class="text-zinc-500 font-normal">Click to insert</span>
-                            </div>
-                            <div class="grid grid-cols-6 gap-1 w-full">
-                                <button type="button" class="emoji-opt hover:scale-125 transition-transform text-xl p-1">❤️</button>
-                                <button type="button" class="emoji-opt hover:scale-125 transition-transform text-xl p-1">🔥</button>
-                                <button type="button" class="emoji-opt hover:scale-125 transition-transform text-xl p-1">👍</button>
-                                <button type="button" class="emoji-opt hover:scale-125 transition-transform text-xl p-1">👏</button>
-                                <button type="button" class="emoji-opt hover:scale-125 transition-transform text-xl p-1">😂</button>
-                                <button type="button" class="emoji-opt hover:scale-125 transition-transform text-xl p-1">🎉</button>
-                                <button type="button" class="emoji-opt hover:scale-125 transition-transform text-xl p-1">🚀</button>
-                                <button type="button" class="emoji-opt hover:scale-125 transition-transform text-xl p-1">🤖</button>
-                                <button type="button" class="emoji-opt hover:scale-125 transition-transform text-xl p-1">✨</button>
-                                <button type="button" class="emoji-opt hover:scale-125 transition-transform text-xl p-1">💯</button>
-                                <button type="button" class="emoji-opt hover:scale-125 transition-transform text-xl p-1">🧠</button>
-                                <button type="button" class="emoji-opt hover:scale-125 transition-transform text-xl p-1">💡</button>
-                            </div>
+                    <!-- Signed out -->
+                    <div id="auth-card" class="hidden g-panel rounded-2xl p-4 sm:p-5">
+                        <div class="flex items-center gap-6 border-b border-white/[.06] mb-4">
+                            <button type="button" class="tab-auth active" data-mode="login">Sign in</button>
+                            <button type="button" class="tab-auth" data-mode="register">Create account</button>
                         </div>
-
-                        <form id="chat-form" class="flex items-end gap-2">
-                            <!-- Left Tool Buttons -->
-                            <div class="flex items-center gap-1 flex-shrink-0">
-                                <button type="button" id="btn-quick-share" class="w-9 h-9 rounded-xl bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/60 hover:border-indigo-500/50 flex items-center justify-center text-zinc-400 hover:text-indigo-400 transition-all active:scale-95" title="Share a Video Card">
-                                    <i class="fas fa-plus text-xs"></i>
-                                </button>
-                                <button type="button" id="btn-toggle-emoji" class="w-9 h-9 rounded-xl bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/60 hover:border-amber-400/50 flex items-center justify-center text-zinc-400 hover:text-amber-400 transition-all active:scale-95" title="Insert Emoji">
-                                    <i class="far fa-smile text-sm"></i>
-                                </button>
+                        <form id="auth-form" class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end" autocomplete="on">
+                            <div id="auth-name-wrap" class="hidden">
+                                <label class="block text-[11px] font-bold text-zinc-400 uppercase tracking-wide mb-1.5" for="auth-name">Name</label>
+                                <input id="auth-name" class="g-input" maxlength="40" autocomplete="nickname" placeholder="Your name">
                             </div>
-
-                            <!-- Text Area -->
-                            <div class="flex-1 min-w-0">
-                                <textarea id="chat-input" rows="1" placeholder="Message JtubeGroup... (Type @JaksAI to ask AI assistant)" class="w-full bg-transparent px-2.5 py-2 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none resize-none max-h-28 min-h-[38px] leading-relaxed" style="scrollbar-width:none;"></textarea>
+                            <div>
+                                <label class="block text-[11px] font-bold text-zinc-400 uppercase tracking-wide mb-1.5" for="auth-email">Email</label>
+                                <input id="auth-email" type="email" required class="g-input" autocomplete="email" placeholder="you@example.com">
                             </div>
-
-                            <!-- Send Button -->
-                            <button type="submit" id="send-btn" disabled class="bg-indigo-600 hover:bg-indigo-500 text-white w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed shadow-md shadow-indigo-600/30 hover:scale-105 active:scale-95">
-                                <i class="fas fa-paper-plane text-xs"></i>
-                            </button>
+                            <div>
+                                <label class="block text-[11px] font-bold text-zinc-400 uppercase tracking-wide mb-1.5" for="auth-password">Password</label>
+                                <input id="auth-password" type="password" required minlength="8" class="g-input" autocomplete="current-password" placeholder="At least 8 characters">
+                            </div>
+                            <button id="auth-submit" type="submit" class="g-btn h-[46px] px-5 text-sm sm:col-span-1">Sign in to chat</button>
                         </form>
+                        <p id="auth-error" class="hidden mt-3 text-xs font-semibold text-red-300"></p>
+                        <p class="mt-3 text-[11px] text-zinc-500"><i class="fas fa-lock mr-1"></i>Your email is never shown to other members. Passwords are stored encrypted (hashed).</p>
                     </div>
 
-                    <!-- Micro Info Footer -->
-                    <div class="flex items-center justify-between mt-2 text-[10px] text-zinc-500 px-1">
-                        <span class="inline-flex items-center gap-1.5 text-zinc-400">
-                            <i class="fas fa-shield-halved text-emerald-400"></i>
-                            <span>AI Moderation Shield active • Zero-abuse safe zone</span>
-                        </span>
-                        <span class="hidden sm:inline text-zinc-500 font-mono">
-                            Press <kbd class="bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-300 font-mono text-[9px] border border-zinc-700/50">Enter</kbd> to send
-                        </span>
+                    <!-- Suspended -->
+                    <div id="banned-card" class="hidden rounded-2xl p-4 bg-red-950/40 border border-red-800/50 text-sm text-red-200">
+                        <i class="fas fa-ban mr-2"></i>Your account has been suspended from the community chat.
                     </div>
-                </div>
-            </div>
-        </div>
 
-        <!-- ===== MEMBERS SIDEBAR DRAWER (Card-based layout) ===== -->
-        <aside id="members-drawer" class="members-drawer hidden-drawer absolute right-0 top-0 bottom-0 w-72 sm:w-80 bg-zinc-950/95 backdrop-blur-2xl border-l border-zinc-800/80 z-30 flex flex-col overflow-hidden shadow-2xl">
-            <!-- Header Card -->
-            <div class="px-4 py-3.5 border-b border-zinc-800/70 flex items-center justify-between flex-shrink-0 bg-zinc-900/60">
-                <div class="flex items-center gap-2">
-                    <div class="w-7 h-7 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
-                        <i class="fas fa-user-group text-xs"></i>
-                    </div>
-                    <div>
-                        <h3 class="font-bold text-xs sm:text-sm text-white brand-font">Community Members</h3>
-                        <p class="text-[10px] text-zinc-500">Directory & active participants</p>
-                    </div>
-                </div>
-                <button id="close-members" class="text-zinc-400 hover:text-white transition-colors w-7 h-7 flex items-center justify-center rounded-lg hover:bg-zinc-800" title="Close Directory">
-                    <i class="fas fa-times text-xs"></i>
-                </button>
-            </div>
-
-            <!-- Search Members Card -->
-            <div class="p-3 border-b border-zinc-800/60 bg-zinc-900/30">
-                <div class="relative">
-                    <i class="fas fa-search absolute left-3 top-2.5 text-zinc-500 text-xs"></i>
-                    <input type="text" id="member-search-input" placeholder="Search members by name..." class="w-full bg-zinc-900 border border-zinc-800 hover:border-zinc-700 focus:border-indigo-500/60 rounded-xl pl-8 pr-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none transition">
-                </div>
-            </div>
-
-            <!-- Pinned AI Assistant Card -->
-            <div class="p-3 border-b border-zinc-800/60">
-                <div class="flex items-center justify-between p-2.5 rounded-2xl bg-gradient-to-r from-indigo-950/40 via-zinc-900/90 to-purple-950/30 border border-indigo-500/30 hover:border-indigo-500/50 transition shadow-sm">
-                    <div class="flex items-center gap-2.5 min-w-0">
-                        <div class="relative flex-shrink-0">
-                            <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md ring-1 ring-indigo-500/30">
-                                <i class="fas fa-robot text-white text-xs"></i>
-                            </div>
-                            <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-zinc-950"></div>
+                    <!-- Signed in -->
+                    <form id="chat-form" class="hidden">
+                        <div id="reply-bar" class="hidden items-center justify-between gap-3 mb-2 px-3 py-2 rounded-xl bg-indigo-500/10 border border-indigo-500/25 text-xs">
+                            <span class="truncate text-zinc-300"><i class="fas fa-reply text-indigo-300 mr-1.5"></i>Replying to <b id="reply-name" class="text-white"></b>: <span id="reply-text" class="text-zinc-400"></span></span>
+                            <button type="button" id="reply-cancel" class="text-zinc-400 hover:text-white" aria-label="Cancel reply"><i class="fas fa-times"></i></button>
                         </div>
-                        <div class="min-w-0">
-                            <div class="flex items-center gap-1.5">
-                                <span class="text-xs font-bold text-indigo-300 truncate">Jaks AI</span>
-                                <span class="bg-indigo-500/20 text-indigo-400 text-[8px] px-1.5 py-0.5 rounded font-black uppercase">Bot</span>
-                            </div>
-                            <p class="text-[10px] text-zinc-400 truncate">Always online • Video Knowledge</p>
+                        <div class="composer flex items-end gap-1.5 p-1.5">
+                            <button type="button" id="btn-share-video" class="w-10 h-10 rounded-xl text-zinc-400 hover:text-white hover:bg-white/5 flex-shrink-0" title="Share a JTube video"><i class="fas fa-film"></i></button>
+                            <button type="button" id="btn-ask" class="w-10 h-10 rounded-xl text-indigo-300 hover:text-white hover:bg-indigo-500/15 flex-shrink-0" title="Ask JAsk AI"><i class="fas fa-robot"></i></button>
+                            <textarea id="chat-input" rows="1" maxlength="1000" class="flex-1 bg-transparent outline-none text-[15px] text-zinc-100 placeholder-zinc-500 py-2.5 px-1" placeholder="Message the community…"></textarea>
+                            <button type="submit" id="send-btn" class="g-btn w-10 h-10 flex-shrink-0 flex items-center justify-center" disabled aria-label="Send"><i class="fas fa-paper-plane text-sm"></i></button>
                         </div>
-                    </div>
-                    <button type="button" class="group-action-chip text-[10px] font-bold bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 hover:text-white border border-indigo-500/30 px-2 py-1 rounded-lg transition active:scale-95" data-insert="@JaksAI ">
-                        Ask
-                    </button>
+                        <div class="flex items-center justify-between mt-1.5 px-1 text-[11px] text-zinc-500">
+                            <span>Be kind · no spam · <button type="button" class="underline hover:text-zinc-300" id="btn-rules-2">rules</button></span>
+                            <span id="char-count">0 / 1000</span>
+                        </div>
+                    </form>
                 </div>
             </div>
+        </main>
 
-            <!-- Users Cards List -->
-            <div id="members-list" class="flex-1 overflow-y-auto p-3 space-y-1.5">
-                <div class="text-center py-8">
-                    <div class="w-6 h-6 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mx-auto mb-2"></div>
-                    <p class="text-xs text-zinc-500">Loading members...</p>
-                </div>
+        <!-- Members -->
+        <div id="members-backdrop" class="hidden fixed inset-0 z-50 bg-black/60 lg:hidden"></div>
+        <aside id="members-panel" class="lg:w-72 flex-shrink-0 border-l border-white/[.06] bg-black/20 flex flex-col">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-white/[.06]">
+                <h3 class="text-sm font-extrabold text-white">Members <span id="member-total" class="text-zinc-500 font-semibold"></span></h3>
+                <button id="close-members" class="lg:hidden text-zinc-400 hover:text-white" aria-label="Close"><i class="fas fa-times"></i></button>
             </div>
+            <div class="p-3"><input id="member-search" class="g-input !py-2 text-sm" placeholder="Find a member…"></div>
+            <div id="members-list" class="flex-1 overflow-y-auto thin-scroll px-2 pb-4"></div>
         </aside>
     </div>
+</div>
 
-    <!-- ===== MODAL: VIDEO & REEL SHARE PICKER ===== -->
-    <div id="video-share-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-        <div class="bg-zinc-900 border border-zinc-700/80 w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-            <div class="p-4 border-b border-zinc-800 flex items-center justify-between flex-shrink-0 bg-zinc-950/60">
-                <div class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
-                        <i class="fas fa-film text-xs"></i>
-                    </div>
-                    <div>
-                        <h3 class="font-bold text-sm text-white">Share Video or Reel in Group</h3>
-                        <p class="text-[10px] text-zinc-400">Select any video or Reel to share with an interactive playable card</p>
-                    </div>
-                </div>
-                <button id="close-video-share-modal" class="w-8 h-8 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 flex items-center justify-center transition">
-                    <i class="fas fa-times text-xs"></i>
-                </button>
-            </div>
-            
-            <div class="p-3 border-b border-zinc-800 flex-shrink-0 space-y-2">
-                <div class="flex items-center gap-1.5 overflow-x-auto pb-0.5">
-                    <button type="button" class="share-tab-btn px-3 py-1 rounded-full text-xs font-semibold bg-white text-zinc-900 transition flex items-center gap-1.5" data-filter="all">
-                        <i class="fas fa-layer-group text-[10px]"></i> All Content
-                    </button>
-                    <button type="button" class="share-tab-btn px-3 py-1 rounded-full text-xs font-medium bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 transition flex items-center gap-1.5" data-filter="videos">
-                        <i class="fas fa-video text-blue-400 text-[10px]"></i> Videos Only
-                    </button>
-                    <button type="button" class="share-tab-btn px-3 py-1 rounded-full text-xs font-medium bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 transition flex items-center gap-1.5" data-filter="reels">
-                        <i class="fas fa-bolt text-pink-400 text-[10px]"></i> Reels & Shorts
-                    </button>
-                </div>
-                <div class="relative">
-                    <i class="fas fa-search absolute left-3 top-2.5 text-zinc-500 text-xs"></i>
-                    <input type="text" id="video-share-search" placeholder="Search title, channel, creator, or topic..." class="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500">
-                </div>
-            </div>
-
-            <div id="video-share-list" class="flex-1 overflow-y-auto p-3 space-y-2">
-                <!-- Dynamically populated -->
-                <div class="text-center py-10 text-zinc-500 text-xs">Loading content...</div>
-            </div>
+<!-- Video picker -->
+<div id="video-modal" class="hidden fixed inset-0 z-[70] modal-bg flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="g-panel w-full sm:max-w-xl rounded-t-3xl sm:rounded-3xl max-h-[85vh] flex flex-col">
+        <div class="flex items-center justify-between p-4 border-b border-white/[.06]">
+            <h3 class="font-extrabold text-white"><i class="fas fa-film text-indigo-300 mr-2"></i>Share a video</h3>
+            <button data-close class="text-zinc-400 hover:text-white" aria-label="Close"><i class="fas fa-times"></i></button>
         </div>
+        <div class="p-4"><input id="video-search" class="g-input" placeholder="Search the JTube library…"></div>
+        <div id="video-results" class="flex-1 overflow-y-auto thin-scroll px-3 pb-4 space-y-1"></div>
     </div>
+</div>
 
-    <!-- ===== MODAL: AI SAFETY SHIELD & COMMUNITY RULES ===== -->
-    <div id="ai-shield-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-        <div class="bg-zinc-900 border border-emerald-500/30 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-            <div class="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/70">
-                <div class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                        <i class="fas fa-shield-halved text-sm"></i>
-                    </div>
-                    <div>
-                        <h3 class="font-bold text-sm text-white">AI Moderation Shield</h3>
-                        <p class="text-[10px] text-emerald-400 font-semibold">Real-time Harassment & Abuse Protection</p>
-                    </div>
-                </div>
-                <button id="close-ai-shield-modal" class="w-8 h-8 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 flex items-center justify-center transition">
-                    <i class="fas fa-times text-xs"></i>
-                </button>
-            </div>
-            
-            <div class="p-5 space-y-3.5 text-xs text-zinc-300">
-                <div class="bg-emerald-950/30 border border-emerald-500/20 p-3.5 rounded-xl">
-                    <h4 class="font-bold text-emerald-400 mb-1 flex items-center gap-1.5 text-xs">
-                        <i class="fas fa-check-circle"></i> Zero-Tolerance for Abuse
-                    </h4>
-                    <p class="text-[11px] text-zinc-300 leading-relaxed">
-                        To maintain a constructive and family-friendly learning space, our automated AI Shield inspects all incoming comments and group chat messages. If a user posts offensive insults, swear words, or harassment, the system automatically purges and deletes the comment immediately.
-                    </p>
-                </div>
-
-                <div class="space-y-2">
-                    <h5 class="font-bold text-white text-[11px] uppercase tracking-wider">Automated Shield Policies:</h5>
-                    <ul class="space-y-1.5 text-[11px] text-zinc-400">
-                        <li class="flex items-start gap-2">
-                            <i class="fas fa-ban text-red-400 mt-0.5 text-[10px]"></i>
-                            <span>Instant scrubbing of slurs, abusive profanity, and hate speech.</span>
-                        </li>
-                        <li class="flex items-start gap-2">
-                            <i class="fas fa-robot text-indigo-400 mt-0.5 text-[10px]"></i>
-                            <span>Real-time cross-checking via automated intelligent classification.</span>
-                        </li>
-                        <li class="flex items-start gap-2">
-                            <i class="fas fa-comments text-emerald-400 mt-0.5 text-[10px]"></i>
-                            <span>Applies synchronously to Video Comments, Replies, and JtubeGroup Community chat.</span>
-                        </li>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="p-3.5 border-t border-zinc-800 bg-zinc-950/40 flex justify-end">
-                <button id="confirm-ai-shield-modal" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs px-4 py-2 rounded-xl transition">
-                    I Understand & Agree
-                </button>
-            </div>
-        </div>
+<!-- Rules -->
+<div id="rules-modal" class="hidden fixed inset-0 z-[70] modal-bg flex items-center justify-center p-4">
+    <div class="g-panel w-full max-w-md rounded-3xl p-6">
+        <div class="w-12 h-12 rounded-2xl bg-emerald-500/15 text-emerald-300 flex items-center justify-center text-xl mb-4"><i class="fas fa-shield-halved"></i></div>
+        <h3 class="text-lg font-extrabold text-white">Community rules &amp; protection</h3>
+        <ul class="mt-3 space-y-2 text-sm text-zinc-300">
+            <li><i class="fas fa-check text-emerald-400 mr-2"></i>Be respectful — insults, hate and harassment are blocked automatically.</li>
+            <li><i class="fas fa-check text-emerald-400 mr-2"></i>No spam: message speed, repeats and links are limited.</li>
+            <li><i class="fas fa-check text-emerald-400 mr-2"></i>Report bad messages — they are hidden after several reports and reviewed by admins.</li>
+            <li><i class="fas fa-check text-emerald-400 mr-2"></i>Your email is private; only your name is shown.</li>
+            <li><i class="fas fa-check text-emerald-400 mr-2"></i>Type <b>/ask</b> to get help from JAsk AI.</li>
+        </ul>
+        <button data-close class="g-btn w-full h-11 mt-5 text-sm">Got it</button>
     </div>
+</div>
 
-    <!-- ===== MODAL: AI BRAIN LEARNING ENGINE ===== -->
-    <div id="ai-brain-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-        <div class="bg-zinc-900 border border-indigo-500/30 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-            <div class="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/70">
-                <div class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
-                        <i class="fas fa-brain text-sm animate-pulse"></i>
-                    </div>
-                    <div>
-                        <h3 class="font-bold text-sm text-white">AI Video Brain</h3>
-                        <p class="text-[10px] text-indigo-400 font-semibold">Continuous 5-Minute Site-Wide Learning</p>
-                    </div>
-                </div>
-                <button id="close-ai-brain-modal" class="w-8 h-8 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 flex items-center justify-center transition">
-                    <i class="fas fa-times text-xs"></i>
-                </button>
-            </div>
-            
-            <div class="p-5 space-y-3.5 text-xs text-zinc-300">
-                <div class="bg-indigo-950/30 border border-indigo-500/20 p-3.5 rounded-xl">
-                    <h4 class="font-bold text-indigo-300 mb-1 flex items-center gap-1.5 text-xs">
-                        <i class="fas fa-clock text-amber-400"></i> Automated 5-Minute Training Cycle
-                    </h4>
-                    <p class="text-[11px] text-zinc-300 leading-relaxed">
-                        Every 5 minutes, our AI system scans and reads all videos across all added channels on JTube. It parses genres, key concepts, target audiences, and categories so users can ask what kind of video any upload is at any time.
-                    </p>
-                </div>
-
-                <div class="grid grid-cols-2 gap-2 text-center">
-                    <div class="bg-zinc-950/60 border border-zinc-800 p-2.5 rounded-xl">
-                        <div id="brain-modal-sync-time" class="text-xs font-mono font-bold text-emerald-400">Just now</div>
-                        <div class="text-[9px] text-zinc-500 uppercase tracking-wider mt-0.5">Last Sync</div>
-                    </div>
-                    <div class="bg-zinc-950/60 border border-zinc-800 p-2.5 rounded-xl">
-                        <div id="brain-modal-video-count" class="text-xs font-mono font-bold text-indigo-400">All Videos</div>
-                        <div class="text-[9px] text-zinc-500 uppercase tracking-wider mt-0.5">Knowledge Base</div>
-                    </div>
-                </div>
-
-                <div class="text-[11px] text-zinc-400 space-y-1">
-                    <p>💡 <strong>Try this:</strong> Type <span class="text-indigo-300 font-mono">@JaksAI What kind of video is this?</span> in the chat, or click the <span class="text-indigo-300 font-semibold">What kind of video is this?</span> button under any video on the Watch page!</p>
-                </div>
-            </div>
-
-            <div class="p-3.5 border-t border-zinc-800 bg-zinc-950/40 flex justify-end">
-                <button id="close-ai-brain-modal-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs px-4 py-2 rounded-xl transition">
-                    Close
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Scripts (NO defer — load sequentially in order) -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-    <script src="env.js"></script>
-    <script src="data.js"></script>
-    <script src="jask.js"></script>
-    <script src="group.js"></script>
+<script src="env.js"></script>
+<script src="data.js"></script>
+<script src="group.js"></script>
 </body>
 </html>

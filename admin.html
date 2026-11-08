@@ -249,6 +249,11 @@
                     <i class="fas fa-users-cog w-5 text-center"></i>
                     <span>Users &amp; Auth</span>
                 </button>
+                <button class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold text-left text-zinc-400" data-tab="community">
+                    <i class="fas fa-comments w-5 text-center text-indigo-400"></i>
+                    <span>Community</span>
+                    <span id="sidebar-report-badge" class="ml-auto hidden bg-red-950/80 text-red-300 border border-red-800/60 text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
+                </button>
                 <button class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-semibold text-left text-zinc-400" data-tab="categories">
                     <i class="fas fa-tags w-5 text-center"></i>
                     <span>Manage Categories</span>
@@ -785,6 +790,34 @@
             </div>
 
             <!-- ===== MANAGE CATEGORIES TAB ===== -->
+            <div id="tab-community" class="tab-panel">
+                <div class="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
+                    <div>
+                        <h1 class="text-2xl font-black text-white tracking-tight">Community moderation</h1>
+                        <p class="text-sm text-zinc-400 mt-1">Reported messages and member accounts of the group chat. Admins can also delete any message directly on the <a href="group.html" target="_blank" class="text-indigo-300 underline">Community page</a>.</p>
+                    </div>
+                    <button id="btn-refresh-community" type="button" class="btn-ghost text-xs font-bold px-3.5 py-2.5 flex items-center gap-1.5"><i class="fas fa-redo"></i><span>Refresh</span></button>
+                </div>
+                <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                    <div class="stat-card"><div class="stat-icon bg-indigo-500/10 text-indigo-400 border-indigo-500/20"><i class="fas fa-users"></i></div><div class="stat-label">Members</div><div class="stat-value" id="cm-users">—</div></div>
+                    <div class="stat-card"><div class="stat-icon bg-emerald-500/10 text-emerald-400 border-emerald-500/20"><i class="fas fa-comment"></i></div><div class="stat-label">Messages stored</div><div class="stat-value" id="cm-messages">—</div></div>
+                    <div class="stat-card"><div class="stat-icon bg-red-500/10 text-red-400 border-red-500/20"><i class="fas fa-flag"></i></div><div class="stat-label">Reports</div><div class="stat-value" id="cm-reports">—</div></div>
+                </div>
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    <div class="glass-card p-5">
+                        <h3 class="font-bold text-sm text-white mb-4 flex items-center gap-2"><i class="fas fa-flag text-red-400 text-xs"></i> Latest reports</h3>
+                        <div id="cm-report-list" class="space-y-2"></div>
+                    </div>
+                    <div class="glass-card p-5">
+                        <div class="flex items-center justify-between gap-3 mb-4">
+                            <h3 class="font-bold text-sm text-white flex items-center gap-2"><i class="fas fa-user-shield text-indigo-400 text-xs"></i> Members</h3>
+                            <input id="cm-user-search" class="input-field py-1.5 px-3 text-xs w-48" placeholder="Search name or email…">
+                        </div>
+                        <div id="cm-user-list" class="space-y-1 max-h-[560px] overflow-y-auto"></div>
+                    </div>
+                </div>
+            </div>
+
             <div id="tab-categories" class="tab-panel">
                 <div class="mb-6 flex items-center justify-between flex-wrap gap-3">
                     <div>

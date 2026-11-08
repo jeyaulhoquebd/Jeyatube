@@ -637,3 +637,12 @@ body.light-theme #btn-feed-sort { background: #f1f5f9 !important; color: #334155
     #top-video-grid > div, #bottom-video-grid > div { transition: none; }
     #top-video-grid > div:hover, #bottom-video-grid > div:hover { transform: none; }
 }
+
+/* Light theme: keep white text on coloured/gradient buttons and logos */
+html.light-theme .brand-logo-text, body.light-theme .brand-logo-text { color: #0f172a !important; }
+html.light-theme [class*="from-red-"].text-white, body.light-theme [class*="from-red-"].text-white,
+html.light-theme [class*="from-violet-"].text-white, body.light-theme [class*="from-violet-"].text-white,
+html.light-theme [class*="from-indigo-"].text-white, body.light-theme [class*="from-indigo-"].text-white,
+html.light-theme [class*="bg-red-6"].text-white, body.light-theme [class*="bg-red-6"].text-white,
+html.light-theme [class*="bg-blue-6"].text-white, body.light-theme [class*="bg-blue-6"].text-white,
+html.light-theme [class*="from-red-"] .text-white, body.light-theme [class*="from-red-"] .text-white { color: #ffffff !important; }

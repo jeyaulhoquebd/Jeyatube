@@ -1,91 +1,180 @@
 document.addEventListener("DOMContentLoaded", async () => {
-    const loading = document.getElementById("playlists-loading");
-    const grid = document.getElementById("playlists-grid");
-    
-    const modal = document.getElementById("playlist-modal");
-    const closeBtn = document.getElementById("close-playlist");
-    const modalName = document.getElementById("modal-playlist-name");
-    const modalChannel = document.getElementById("modal-playlist-channel");
-    const modalStats = document.getElementById("modal-playlist-stats");
-    const modalThumb = document.getElementById("modal-playlist-thumb");
-    const modalBg = document.getElementById("modal-bg-img");
-    const modalVideos = document.getElementById("modal-videos-grid");
+    const $ = id => document.getElementById(id);
+    const loading = $("playlists-loading");
+    const grid = $("playlists-grid");
+    const moreBtn = $("playlist-more");
+    const search = $("playlist-search");
+    const channelSel = $("playlist-channel");
+    const total = $("playlist-total");
 
-    closeBtn.addEventListener("click", () => modal.classList.add("hidden"));
+    const modal = $("playlist-modal");
+    const modalName = $("modal-playlist-name");
+    const modalChannel = $("modal-playlist-channel");
+    const modalStats = $("modal-playlist-stats");
+    const modalThumb = $("modal-playlist-thumb");
+    const modalBg = $("modal-bg-img");
+    const modalVideos = $("modal-videos-grid");
 
-    const playlists = await getPlaylists();
-    
+    const esc = s => escapeHtml(s);
+    const state = { page: 0, hasMore: false, server: null, items: [], current: null };
+
+    const closeModal = () => { modal.classList.add("hidden"); modal.classList.remove("flex"); document.body.style.overflow = ""; };
+    $("close-playlist").addEventListener("click", closeModal);
+    document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
+
+    function videoHref(v) {
+        const base = (v.isShort || v.isReel) ? "shorts.html" : "watch.html";
+        return `${base}?id=${encodeURIComponent(v.id)}`;
+    }
+
+    // ---------- server playlists ----------
+    async function fetchPage(reset) {
+        if (reset) { state.page = 0; state.items = []; grid.innerHTML = ""; }
+        const qs = new URLSearchParams({ page: state.page + 1, limit: 24, q: search.value.trim(), channel: channelSel.value });
+        try {
+            const res = await fetch("/api/playlists?" + qs);
+            if (!res.ok) throw new Error();
+            const data = await res.json();
+            state.server = true;
+            state.page = data.page;
+            state.hasMore = data.hasMore;
+            total.textContent = `${data.total.toLocaleString()} playlists`;
+            renderCards(data.items, state.items.length);
+            state.items.push(...data.items);
+            if (!state.items.length) grid.innerHTML = `<p class="col-span-full text-zinc-500 py-16 text-center">No playlists found${search.value ? ' for “' + esc(search.value) + '”' : ''}.</p>`;
+        } catch (e) {
+            state.server = false;
+        }
+        moreBtn.classList.toggle("hidden", !state.hasMore);
+    }
+
+    function renderCards(items) {
+        const frag = document.createDocumentFragment();
+        items.forEach(p => {
+            const card = document.createElement("button");
+            card.type = "button";
+            card.className = "text-left group";
+            card.innerHTML = `
+                <div class="relative aspect-video rounded-xl overflow-hidden mb-3 bg-zinc-800">
+                    <div class="absolute -top-1.5 inset-x-3 h-3 rounded-t-xl bg-zinc-700/70"></div>
+                    <img src="${esc(safeUrl(p.thumbnail))}" alt="" loading="lazy" class="relative w-full h-full object-cover group-hover:scale-105 transition duration-300">
+                    <div class="absolute inset-y-0 right-0 w-2/5 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center text-white">
+                        <span class="text-lg font-black">${Number(p.itemCount || 0).toLocaleString()}</span>
+                        <i class="fas fa-list-ul text-sm mt-1 text-zinc-300"></i>
+                    </div>
+                    <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                        <span class="bg-white text-black text-xs font-bold px-3 py-1.5 rounded-full"><i class="fas fa-play mr-1"></i>View playlist</span>
+                    </div>
+                </div>
+                <h3 class="font-bold text-[15px] leading-snug line-clamp-2 text-zinc-100 group-hover:text-white">${esc(p.title)}</h3>
+                <p class="text-sm text-zinc-400 mt-1 truncate">${esc(p.channel)} <i class="fas fa-circle-check text-[10px] text-zinc-500"></i></p>`;
+            card.addEventListener("click", () => openServerPlaylist(p));
+            frag.appendChild(card);
+        });
+        grid.appendChild(frag);
+    }
+
+    function fillModalHeader(name, channel, thumb, statsText) {
+        modalName.textContent = name;
+        modalChannel.textContent = channel;
+        modalStats.textContent = statsText;
+        modalThumb.src = safeUrl(thumb);
+        modalBg.style.backgroundImage = thumb ? `url("${safeUrl(thumb)}")` : "";
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+        document.body.style.overflow = "hidden";
+    }
+
+    function renderVideoList(videos) {
+        state.current = videos;
+        if (!videos.length) {
+            modalVideos.innerHTML = `<p class="text-zinc-500 text-center py-16">This playlist has no videos on JTube yet.</p>`;
+            return;
+        }
+        modalVideos.innerHTML = videos.map((v, idx) => `
+            <a href="${videoHref(v)}" class="flex gap-4 p-2 sm:p-3 hover:bg-white/10 rounded-xl transition group">
+                <div class="text-zinc-400 font-medium self-center w-6 text-center text-sm">${idx + 1}</div>
+                <div class="w-[120px] sm:w-[168px] aspect-video bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 relative">
+                    <img src="${esc(safeUrl(v.thumbnail))}" alt="" loading="lazy" class="w-full h-full object-cover">
+                    <span class="absolute bottom-1 right-1 bg-black/80 px-1.5 py-0.5 rounded text-[10px] font-semibold text-white">${(v.isShort || v.isReel) ? "Short" : esc(v.duration || "")}</span>
+                </div>
+                <div class="flex-1 min-w-0 py-1">
+                    <h4 class="font-semibold text-sm sm:text-[15px] text-zinc-100 line-clamp-2 leading-snug group-hover:text-white">${esc(v.title)}</h4>
+                    <p class="text-xs text-zinc-400 mt-1.5 truncate">${esc(v.channel)} • ${formatCompactNumber(v.views || 0)} views • ${esc(v.time || "")}</p>
+                </div>
+            </a>`).join("");
+    }
+
+    async function openServerPlaylist(p) {
+        fillModalHeader(p.title, p.channel, p.thumbnail, `${Number(p.itemCount).toLocaleString()} videos`);
+        $("pl-youtube").href = `https://www.youtube.com/playlist?list=${encodeURIComponent(p.id)}`;
+        $("pl-youtube").classList.remove("hidden");
+        modalVideos.innerHTML = `<p class="text-zinc-500 text-center py-16"><i class="fas fa-spinner fa-spin mr-2"></i>Loading videos…</p>`;
+        try {
+            const res = await fetch("/api/playlists/" + encodeURIComponent(p.id));
+            if (!res.ok) throw new Error();
+            const data = await res.json();
+            const items = sanitizeAndCurateVideos(data.items || []);
+            modalStats.textContent = `${Number(p.itemCount).toLocaleString()} videos${items.length < p.itemCount ? ` • ${items.length} public` : ""}`;
+            renderVideoList(items);
+        } catch (e) {
+            modalVideos.innerHTML = `<p class="text-zinc-500 text-center py-16">Could not load this playlist right now.</p>`;
+        }
+    }
+
+    $("pl-play-all").addEventListener("click", () => { if (state.current && state.current[0]) location.href = videoHref(state.current[0]); });
+    $("pl-shuffle").addEventListener("click", () => {
+        if (state.current && state.current.length) location.href = videoHref(state.current[Math.floor(Math.random() * state.current.length)]);
+    });
+    $("pl-share").addEventListener("click", async () => {
+        try { await navigator.clipboard.writeText($("pl-youtube").href || location.href); showToast("Link copied", "success"); } catch (e) {}
+    });
+
+    // ---------- legacy fallback (static hosting): playlists from local video fields ----------
+    async function renderLegacy() {
+        const playlists = await getPlaylists();
+        total.textContent = `${playlists.length} playlists`;
+        if (!playlists.length) { grid.innerHTML = `<p class="col-span-full text-zinc-500 py-16 text-center">No playlists available.</p>`; return; }
+        playlists.forEach(p => {
+            const card = document.createElement("button");
+            card.type = "button";
+            card.className = "text-left group";
+            card.innerHTML = `
+                <div class="relative aspect-video rounded-xl overflow-hidden mb-3 bg-zinc-800">
+                    <img src="${esc(safeUrl(p.thumbnail))}" alt="" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+                    <div class="absolute top-2 right-2 bg-black/80 px-2 py-1 rounded text-xs font-bold"><i class="fas fa-list mr-1"></i>${p.videos.length}</div>
+                </div>
+                <h3 class="font-bold text-[15px] line-clamp-2 text-zinc-100">${esc(p.name)}</h3>
+                <p class="text-sm text-zinc-400 mt-1 truncate">${esc(p.channel)}</p>`;
+            card.addEventListener("click", () => {
+                fillModalHeader(p.name, p.channel, p.thumbnail, `${p.videos.length} videos`);
+                $("pl-youtube").classList.add("hidden");
+                renderVideoList(p.videos);
+            });
+            grid.appendChild(card);
+        });
+    }
+
+    // ---------- init ----------
+    try {
+        const res = await fetch("/api/channels/featured");
+        if (res.ok) {
+            const d = await res.json();
+            (d.channels || []).map(c => c.name).sort((a, b) => a.localeCompare(b)).forEach(n => {
+                const o = document.createElement("option");
+                o.value = n; o.textContent = n;
+                channelSel.appendChild(o);
+            });
+        }
+    } catch (e) {}
+
+    await fetchPage(true);
+    if (state.server === false) await renderLegacy();
     loading.classList.add("hidden");
     grid.classList.remove("hidden");
 
-    if (playlists.length === 0) {
-        grid.innerHTML = `<p class="col-span-full text-zinc-500 py-4 text-center">No playlists available.</p>`;
-        return;
-    }
-
-    // Attach data safely to window to use in onclick without serialization issues
-    window.openPlaylist = function(index) {
-        const p = playlists[index];
-        modalName.textContent = p.name;
-        modalChannel.textContent = p.channel;
-        
-        // Find most recent timestamp for "Last updated"
-        let latestTime = 0;
-        p.videos.forEach(v => {
-            if (v.timestamp > latestTime) latestTime = v.timestamp;
-        });
-        const updatedText = latestTime > 0 ? timeAgo(latestTime) : 'recently';
-        modalStats.textContent = `${p.videos.length} videos • Last updated ${updatedText}`;
-        
-        modalThumb.src = p.thumbnail;
-        modalBg.style.backgroundImage = `url('${p.thumbnail}')`;
-        
-        modalVideos.innerHTML = "";
-        p.videos.forEach((v, idx) => {
-            modalVideos.innerHTML += `
-                <div class="flex gap-4 p-2 sm:p-3 hover:bg-white/10 rounded-xl cursor-pointer transition group" onclick="location.href='watch.html?id=${v.id}'">
-                    <div class="text-zinc-400 font-medium self-center w-4 sm:w-6 text-center text-xs sm:text-sm group-hover:hidden">${idx + 1}</div>
-                    <div class="text-white font-medium self-center w-4 sm:w-6 text-center text-xs sm:text-sm hidden group-hover:block"><i class="fas fa-play text-[10px]"></i></div>
-                    
-                    <div class="w-[120px] sm:w-[160px] aspect-video bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 relative">
-                        <img src="${v.thumbnail}" class="w-full h-full object-cover">
-                        <span class="absolute bottom-1 right-1 bg-black/80 px-1.5 py-0.5 rounded text-[10px] font-semibold text-white">${v.duration}</span>
-                    </div>
-                    <div class="flex-1 min-w-0 pr-2 sm:pr-4 py-1">
-                        <h4 class="font-semibold text-sm sm:text-base text-zinc-100 line-clamp-2 leading-tight group-hover:text-white">${v.title}</h4>
-                        <div class="flex flex-col sm:flex-row sm:items-center sm:space-x-1 mt-1 sm:mt-1.5 text-xs text-zinc-400">
-                            <p class="truncate hover:text-zinc-300">${v.channel}</p>
-                            <span class="hidden sm:inline">•</span>
-                            <p>${formatCompactNumber(v.views)} views</p>
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
-        modal.classList.remove("hidden");
-    };
-
-    playlists.forEach((p, index) => {
-        grid.innerHTML += `
-            <div class="cursor-pointer group relative" onclick="openPlaylist(${index})">
-                <div class="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-3">
-                    <img src="${p.thumbnail}" alt="${p.name}" class="w-full h-full object-cover group-hover:scale-105 transition duration-200 opacity-60">
-                    <div class="absolute inset-0 flex items-center justify-center">
-                        <i class="fas fa-play text-4xl text-white opacity-80 group-hover:opacity-100 group-hover:scale-110 transition drop-shadow-md"></i>
-                    </div>
-                    <div class="absolute top-2 right-2 bg-black/80 px-2 py-1 rounded text-xs font-bold flex items-center space-x-1">
-                        <i class="fas fa-list"></i>
-                        <span>${p.videos.length}</span>
-                    </div>
-                </div>
-                <div>
-                    <h3 class="font-bold text-base line-clamp-1 text-zinc-100 group-hover:text-white">${p.name}</h3>
-                    <div class="flex items-center space-x-1 mt-0.5">
-                        <p class="text-sm text-zinc-400 truncate">${p.channel}</p>
-                        <img src="img/icons.svg" class="w-3.5 h-3.5 flex-shrink-0" alt="Verified" title="Verified">
-                    </div>
-                </div>
-            </div>
-        `;
-    });
+    moreBtn.addEventListener("click", () => fetchPage(false));
+    let t = null;
+    search.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => state.server && fetchPage(true), 300); });
+    channelSel.addEventListener("change", () => state.server && fetchPage(true));
 });

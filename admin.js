@@ -46,6 +46,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         loadAdminUsers();
         if (typeof loadDailySyncHub === 'function') loadDailySyncHub();
         if (typeof initAISuite === 'function') initAISuite();
+        setTimeout(() => { if (typeof loadCommunityAdmin === 'function') loadCommunityAdmin(); }, 500);
     }
 
     function lockStudio(message) {
@@ -2363,6 +2364,63 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    // ===== COMMUNITY MODERATION =====
+    let communityData = null;
+    async function loadCommunityAdmin() {
+        try {
+            const res = await fetch('/api/admin/community');
+            if (!res.ok) return;
+            communityData = await res.json();
+        } catch (e) { return; }
+        const d = communityData;
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+        set('cm-users', d.users.length.toLocaleString());
+        set('cm-messages', d.messages.toLocaleString());
+        set('cm-reports', d.reports.length.toLocaleString());
+        const badge = document.getElementById('sidebar-report-badge');
+        if (badge) { badge.textContent = d.reports.length; badge.classList.toggle('hidden', d.reports.length === 0); }
+        const rl = document.getElementById('cm-report-list');
+        if (rl) rl.innerHTML = d.reports.length ? d.reports.slice(0, 50).map(r => `
+            <div class="p-3 rounded-xl bg-zinc-900/70 border border-zinc-800">
+                <div class="flex items-center justify-between gap-2 text-[11px] text-zinc-500">
+                    <span><b class="text-zinc-300">${escapeHtml(r.authorName)}</b> · ${new Date(r.ts).toLocaleString()}</span>
+                    <button class="btn-icon btn-icon-danger cm-ban" data-uid="${escapeHtml(r.author)}" data-ban="1" title="Suspend author"><i class="fas fa-ban"></i></button>
+                </div>
+                <p class="text-sm text-zinc-200 mt-1.5 break-words">${escapeHtml(r.text)}</p>
+                ${r.reason ? `<p class="text-[11px] text-amber-300/80 mt-1"><i class="far fa-flag mr-1"></i>${escapeHtml(r.reason)}</p>` : ''}
+            </div>`).join('') : '<p class="text-xs text-zinc-500 py-6 text-center">No reports — the community is behaving. 🎉</p>';
+        renderCommunityUsers();
+    }
+    function renderCommunityUsers() {
+        const ul = document.getElementById('cm-user-list');
+        if (!ul || !communityData) return;
+        const q = (document.getElementById('cm-user-search')?.value || '').toLowerCase();
+        const users = communityData.users.filter(u => !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q))
+            .sort((a, b) => b.createdAt - a.createdAt);
+        ul.innerHTML = users.length ? users.map(u => `
+            <div class="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-zinc-800/40">
+                <div class="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-xs font-black text-zinc-300">${escapeHtml((u.name || '?')[0].toUpperCase())}</div>
+                <div class="min-w-0 flex-1">
+                    <div class="text-sm font-semibold text-white truncate">${escapeHtml(u.name)} ${u.banned ? '<span class="pill pill-amber ml-1">Suspended</span>' : ''}</div>
+                    <div class="text-[11px] text-zinc-500 truncate">${escapeHtml(u.email)} · joined ${new Date(u.createdAt).toLocaleDateString()}</div>
+                </div>
+                <button class="btn-ghost text-[11px] font-bold px-2.5 py-1.5 cm-ban" data-uid="${escapeHtml(u.id)}" data-ban="${u.banned ? 0 : 1}">${u.banned ? 'Restore' : 'Suspend'}</button>
+            </div>`).join('') : '<p class="text-xs text-zinc-500 py-6 text-center">No members yet.</p>';
+    }
+    document.getElementById('cm-user-search')?.addEventListener('input', renderCommunityUsers);
+    document.getElementById('btn-refresh-community')?.addEventListener('click', loadCommunityAdmin);
+    document.getElementById('tab-community')?.addEventListener('click', async e => {
+        const b = e.target.closest('.cm-ban');
+        if (!b) return;
+        const ban = b.dataset.ban === '1';
+        if (ban && !confirm('Suspend this member? Their messages will be hidden and they can no longer post.')) return;
+        try {
+            const res = await fetch('/api/admin/community/ban', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid: b.dataset.uid, banned: ban }) });
+            if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed');
+            loadCommunityAdmin();
+        } catch (err) { alert(err.message); }
+    });
+
     // Mobile drawer for the studio sidebar
     const studioSidebar = document.getElementById('studio-sidebar');
     const studioBackdrop = document.getElementById('studio-sidebar-backdrop');
@@ -2378,6 +2436,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         btn.addEventListener('click', () => {
             setDrawer(false);
             if (!window.JTUBE_ADMIN_SESSION) return;
+            if (btn.dataset.tab === 'community') loadCommunityAdmin();
             if (btn.dataset.tab === 'daily-sync') {
                 loadDailySyncHub();
             } else if (btn.dataset.tab === 'ai-system') {

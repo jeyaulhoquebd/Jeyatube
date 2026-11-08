@@ -988,8 +988,8 @@ if (auth && typeof auth.onAuthStateChanged === 'function') {
         if (user) {
             currentUser = user;
             if (typeof window !== 'undefined') window.currentUser = user;
-            saveToStorage('current_user', { uid: user.uid, email: user.email, displayName: user.displayName });
-            document.dispatchEvent(new CustomEvent('authStateChanged', { detail: user }));
+            saveToStorage('current_user', { uid: user.uid, email: user.email, displayName: user.displayName, server: Boolean(user.server) });
+            // (Do not re-dispatch 'authStateChanged' here: this listener is itself driven by that event.)
         }
     });
 }
@@ -1050,12 +1050,59 @@ async function authenticateLocally(email, password) {
     throw err;
 }
 
+// ===== SERVER ACCOUNTS =====
+// When the JTube server is available, accounts live on the server (secure, shared across devices)
+// and the session is an HttpOnly cookie. Browser-only accounts are kept as an offline fallback.
+async function serverAuth(path, body) {
+    try {
+        const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+        if (res.status === 404 || res.status === 405) return { unavailable: true };
+        const data = await res.json().catch(() => ({}));
+        return { ok: res.ok, status: res.status, data };
+    } catch (e) {
+        return { unavailable: true };
+    }
+}
+
+function setSignedInUser(u) {
+    currentUser = { uid: u.id || u.uid, email: u.email, displayName: u.name || u.displayName || (u.email || '').split('@')[0], server: Boolean(u.id) };
+    saveToStorage('current_user', currentUser);
+    if (typeof window !== 'undefined') window.currentUser = currentUser;
+    document.dispatchEvent(new CustomEvent('authStateChanged', { detail: currentUser }));
+    return currentUser;
+}
+
+function authError(message, code) {
+    const err = new Error(message || 'Sign-in failed.');
+    err.code = code || 'auth/error';
+    return err;
+}
+
 async function loginWithEmail(email, password) {
-    return authenticateLocally(email, password);
+    const r = await serverAuth('/api/auth/login', { email, password });
+    if (r.unavailable) return authenticateLocally(email, password);
+    if (r.ok) return { user: setSignedInUser(r.data.user) };
+    if (r.status === 401) {
+        // Old browser-only account? Verify it locally, then move it to the server.
+        try {
+            await authenticateLocally(email, password);
+            const users = loadFromStorage('app_users', {});
+            const local = users[String(email).toLowerCase().trim()] || {};
+            const reg = await serverAuth('/api/auth/register', { name: local.displayName || local.name || String(email).split('@')[0], email, password });
+            if (reg.ok) return { user: setSignedInUser(reg.data.user) };
+            return { user: currentUser };
+        } catch (e) { /* fall through */ }
+    }
+    throw authError(r.data && r.data.error, r.data && r.data.code || 'auth/wrong-password');
 }
 
 async function registerWithEmail(email, password, name) {
-    // Local registration fallback
+    const r = await serverAuth('/api/auth/register', { name, email, password });
+    if (!r.unavailable) {
+        if (r.ok) return setSignedInUser(r.data.user);
+        throw authError(r.data && r.data.error, r.data && r.data.code);
+    }
+    // Offline fallback: browser-only account
     const users = loadFromStorage('app_users', {});
     if (users[email.toLowerCase()]) {
         const err = new Error("Email already registered.");
@@ -1100,6 +1147,7 @@ async function loginWithGoogle() {
 }
 
 async function logoutUser() {
+    serverAuth('/api/auth/logout', {});
     currentUser = null;
     if (typeof window !== 'undefined') window.currentUser = null;
     try {
@@ -2906,6 +2954,25 @@ async function toggleSubscription(channelName, userEmail) {
         console.error("toggleSubscription error:", err);
         return false;
     }
+}
+
+// Keep the page's signed-in state in step with the server session cookie
+if (typeof window !== 'undefined' && typeof fetch === 'function') {
+    fetch('/api/auth/me', { headers: { Accept: 'application/json' } })
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => {
+            if (!d) return;
+            if (d.authenticated && d.user) {
+                if (!currentUser || currentUser.uid !== d.user.id) setSignedInUser(d.user);
+            } else if (currentUser && currentUser.server) {
+                // Server session expired: sign out locally too
+                currentUser = null;
+                window.currentUser = null;
+                try { localStorage.removeItem('jtube_current_user'); } catch (e) {}
+                document.dispatchEvent(new CustomEvent('authStateChanged', { detail: null }));
+            }
+        })
+        .catch(() => {});
 }
 
 // Global Browser Exports
