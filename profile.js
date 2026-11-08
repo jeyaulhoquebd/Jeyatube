@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", async () => {
     // ===== PUBLIC PROFILE VIEW =====
     const urlParams = new URLSearchParams(window.location.search);
-    const publicUserParam = urlParams.get('user');
+    const publicUserParam = safeText(urlParams.get('user') || '');
 
     if (publicUserParam) {
         // Show public profile for another user

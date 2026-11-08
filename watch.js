@@ -1,6 +1,6 @@
 document.addEventListener("DOMContentLoaded", async () => {
     const urlParams = new URLSearchParams(window.location.search);
-    const videoId = urlParams.get('id');
+    const videoId = (urlParams.get('id') || '').replace(/[^\w-]/g, '');
     const timeParam = urlParams.get('t') || urlParams.get('time');
     const initialSeekTime = timeParam ? Math.max(0, parseInt(timeParam, 10)) : 0;
 
@@ -823,15 +823,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         video.comments.forEach((comment, idx) => {
-            const avatarLetter = comment.username ? comment.username[0].toUpperCase() : 'U';
+            const avatarLetter = escapeHtml(comment.username ? comment.username[0].toUpperCase() : 'U');
             const profileLink = `profile.html?user=${encodeURIComponent(comment.email || comment.username)}`;
             const repliesHtml = (comment.replies && comment.replies.length > 0)
                 ? comment.replies.map(r => `
                     <div class="flex gap-2 items-start text-sm mt-3 ml-1">
-                        <a href="${`profile.html?user=${encodeURIComponent(r.email || r.username)}`}" onclick="event.stopPropagation()" class="bg-gradient-to-br from-blue-600 to-purple-700 w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] flex-shrink-0 cursor-pointer hover:opacity-80 transition" title="View profile">${r.username ? r.username[0].toUpperCase() : 'U'}</a>
+                        <a href="${`profile.html?user=${encodeURIComponent(r.email || r.username)}`}" onclick="event.stopPropagation()" class="bg-gradient-to-br from-blue-600 to-purple-700 w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] flex-shrink-0 cursor-pointer hover:opacity-80 transition" title="View profile">${escapeHtml(r.username ? r.username[0].toUpperCase() : 'U')}</a>
                         <div class="bg-zinc-800/60 rounded-xl px-3 py-2 flex-1">
-                            <p class="font-semibold text-zinc-300 text-xs">${r.username}</p>
-                            <p class="text-zinc-100 mt-0.5 text-sm">${r.text}</p>
+                            <p class="font-semibold text-zinc-300 text-xs">${escapeHtml(r.username)}</p>
+                            <p class="text-zinc-100 mt-0.5 text-sm">${escapeHtml(r.text)}</p>
                         </div>
                     </div>`).join('')
                 : '';
@@ -841,21 +841,21 @@ document.addEventListener("DOMContentLoaded", async () => {
             commentEl.dataset.idx = idx;
             commentEl.innerHTML = `
                 <div class="flex gap-3 items-start text-sm">
-                    <a href="${profileLink}" onclick="event.stopPropagation()" class="bg-gradient-to-br from-purple-600 to-red-600 w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 cursor-pointer hover:opacity-80 transition" title="View ${comment.username}'s profile">${avatarLetter}</a>
+                    <a href="${profileLink}" onclick="event.stopPropagation()" class="bg-gradient-to-br from-purple-600 to-red-600 w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 cursor-pointer hover:opacity-80 transition" title="View ${escapeHtml(comment.username)}'s profile">${avatarLetter}</a>
                     <div class="flex-1">
                         <div class="bg-zinc-800/50 rounded-xl px-3 py-2">
-                            <a href="${profileLink}" class="font-semibold text-zinc-200 text-xs hover:text-white transition cursor-pointer">${comment.username}</a>
-                            <p class="text-zinc-100 mt-0.5">${comment.text}</p>
+                            <a href="${profileLink}" class="font-semibold text-zinc-200 text-xs hover:text-white transition cursor-pointer">${escapeHtml(comment.username)}</a>
+                            <p class="text-zinc-100 mt-0.5">${escapeHtml(comment.text)}</p>
                         </div>
                         <div class="flex items-center gap-4 mt-1.5 px-1">
-                            <span class="text-[11px] text-zinc-500">${comment.time || 'Just now'}</span>
+                            <span class="text-[11px] text-zinc-500">${escapeHtml(comment.time || 'Just now')}</span>
                             <button class="reply-btn text-[11px] text-zinc-400 hover:text-red-400 font-semibold transition flex items-center gap-1" data-idx="${idx}">
                                 <i class="fas fa-reply text-[9px]"></i> Reply
                             </button>
                         </div>
                         <!-- Reply input (hidden by default) -->
                         <div class="reply-form hidden mt-3 flex gap-2 items-start">
-                            <div class="bg-purple-600 w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] flex-shrink-0 text-white">${currentUser ? (currentUser.displayName || 'U')[0].toUpperCase() : 'U'}</div>
+                            <div class="bg-purple-600 w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] flex-shrink-0 text-white">${escapeHtml(currentUser ? (currentUser.displayName || 'U')[0].toUpperCase() : 'U')}</div>
                             <div class="flex-1">
                                 <input type="text" placeholder="Add a reply..." class="reply-input w-full bg-transparent border-b border-zinc-600 focus:border-white focus:outline-none py-1 text-xs text-white">
                                 <div class="flex justify-end space-x-2 mt-1.5">
@@ -1030,9 +1030,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Format AI response text (markdown-like to HTML)
     function formatAIResponse(text) {
-        let html = text;
+        // Escape first: the AI's answer may echo untrusted text (titles, user input)
+        let html = escapeHtml(text || '');
         // Convert JTube video links: [Title](watch.html?id=xxx) -> clickable cards
-        html = html.replace(/\[([^\]]+)\]\(watch\.html\?id=([^)]+)\)/g, (match, title, id) => {
+        html = html.replace(/\[([^\]]+)\]\(watch\.html\?id=([\w-]+)\)/g, (match, title, id) => {
             const linkedVideo = allJAskVideos.find(v => v.id === id);
             if (linkedVideo) {
                 return `<a href="watch.html?id=${id}" class="jask-video-card flex items-center gap-2 p-2 my-1 bg-zinc-800/80 hover:bg-zinc-700/80 rounded-xl border border-zinc-700/50 hover:border-violet-500/30 transition-all group/link no-underline block">
@@ -1129,7 +1130,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         jaskInput.value = '';
 
         // Show user message
-        addJAskMessage(userMsg, true);
+        addJAskMessage(escapeHtml(userMsg), true);
 
         // Show typing...
         showTypingIndicator();

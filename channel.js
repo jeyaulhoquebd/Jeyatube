@@ -1,6 +1,6 @@
 document.addEventListener("DOMContentLoaded", async () => {
     const urlParams = new URLSearchParams(window.location.search);
-    const channelNameParam = urlParams.get('name');
+    const channelNameParam = safeText(urlParams.get('name') || '');
 
     if (!channelNameParam) {
         document.body.innerHTML = `<div class="text-center py-20"><h1 class="text-2xl">Channel not found.</h1><a href="index.html" class="text-blue-500 mt-4 block">Return Home</a></div>`;
@@ -107,10 +107,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     channelSubs.textContent = `${formatCompactNumber(currentChannelData.subscribers)} subscribers`;
     
     if (currentChannelData.coverUrl) {
-        channelCover.innerHTML = `<img src="${currentChannelData.coverUrl}" class="w-full h-full object-cover" loading="lazy" alt="Channel cover">`;
+        channelCover.innerHTML = `<img src="${safeUrl(currentChannelData.coverUrl)}" class="w-full h-full object-cover" loading="lazy" alt="Channel cover">`;
     }
     if (currentChannelData.avatarUrl) {
-        channelAvatar.innerHTML = `<img src="${currentChannelData.avatarUrl}" class="w-full h-full object-cover" loading="lazy" alt="${channelNameParam}">`;
+        channelAvatar.innerHTML = `<img src="${safeUrl(currentChannelData.avatarUrl)}" class="w-full h-full object-cover" loading="lazy" alt="${channelNameParam}">`;
     } else {
         channelAvatar.innerHTML = `<div class="w-full h-full flex items-center justify-center bg-purple-600 text-3xl font-bold">${channelNameParam[0]}</div>`;
     }
@@ -125,8 +125,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         linksArray.forEach(linkStr => {
             const parts = linkStr.split("|");
             if (parts.length === 2) {
-                channelLinks.innerHTML += `<a href="${parts[1].trim()}" target="_blank" class="bg-zinc-800 text-blue-400 hover:text-blue-300 font-semibold text-xs px-3 py-1.5 rounded-full inline-flex items-center space-x-1.5 border border-zinc-700 transition">
-                    <i class="fas fa-link"></i> <span>${parts[0].trim()}</span>
+                const href = safeUrl(parts[1].trim());
+                if (!/^https:\/\//.test(href)) return;
+                channelLinks.innerHTML += `<a href="${href}" target="_blank" rel="noopener" class="bg-zinc-800 text-blue-400 hover:text-blue-300 font-semibold text-xs px-3 py-1.5 rounded-full inline-flex items-center space-x-1.5 border border-zinc-700 transition">
+                    <i class="fas fa-link"></i> <span>${escapeHtml(parts[0].trim())}</span>
                 </a>`;
             }
         });
@@ -165,15 +167,67 @@ document.addEventListener("DOMContentLoaded", async () => {
     let currentChannelVideos = [];
 
     // ===== VIDEOS TAB =====
+    const channelFeed = { page: 1, hasMore: false, total: 0, loading: false, type: 'all' };
+
     async function renderChannelVideosTab() {
-        const videos = await getVideosByChannel(channelNameParam);
+        // The server holds every upload of this channel; page through it
+        const first = typeof fetchCatalogPage === 'function'
+            ? await fetchCatalogPage({ channel: channelNameParam, type: channelFeed.type, limit: 48, page: 1 })
+            : null;
+        const videos = first ? sanitizeAndCurateVideos(first.items) : await getVideosByChannel(channelNameParam);
+        channelFeed.page = 1;
+        channelFeed.total = first ? first.total : videos.length;
+        channelFeed.hasMore = first ? first.hasMore : false;
         currentChannelVideos = videos;
-        channelVideoCount.textContent = `${videos.length} video${videos.length !== 1 ? 's' : ''}`;
+        channelVideoCount.textContent = `${channelFeed.total.toLocaleString()} video${channelFeed.total !== 1 ? 's' : ''}`;
 
         if (videos.length === 0) {
             channelVideos.innerHTML = `<p class="col-span-full text-zinc-500 py-4">No videos found for this channel.</p>`;
         } else {
             channelVideos.innerHTML = "";
+            appendChannelCards(videos);
+        }
+        renderChannelLoadMore();
+        return videos;
+    }
+
+    function renderChannelLoadMore() {
+        let wrap = document.getElementById('channel-load-more');
+        if (!wrap) {
+            wrap = document.createElement('div');
+            wrap.id = 'channel-load-more';
+            wrap.className = 'flex justify-center py-8';
+            channelVideos.insertAdjacentElement('afterend', wrap);
+        }
+        if (!channelFeed.hasMore) { wrap.innerHTML = ''; return; }
+        wrap.innerHTML = `<button type="button" class="px-6 py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-sm font-semibold border border-white/10 transition flex items-center gap-2"><i class="fas fa-plus text-xs"></i> Load more <span class="text-zinc-400 font-normal">(${(channelFeed.total - currentChannelVideos.length).toLocaleString()} left)</span></button>`;
+        wrap.querySelector('button').onclick = loadMoreChannelVideos;
+        if ('IntersectionObserver' in window && !wrap.dataset.observed) {
+            wrap.dataset.observed = '1';
+            new IntersectionObserver(entries => {
+                if (entries.some(e => e.isIntersecting) && channelFeed.hasMore) loadMoreChannelVideos();
+            }, { rootMargin: '600px' }).observe(wrap);
+        }
+    }
+
+    async function loadMoreChannelVideos() {
+        if (channelFeed.loading || !channelFeed.hasMore) return;
+        channelFeed.loading = true;
+        try {
+            const res = await fetchCatalogPage({ channel: channelNameParam, type: channelFeed.type, limit: 48, page: channelFeed.page + 1 });
+            if (!res) { channelFeed.hasMore = false; return; }
+            channelFeed.page = res.page;
+            channelFeed.hasMore = res.hasMore;
+            const more = sanitizeAndCurateVideos(res.items);
+            currentChannelVideos.push(...more);
+            appendChannelCards(more);
+        } finally {
+            channelFeed.loading = false;
+            renderChannelLoadMore();
+        }
+    }
+
+    function appendChannelCards(videos) {
             const fragment = document.createDocumentFragment();
             videos.forEach(video => {
                 const ytId = getYoutubeId(video.videoUrl);
@@ -182,7 +236,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
                 const card = document.createElement('div');
                 card.className = "cursor-pointer group relative video-card-custom bg-[#12151c] border border-white/[0.08] hover:border-white/[0.18] rounded-2xl pb-3.5 h-full flex flex-col overflow-hidden transition-all duration-200";
-                card.onclick = () => location.href = isShort ? `shorts.html?id=${video.id}` : `watch.html?id=${video.id}`;
+                card.onclick = () => location.href = isShort ? `shorts.html?id=${encodeURIComponent(video.id)}` : `watch.html?id=${encodeURIComponent(video.id)}`;
 
                 const durationBadge = isShort
                     ? `<span class="absolute bottom-2 right-2 px-2 py-0.5 rounded text-xs font-bold z-30 bg-red-600 text-white flex items-center gap-1 shadow"><i class="fas fa-bolt text-[9px]"></i> Shorts • ${video.duration}</span>`
@@ -253,8 +307,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 fragment.appendChild(card);
             });
             channelVideos.appendChild(fragment);
-        }
-        return videos;
     }
 
     // ===== PLAYLISTS TAB (YouTube-style) =====

@@ -383,17 +383,37 @@ document.addEventListener("DOMContentLoaded", async () => {
         return card;
     }
 
-    // Dynamic Feed Looping & Rotating Cycle State
-    let feedReloadCycle = parseInt(sessionStorage.getItem('jtube_feed_cycle_offset') || '0', 10);
-    feedReloadCycle = (feedReloadCycle + 1) % 1000;
-    sessionStorage.setItem('jtube_feed_cycle_offset', String(feedReloadCycle));
+    // Feed order is newest-first (no artificial looping/rotation)
+    function applyDynamicLoopRotation(list) { return Array.isArray(list) ? list : []; }
 
-    function applyDynamicLoopRotation(list) {
-        if (!Array.isArray(list) || list.length <= 1) return list;
-        const step = 4;
-        const offset = (feedReloadCycle * step) % list.length;
-        if (offset === 0) return [...list];
-        return [...list.slice(offset), ...list.slice(0, offset)];
+    // ===== SERVER-BACKED FEED (pages through the full library) =====
+    const serverFeed = { active: false, params: null, page: 0, hasMore: false, loading: false, total: 0, sort: 'latest' };
+    try { serverFeed.sort = localStorage.getItem('jtube_feed_sort') || 'latest'; } catch (e) {}
+
+    function feedParamsFor(filterCategory) {
+        if (filterCategory === 'all') return { type: 'all' };
+        if (filterCategory === 'shorts') return { type: 'short' };
+        if (filterCategory === 'videos_only') return { type: 'video' };
+        if (filterCategory === 'history' || filterCategory === 'playlists') return null;
+        return { type: 'all', category: filterCategory };
+    }
+
+    async function loadNextServerPage() {
+        if (serverFeed.loading || !serverFeed.hasMore) return [];
+        serverFeed.loading = true;
+        try {
+            const res = await fetchCatalogPage({ ...serverFeed.params, sort: serverFeed.sort, page: serverFeed.page + 1, limit: 30 });
+            if (!res) { serverFeed.hasMore = false; return []; }
+            serverFeed.page = res.page;
+            serverFeed.hasMore = res.hasMore;
+            serverFeed.total = res.total;
+            const seen = new Set(activeVideosPool.map(v => v.id));
+            const fresh = sanitizeAndCurateVideos(res.items).filter(v => !seen.has(v.id));
+            activeVideosPool.push(...fresh);
+            return fresh;
+        } finally {
+            serverFeed.loading = false;
+        }
     }
 
     function createFeedCard(item, channelsMap) {
@@ -404,14 +424,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // Append next progressive batch to ensure zero lag and continuous loop
-    function appendNextBatch() {
-        if (!activeVideosPool || activeVideosPool.length === 0) return;
-
-        const poolLength = activeVideosPool.length;
-        const nextSlice = [];
-        for (let i = 0; i < CHUNK_SIZE; i++) {
-            const indexInPool = (currentRenderIndex + i) % poolLength;
-            nextSlice.push(activeVideosPool[indexInPool]);
+    async function appendNextBatch() {
+        if (!activeVideosPool) return;
+        if (serverFeed.active && currentRenderIndex + CHUNK_SIZE > activeVideosPool.length && serverFeed.hasMore) {
+            await loadNextServerPage();
+        }
+        const nextSlice = activeVideosPool.slice(currentRenderIndex, currentRenderIndex + CHUNK_SIZE);
+        const notice = document.getElementById("all-loaded-notice");
+        const loadBtn = document.getElementById("load-more-btn");
+        if (nextSlice.length === 0) {
+            if (loadBtn) loadBtn.classList.add("hidden");
+            if (notice && activeVideosPool.length > 0) notice.classList.remove("hidden");
+            updateStatsBanner(currentRenderIndex, serverFeed.active ? serverFeed.total : activeVideosPool.length);
+            return;
         }
         currentRenderIndex += nextSlice.length;
 
@@ -455,50 +480,38 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (bottomVideoGrid) bottomVideoGrid.appendChild(fragment);
         }
 
-        updateStatsBanner(currentRenderIndex, activeVideosPool.length);
+        const totalAvailable = serverFeed.active ? serverFeed.total : activeVideosPool.length;
+        updateStatsBanner(currentRenderIndex, totalAvailable);
 
-        const loadBtn = document.getElementById("load-more-btn");
-        const notice = document.getElementById("all-loaded-notice");
+        const moreLeft = currentRenderIndex < activeVideosPool.length || (serverFeed.active && serverFeed.hasMore);
         if (loadBtn) {
-            loadBtn.classList.remove("hidden");
-            const loopPass = Math.floor(currentRenderIndex / poolLength);
-            loadBtn.innerHTML = loopPass > 0 
-                ? `<i class="fas fa-arrows-rotate text-xs animate-spin"></i> <span>Cycling Continuously (Loop Cycle ${loopPass + 1})</span>`
-                : `<i class="fas fa-arrows-rotate text-xs"></i> <span>Cycle More Videos</span>`;
+            loadBtn.classList.toggle("hidden", !moreLeft);
+            loadBtn.innerHTML = `<i class="fas fa-plus text-xs"></i> <span>Load more</span>`;
         }
-        if (notice) notice.classList.add("hidden");
+        if (notice) notice.classList.toggle("hidden", moreLeft);
     }
 
     function updateStatsBanner(renderedCount, totalCount) {
         const counterEl = document.getElementById("content-counter-text");
         const modeBadge = document.getElementById("viewing-mode-badge");
         if (!counterEl) return;
-
-        const reelsCount = activeVideosPool.filter(v => isShortVideo(v)).length;
-        const videosCount = totalCount - reelsCount;
-
-        if (totalCount === 0) {
-            counterEl.innerHTML = `No items found`;
+        if (!totalCount) {
+            counterEl.textContent = "No items found";
             return;
         }
-
-        const loopCount = Math.floor(renderedCount / Math.max(1, totalCount));
-        const loopBadge = loopCount > 0 
-            ? ` <span class="text-amber-400 font-semibold">• Loop ${loopCount + 1}</span>` 
-            : ``;
-
-        counterEl.innerHTML = `Showing <span class="font-bold text-white">${renderedCount.toLocaleString()}</span> cycled <span class="text-zinc-400 font-normal">(${videosCount.toLocaleString()} Videos • ${reelsCount.toLocaleString()} Reels)</span>${loopBadge}`;
+        const stats = (window.JTubeServer && window.JTubeServer.stats) || null;
+        const shown = Math.min(renderedCount, totalCount);
+        counterEl.innerHTML = `Showing <span class="font-bold text-white">${shown.toLocaleString()}</span> of <span class="font-bold text-white">${totalCount.toLocaleString()}</span>` +
+            (stats && currentCategory === "all" ? ` <span class="text-zinc-400 font-normal hidden md:inline">(${stats.videos.toLocaleString()} videos • ${stats.shorts.toLocaleString()} shorts)</span>` : "");
 
         if (modeBadge) {
-            if (currentCategory === "all") {
-                modeBadge.innerHTML = `<i class="fas fa-layer-group text-[10px] text-emerald-400"></i> All Videos &amp; Reels Viewable Together (${totalCount.toLocaleString()})`;
-            } else if (currentCategory === "shorts") {
-                modeBadge.innerHTML = `<i class="fas fa-bolt text-[10px] text-pink-400"></i> Reels &amp; Shorts Only (${reelsCount.toLocaleString()})`;
-            } else if (currentCategory === "videos_only") {
-                modeBadge.innerHTML = `<i class="fas fa-film text-[10px] text-blue-400"></i> Standard Videos Only (${videosCount.toLocaleString()})`;
-            } else {
-                modeBadge.innerHTML = `<i class="fas fa-filter text-[10px] text-amber-400"></i> Category: ${currentCategory} (${totalCount.toLocaleString()})`;
-            }
+            const label = currentCategory === "all" ? "All videos & shorts"
+                : currentCategory === "shorts" ? "Shorts only"
+                : currentCategory === "videos_only" ? "Videos only"
+                : currentCategory === "history" ? "Watch history"
+                : currentCategory === "playlists" ? "Playlists"
+                : currentCategory;
+            modeBadge.innerHTML = `<i class="fas fa-layer-group text-[10px]"></i> ${escapeHtml(label)}`;
         }
     }
 
@@ -511,20 +524,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         const loadBtn = document.getElementById("load-more-btn");
 
         if (loadBtn) {
-            loadBtn.onclick = () => {
-                appendNextBatch();
-            };
+            loadBtn.onclick = () => { appendNextBatch(); };
         }
 
         if (sentinel && 'IntersectionObserver' in window) {
             infiniteScrollObserver = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
-                    if (entry.isIntersecting && activeVideosPool && activeVideosPool.length > 0) {
+                    if (entry.isIntersecting && activeVideosPool && activeVideosPool.length > 0 && !serverFeed.loading) {
+                        const moreLeft = currentRenderIndex < activeVideosPool.length || (serverFeed.active && serverFeed.hasMore);
+                        if (!moreLeft) return;
                         if (spinner) spinner.classList.remove("hidden");
-                        setTimeout(() => {
-                            appendNextBatch();
-                            if (spinner) spinner.classList.add("hidden");
-                        }, 120);
+                        appendNextBatch().finally(() => { if (spinner) spinner.classList.add("hidden"); });
                     }
                 });
             }, { rootMargin: '400px' });
@@ -533,18 +543,33 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // Render Videos Grid: Ensures ALL videos and Reels in Cloud Firestore are viewable together
+    let renderToken = 0;
     async function renderVideos(filterCategory = "all") {
         currentCategory = filterCategory;
-        
-        // Fetch full library from Cloud Firestore and channel directory
+        const myToken = ++renderToken;
+
+        // Preferred: page through the complete server library
+        const params = feedParamsFor(filterCategory);
+        let serverFirst = null;
+        if (params && typeof fetchCatalogPage === 'function') {
+            serverFirst = await fetchCatalogPage({ ...params, sort: serverFeed.sort, page: 1, limit: 30 });
+        }
         const [videosData, channelsMap] = await Promise.all([
-            filterCategory === "history" ? getHistory() : getVideos(),
+            serverFirst ? Promise.resolve(null) : (filterCategory === "history" ? getHistory() : getVideos()),
             getChannels()
         ]);
+        if (myToken !== renderToken) return;
         cachedChannelsMap = channelsMap || {};
 
+        serverFeed.active = Boolean(serverFirst);
         let videosToRender = [];
-        if (filterCategory === "history") {
+        if (serverFirst) {
+            serverFeed.params = params;
+            serverFeed.page = serverFirst.page;
+            serverFeed.hasMore = serverFirst.hasMore;
+            serverFeed.total = serverFirst.total;
+            videosToRender = sanitizeAndCurateVideos(serverFirst.items);
+        } else if (filterCategory === "history") {
             videosToRender = videosData || [];
         } else if (filterCategory === "playlists") {
             videosToRender = (videosData || []).filter(v => v.playlist && v.playlist.trim() !== "");
@@ -634,7 +659,31 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // Auto-update feed when new videos or reels are saved into Cloud Firestore
+    // New uploads arrive from the server every minute: refresh the feed if the viewer is at the top
+    document.addEventListener('jtube:newUploads', () => {
+        if (serverFeed.active && window.scrollY < 400 && !document.getElementById('search-results-section')?.offsetParent) {
+            renderVideos(currentCategory);
+        }
+    });
+
+    // Sort toggle (Latest / Most viewed)
+    const sortBtn = document.getElementById('btn-feed-sort');
+    const paintSort = () => {
+        if (!sortBtn) return;
+        sortBtn.innerHTML = serverFeed.sort === 'popular'
+            ? '<i class="fas fa-fire text-[10px] text-amber-400"></i><span>Most viewed</span>'
+            : '<i class="fas fa-clock text-[10px] text-red-400"></i><span>Latest</span>';
+    };
+    paintSort();
+    sortBtn?.addEventListener('click', () => {
+        serverFeed.sort = serverFeed.sort === 'popular' ? 'latest' : 'popular';
+        try { localStorage.setItem('jtube_feed_sort', serverFeed.sort); } catch (e) {}
+        paintSort();
+        renderVideos(currentCategory);
+    });
+
     document.addEventListener('jtube:videosUpdated', async (e) => {
+        if (serverFeed.active) return; // server feed pages itself
         if (currentCategory === "all" || currentCategory === "shorts" || currentCategory === "videos_only") {
             const freshVideos = e.detail;
             if (Array.isArray(freshVideos) && freshVideos.length > 0) {
@@ -796,28 +845,38 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     function highlight(text, query) {
+        text = escapeHtml(text || '');
+        query = escapeHtml(query || '');
         if (!query) return text;
         const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
         return text.replace(regex, '<mark class="bg-red-500/30 text-red-300 rounded px-0.5">$1</mark>');
     }
 
-    function filterVideos(query) {
+    let lastSearchTotal = 0;
+    async function filterVideos(query, limit = 60) {
         const q = query.toLowerCase().trim();
         if (!q) return [];
-        return allVideosCache.filter(v =>
+        // Search the complete server library first
+        if (typeof fetchCatalogPage === 'function') {
+            const res = await fetchCatalogPage({ q: query.trim(), limit, sort: 'popular' });
+            if (res) { lastSearchTotal = res.total; return sanitizeAndCurateVideos(res.items); }
+        }
+        const local = allVideosCache.filter(v =>
             (v.title && v.title.toLowerCase().includes(q)) ||
             (v.channel && v.channel.toLowerCase().includes(q)) ||
             (v.category && v.category.toLowerCase().includes(q)) ||
             (v.description && v.description.toLowerCase().includes(q)) ||
             (v.playlist && v.playlist.toLowerCase().includes(q))
         );
+        lastSearchTotal = local.length;
+        return local;
     }
 
     let searchDebounceTimer;
     function handleSearchInput(query) {
         clearTimeout(searchDebounceTimer);
-        searchDebounceTimer = setTimeout(() => {
-            const results = filterVideos(query);
+        searchDebounceTimer = setTimeout(async () => {
+            const results = await filterVideos(query, 9);
             if (!query.trim()) {
                 searchDropdown.classList.add('hidden');
                 return;
@@ -825,26 +884,26 @@ document.addEventListener("DOMContentLoaded", async () => {
             // Populate dropdown
             searchResultsList.innerHTML = '';
             if (results.length === 0) {
-                searchResultsList.innerHTML = `<div class="px-5 py-6 text-center text-zinc-500 text-sm"><i class="fas fa-search text-2xl mb-2 block opacity-30"></i>No results for "${query}"</div>`;
+                searchResultsList.innerHTML = `<div class="px-5 py-6 text-center text-zinc-500 text-sm"><i class="fas fa-search text-2xl mb-2 block opacity-30"></i>No results for "${escapeHtml(query)}"</div>`;
             } else {
                 results.slice(0, 8).forEach(v => {
                     const item = document.createElement('div');
                     item.className = 'flex items-center gap-3 px-4 py-3 hover:bg-zinc-800 cursor-pointer transition-colors group/item';
                     item.innerHTML = `
-                        <img src="${v.thumbnail}" class="w-14 h-10 rounded-lg object-cover flex-shrink-0">
+                        <img src="${v.thumbnail}" alt="" loading="lazy" class="w-14 h-10 rounded-lg object-cover flex-shrink-0">
                         <div class="flex-1 min-w-0">
                             <p class="text-sm font-medium text-zinc-100 line-clamp-1">${highlight(v.title, query)}</p>
-                            <p class="text-xs text-zinc-400 mt-0.5">${highlight(v.channel, query)} <span class="text-zinc-600">•</span> ${v.category || ''}</p>
+                            <p class="text-xs text-zinc-400 mt-0.5">${highlight(v.channel, query)} <span class="text-zinc-600">•</span> ${escapeHtml(v.category || '')}</p>
                         </div>
                         <i class="fas fa-arrow-right text-zinc-600 group-hover/item:text-red-400 transition text-xs"></i>
                     `;
-                    item.onclick = () => { location.href = `watch.html?id=${v.id}`; };
+                    item.onclick = () => { location.href = `${isShortVideo(v) ? 'shorts' : 'watch'}.html?id=${encodeURIComponent(v.id)}`; };
                     searchResultsList.appendChild(item);
                 });
-                if (results.length > 8) {
+                if (lastSearchTotal > 8) {
                     const more = document.createElement('div');
                     more.className = 'px-5 py-3 border-t border-zinc-800 text-center';
-                    more.innerHTML = `<button class="text-xs text-red-400 hover:text-red-300 font-semibold">See all ${results.length} results for "${query}"</button>`;
+                    more.innerHTML = `<button class="text-xs text-red-400 hover:text-red-300 font-semibold">See all ${lastSearchTotal.toLocaleString()} results for "${escapeHtml(query)}"</button>`;
                     more.onclick = () => showFullSearchResults(query);
                     searchResultsList.appendChild(more);
                 }
@@ -853,9 +912,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         }, 200);
     }
 
-    function showFullSearchResults(query) {
+    async function showFullSearchResults(query) {
         searchDropdown.classList.add('hidden');
-        const results = filterVideos(query);
+        const results = await filterVideos(query, 90);
         searchQueryLabel.textContent = `"${query}"`;
         searchResultsSection.classList.remove('hidden');
         categoryBar.classList.add('hidden');

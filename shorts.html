@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme-lock="dark" class="dark-theme">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -22,6 +22,14 @@
         .short-viewport {
             height: calc(100vh - 60px);
             height: calc(100dvh - 60px);
+        }
+        /* Desktop: keep the 9:16 frame fully visible below the header */
+        @media (min-width: 640px) {
+            #short-video-container {
+                height: min(calc(100dvh - 104px), 860px) !important;
+                width: auto !important;
+                margin-top: 64px;
+            }
         }
         @media (max-width: 640px) {
             .short-viewport {
@@ -109,7 +117,7 @@
         <div class="relative flex items-center justify-center w-full h-full max-w-full sm:max-w-[420px] mx-auto">
             
             <!-- 9:16 Video Frame -->
-            <div id="short-video-container" class="relative w-full h-full sm:h-[90vh] sm:rounded-3xl overflow-hidden bg-black shadow-2xl border border-zinc-800/80 flex items-center justify-center">
+            <div id="short-video-container" class="relative w-full h-full sm:h-auto sm:aspect-[9/16] sm:rounded-3xl overflow-hidden bg-black shadow-2xl border border-zinc-800/80 flex items-center justify-center">
                 
                 <!-- Loading Spinner -->
                 <div id="short-loading" class="absolute inset-0 flex flex-col items-center justify-center bg-zinc-950 z-20 transition-opacity duration-300">

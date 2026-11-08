@@ -81,7 +81,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (filteredUsers.length > 0) {
                     mentionDropdown.innerHTML = filteredUsers.slice(0, 8).map(u => {
                         const name = u.name || u.displayName || 'User';
-                        return `<div class="px-4 py-2 hover:bg-zinc-700 cursor-pointer text-sm mention-item flex items-center" data-name="${name.replace(/\s+/g, '')}">${u.isAI ? '<i class="fas fa-robot text-indigo-400 mr-2 text-xs"></i>' : '<i class="fas fa-user text-zinc-400 mr-2 text-xs"></i>'}<span>${name}</span></div>`;
+                        return `<div class="px-4 py-2 hover:bg-zinc-700 cursor-pointer text-sm mention-item flex items-center" data-name="${escapeHtml(name.replace(/\s+/g, ''))}">${u.isAI ? '<i class="fas fa-robot text-indigo-400 mr-2 text-xs"></i>' : '<i class="fas fa-user text-zinc-400 mr-2 text-xs"></i>'}<span>${escapeHtml(name)}</span></div>`;
                     }).join('');
                     mentionDropdown.classList.remove('hidden');
                     mentionDropdown.classList.add('flex');
@@ -524,9 +524,9 @@ document.addEventListener("DOMContentLoaded", () => {
             // ==========================================
             let avatarHtml = '';
             if (msg.avatarUrl) {
-                avatarHtml = `<img src="${msg.avatarUrl}" class="w-6 h-6 rounded-full object-cover ring-1 ring-zinc-700" loading="lazy">`;
+                avatarHtml = `<img src="${safeUrl(msg.avatarUrl)}" class="w-6 h-6 rounded-full object-cover ring-1 ring-zinc-700" loading="lazy">`;
             } else {
-                const initial = (msg.name || 'U').charAt(0).toUpperCase();
+                const initial = escapeHtml((msg.name || 'U').charAt(0).toUpperCase());
                 const colors = ['bg-purple-600','bg-emerald-600','bg-rose-600','bg-amber-600','bg-cyan-600','bg-pink-600'];
                 const colorIdx = (msg.name || '').length % colors.length;
                 avatarHtml = `<div class="w-6 h-6 rounded-full ${colors[colorIdx]} flex items-center justify-center text-[10px] font-bold text-white">${initial}</div>`;
@@ -539,7 +539,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         <div class="flex items-center gap-1.5 min-w-0">
                             <a href="profile.html?user=${encodeURIComponent(msg.email || '')}" class="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition flex-shrink-0">
                                 ${avatarHtml}
-                                <span class="font-bold text-xs text-zinc-200 hover:text-white transition truncate">${msg.name || 'Anonymous'}</span>
+                                <span class="font-bold text-xs text-zinc-200 hover:text-white transition truncate">${escapeHtml(msg.name || 'Anonymous')}</span>
                             </a>
                             ${adminBadge}
                             <span class="text-[10px] text-zinc-500 font-mono">${timeStr}</span>
@@ -547,7 +547,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
                         <!-- Hover Action Bar -->
                         <div class="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                            <button type="button" class="reply-msg-btn text-zinc-400 hover:text-indigo-400 p-1 rounded-lg hover:bg-zinc-800 transition" data-name="${msg.name || 'Member'}" title="Reply to ${msg.name}">
+                            <button type="button" class="reply-msg-btn text-zinc-400 hover:text-indigo-400 p-1 rounded-lg hover:bg-zinc-800 transition" data-name="${escapeHtml(msg.name || 'Member')}" title="Reply to ${escapeHtml(msg.name)}">
                                 <i class="fas fa-reply text-[11px]"></i>
                             </button>
                             <button type="button" class="react-msg-btn flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/50 hover:border-red-500/40 text-zinc-300 transition-all active:scale-95 cursor-pointer" data-id="${msg._id}" title="Like message">
@@ -606,7 +606,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // ===== PARSE MESSAGE CONTENT (MODERN RICH EMBEDS) =====
     function parseMessageContent(text) {
         // 1. Escape HTML
-        let safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        let safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
         // 2. JTube video link previews (Elevated Card Layout)
         const watchRegex = /(?:https?:\/\/[^\s<]+)?watch\.html\?id=([a-zA-Z0-9_-]+)/g;
@@ -691,10 +691,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 users.slice(0, 5).forEach(u => {
                     const name = u.name || u.displayName || u.email || 'User';
                     if (u.avatarUrl) {
-                        html += `<img src="${u.avatarUrl}" class="w-7 h-7 rounded-full border-2 border-zinc-950 object-cover ring-1 ring-zinc-800" title="${name}" loading="lazy">`;
+                        html += `<img src="${safeUrl(u.avatarUrl)}" class="w-7 h-7 rounded-full border-2 border-zinc-950 object-cover ring-1 ring-zinc-800" title="${escapeHtml(name)}" loading="lazy">`;
                     } else {
                         const initial = name.charAt(0).toUpperCase();
-                        html += `<div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 border-2 border-zinc-950 flex items-center justify-center text-[9px] font-bold text-white shadow-sm" title="${name}">${initial}</div>`;
+                        html += `<div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 border-2 border-zinc-950 flex items-center justify-center text-[9px] font-bold text-white shadow-sm" title="${escapeHtml(name)}">${escapeHtml(initial)}</div>`;
                     }
                 });
                 if (users.length > 5) {
@@ -736,8 +736,8 @@ document.addEventListener("DOMContentLoaded", () => {
             const name = u.name || u.displayName || u.email || 'User';
             const email = u.email || '';
             const avatarInner = u.avatarUrl
-                ? `<img src="${u.avatarUrl}" class="w-9 h-9 rounded-xl object-cover ring-1 ring-zinc-800" loading="lazy">`
-                : `<div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-xs font-bold text-white shadow-sm">${name.charAt(0).toUpperCase()}</div>`;
+                ? `<img src="${safeUrl(u.avatarUrl)}" class="w-9 h-9 rounded-xl object-cover ring-1 ring-zinc-800" loading="lazy">`
+                : `<div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-xs font-bold text-white shadow-sm">${escapeHtml(name.charAt(0).toUpperCase())}</div>`;
 
             const isAdmin = (email.toLowerCase() === 'jeyaulhoquejaber@gmail.com');
             const roleBadge = isAdmin
@@ -753,13 +753,13 @@ document.addEventListener("DOMContentLoaded", () => {
                         </div>
                         <div class="min-w-0 flex-1">
                             <div class="flex items-center gap-1.5">
-                                <p class="text-xs font-semibold text-zinc-200 group-hover:text-white transition truncate">${name}</p>
+                                <p class="text-xs font-semibold text-zinc-200 group-hover:text-white transition truncate">${escapeHtml(name)}</p>
                                 ${roleBadge}
                             </div>
-                            <p class="text-[10px] text-zinc-500 truncate">${email}</p>
+                            <p class="text-[10px] text-zinc-500 truncate">${escapeHtml(email)}</p>
                         </div>
                     </a>
-                    <button type="button" class="group-action-chip text-[10px] font-bold bg-zinc-800/80 hover:bg-indigo-600 text-zinc-400 hover:text-white border border-zinc-700/50 px-2 py-1 rounded-lg transition active:scale-95 ml-1 flex-shrink-0" data-insert="@${name} " title="Mention ${name}">
+                    <button type="button" class="group-action-chip text-[10px] font-bold bg-zinc-800/80 hover:bg-indigo-600 text-zinc-400 hover:text-white border border-zinc-700/50 px-2 py-1 rounded-lg transition active:scale-95 ml-1 flex-shrink-0" data-insert="@${escapeHtml(name)} " title="Mention ${escapeHtml(name)}">
                         @
                     </button>
                 </div>

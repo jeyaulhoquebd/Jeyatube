@@ -17,15 +17,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     const adminLogoutBtn = document.getElementById("admin-logout-btn");
     const adminAvatarInitial = document.getElementById("admin-avatar-initial");
 
-    // Authorized Admins
-    const ADMIN_EMAILS = ["admin@jtube.com", "jmathcodemail@gmail.com"];
-    const ADMIN_UIDS = ["n0ylKjBvgSOZ7x1LO4Fe5Nh75WC2"];
-
-    function isAuthorizedAdmin(user) {
-        if (!user) return false;
-        const email = (user.email || "").toLowerCase().trim();
-        return ADMIN_EMAILS.includes(email) || ADMIN_UIDS.includes(user.uid);
-    }
+    // ===== SERVER-VERIFIED ADMIN SESSION =====
+    // Credentials are checked by the server (scrypt-hashed password, brute-force lockout).
+    // The session lives in an HttpOnly cookie that page scripts cannot read or forge.
+    window.JTUBE_ADMIN_SESSION = false;
 
     function showLoginError(msg) {
         if (!adminLoginError || !adminLoginErrorText) return;
@@ -38,16 +33,45 @@ document.addEventListener("DOMContentLoaded", async () => {
         adminLoginError.classList.add("hidden");
     }
 
+    let studioUnlocked = false;
     function unlockStudio(email) {
+        window.JTUBE_ADMIN_SESSION = true;
         if (adminLoginOverlay) adminLoginOverlay.classList.add("hidden");
         if (adminUserBadge) adminUserBadge.classList.remove("hidden");
-        if (adminEmailDisplay) adminEmailDisplay.textContent = email || "admin@jtube.com";
+        if (adminEmailDisplay) adminEmailDisplay.textContent = email || "";
         if (adminAvatarInitial) adminAvatarInitial.textContent = (email || "A")[0].toUpperCase();
+        if (studioUnlocked) return;
+        studioUnlocked = true;
         loadAdminDashboard();
         loadAdminUsers();
         if (typeof loadDailySyncHub === 'function') loadDailySyncHub();
         if (typeof initAISuite === 'function') initAISuite();
     }
+
+    function lockStudio(message) {
+        window.JTUBE_ADMIN_SESSION = false;
+        if (adminLoginOverlay) adminLoginOverlay.classList.remove("hidden");
+        if (adminUserBadge) adminUserBadge.classList.add("hidden");
+        if (adminPasswordInput) adminPasswordInput.value = "";
+        if (message) showLoginError(message);
+    }
+
+    // Any admin API call that returns 401 means the session expired
+    const _origFetch = window.fetch.bind(window);
+    window.fetch = async (...args) => {
+        const res = await _origFetch(...args);
+        const url = String(args[0] && args[0].url ? args[0].url : args[0]);
+        if (res.status === 401 && url.includes('/api/') && !url.includes('/api/admin/login') && !url.includes('/api/admin/me') && window.JTUBE_ADMIN_SESSION) {
+            lockStudio("Your admin session expired. Please sign in again.");
+        }
+        return res;
+    };
+
+    // Restore an existing session
+    _origFetch('/api/admin/me', { headers: { Accept: 'application/json' } })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d && d.authenticated) unlockStudio(d.email); })
+        .catch(() => {});
 
     // Toggle password visibility
     if (toggleAdminPasswordBtn && adminPasswordInput) {
@@ -55,15 +79,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             const isPassword = adminPasswordInput.type === "password";
             adminPasswordInput.type = isPassword ? "text" : "password";
             toggleAdminPasswordBtn.innerHTML = isPassword ? '<i class="fas fa-eye-slash"></i>' : '<i class="fas fa-eye"></i>';
-        });
-    }
-
-    // Check Firebase Auth state for Admin
-    if (typeof auth !== "undefined") {
-        auth.onAuthStateChanged(user => {
-            if (user && isAuthorizedAdmin(user)) {
-                unlockStudio(user.email);
-            }
         });
     }
 
@@ -83,40 +98,26 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (adminLoginSubmitBtn) {
                 adminLoginSubmitBtn.disabled = true;
-                adminLoginSubmitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Verifying Admin...';
+                adminLoginSubmitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Verifying...';
             }
 
             try {
-                if (typeof auth !== "undefined") {
-                    const cred = await auth.signInWithEmailAndPassword(email, password);
-                    const user = cred.user;
-                    if (isAuthorizedAdmin(user) || email.toLowerCase() === "admin@jtube.com") {
-                        unlockStudio(user.email);
-                    } else {
-                        await auth.signOut();
-                        showLoginError("Access denied. Only authorized admin accounts can access JTube Studio.");
-                    }
-                } else if (password === "Jeyaul" || password === "admin123") {
-                    unlockStudio(email);
+                const res = await _origFetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.success) {
+                    if (adminPasswordInput) adminPasswordInput.value = "";
+                    unlockStudio(data.email);
+                } else if (res.status === 404) {
+                    showLoginError("Admin login requires the JTube server (npm start). Static hosting cannot verify admins.");
                 } else {
-                    showLoginError("Authentication is currently unavailable. Check credentials.");
+                    showLoginError(data.error || "Invalid email or password.");
                 }
             } catch (err) {
-                console.error("Admin sign in error:", err);
-                // Fallback check for emergency master password
-                if (password === "Jeyaul" || password === "admin123") {
-                    unlockStudio(email);
-                } else {
-                    let errMsg = "Authentication failed. Please check your credentials.";
-                    if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
-                        errMsg = "Invalid email or password. Please verify your admin credentials.";
-                    } else if (err.code === "auth/network-request-failed") {
-                        errMsg = "Network error. Please check your internet connection.";
-                    } else if (err.message) {
-                        errMsg = err.message;
-                    }
-                    showLoginError(errMsg);
-                }
+                showLoginError("Network error. Please check your connection.");
             } finally {
                 if (adminLoginSubmitBtn) {
                     adminLoginSubmitBtn.disabled = false;
@@ -129,18 +130,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Handle Admin Logout
     if (adminLogoutBtn) {
         adminLogoutBtn.addEventListener("click", async () => {
-            if (confirm("Are you sure you want to log out of JTube Studio?")) {
-                try {
-                    if (typeof auth !== "undefined") {
-                        await auth.signOut();
-                    }
-                } catch (err) {
-                    console.error("Sign out error:", err);
-                }
-                if (adminLoginOverlay) adminLoginOverlay.classList.remove("hidden");
-                if (adminUserBadge) adminUserBadge.classList.add("hidden");
-                if (adminPasswordInput) adminPasswordInput.value = "";
-            }
+            if (!confirm("Are you sure you want to log out of JTube Studio?")) return;
+            try { await _origFetch('/api/admin/logout', { method: 'POST' }); } catch (err) {}
+            lockStudio();
         });
     }
 
@@ -375,26 +367,39 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
-    // Search input listener
-    if (searchInput) {
-        searchInput.addEventListener("input", () => {
-            renderAdminVideosTable();
+    // Manage Videos searches the complete server library (tens of thousands of items)
+    let adminServerMode = false;
+    async function refreshAdminVideosFromServer(rerender = true) {
+        if (typeof fetchCatalogPage !== 'function') return false;
+        const term = searchInput ? searchInput.value.trim() : "";
+        const cat = categoryFilter ? categoryFilter.value : "all";
+        const typeVal = typeFilter ? typeFilter.value : "all";
+        const res = await fetchCatalogPage({
+            q: term,
+            category: cat === "all" ? "" : cat,
+            type: typeVal === "shorts" ? "short" : typeVal === "longform" ? "video" : "all",
+            limit: 100
         });
+        if (!res) return false;
+        adminServerMode = true;
+        adminVideos = res.items;
+        const stats = await fetchCatalogStats();
+        const total = stats ? stats.total : res.total;
+        if (videoCount) videoCount.textContent = `${res.total.toLocaleString()} matching • showing ${res.items.length}`;
+        if (sidebarVideoCount) sidebarVideoCount.textContent = total.toLocaleString();
+        renderAdminVideosTable();
+        return true;
     }
-
-    // Category filter dropdown listener
-    if (categoryFilter) {
-        categoryFilter.addEventListener("change", () => {
-            renderAdminVideosTable();
-        });
-    }
-
-    // Content Type filter dropdown listener
-    if (typeFilter) {
-        typeFilter.addEventListener("change", () => {
-            renderAdminVideosTable();
-        });
-    }
+    let adminSearchTimer = null;
+    const onAdminFilterChange = () => {
+        clearTimeout(adminSearchTimer);
+        adminSearchTimer = setTimeout(async () => {
+            if (!adminServerMode || !(await refreshAdminVideosFromServer())) renderAdminVideosTable();
+        }, 300);
+    };
+    if (searchInput) searchInput.addEventListener("input", onAdminFilterChange);
+    if (categoryFilter) categoryFilter.addEventListener("change", onAdminFilterChange);
+    if (typeFilter) typeFilter.addEventListener("change", onAdminFilterChange);
 
     // Bulk Delete Selected from Firestore Button Listener
     if (btnDeleteSelected) {
@@ -456,12 +461,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             </tr>`;
 
         await loadChannelsForAdmin();
-        adminVideos = await getVideos();
-        const count = adminVideos.length;
-        if (videoCount) videoCount.textContent = count;
-        if (sidebarVideoCount) sidebarVideoCount.textContent = count;
-
-        renderAdminVideosTable();
+        const fromServer = await refreshAdminVideosFromServer(false);
+        if (!fromServer) {
+            adminVideos = await getVideos();
+            const count = adminVideos.length;
+            if (videoCount) videoCount.textContent = count;
+            if (sidebarVideoCount) sidebarVideoCount.textContent = count;
+            renderAdminVideosTable();
+        }
         await loadCategoriesForAdmin();
 
         const channels = await getChannels();
@@ -632,7 +639,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         
         if (ytId) {
             try {
-                const sRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${ytId}&key=${ENV.YOUTUBE_API_KEY}`);
+                const sRes = await fetch(`/api/admin/youtube/videos?part=statistics&id=${ytId}`);
                 const sData = await sRes.json();
                 if (sData.items && sData.items.length > 0) {
                     fetchedViews = parseInt(sData.items[0].statistics?.viewCount || 0);
@@ -841,7 +848,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     `Fetching page ${pagesFetched + 1}...`
                 );
 
-                const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=50&playlistId=${playlistId}&key=${ENV.YOUTUBE_API_KEY}&pageToken=${pageToken}`;
+                const url = `/api/admin/youtube/playlistItems?part=snippet,contentDetails&maxResults=50&playlistId=${playlistId}&pageToken=${pageToken}`;
                 const res = await fetch(url);
                 const data = await res.json();
 
@@ -850,7 +857,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 if (data.items && data.items.length > 0) {
                     const videoIds = data.items.map(item => item.contentDetails.videoId).filter(Boolean).join(',');
                     if (videoIds) {
-                        const vidRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails,statistics&id=${videoIds}&key=${ENV.YOUTUBE_API_KEY}`);
+                        const vidRes = await fetch(`/api/admin/youtube/videos?part=contentDetails,statistics&id=${videoIds}`);
                         const vidData = await vidRes.json();
 
                         const durationMap = {};
@@ -899,7 +906,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function getChannelDetails(channelId) {
         try {
             showProgress(5, "Looking up channel...");
-            const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=contentDetails,statistics&id=${channelId}&key=${ENV.YOUTUBE_API_KEY}`);
+            const res = await fetch(`/api/admin/youtube/channels?part=contentDetails,statistics&id=${channelId}`);
             const data = await res.json();
             if (data.error) throw new Error(data.error.message);
             if (data.items && data.items.length > 0) {
@@ -1089,8 +1096,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                     created: u.metadata && u.metadata.creationTime ? new Date(u.metadata.creationTime).toLocaleDateString("en-US", { month: 'short', day: 'numeric', year: 'numeric' }) : "Recently",
                     signedIn: u.metadata && u.metadata.lastSignInTime ? new Date(u.metadata.lastSignInTime).toLocaleDateString("en-US", { month: 'short', day: 'numeric', year: 'numeric' }) : "Active Now",
                     uid: u.uid,
-                    role: isAuthorizedAdmin(u) ? "Admin" : "User",
-                    isAdmin: isAuthorizedAdmin(u)
+                    role: "Viewer",
+                    isAdmin: false
                 });
             }
         }
@@ -1634,420 +1641,234 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    // Server-side library sync (all videos + Shorts of every connected channel)
+    let syncStatusCache = null;
+    let syncPollTimer = null;
+
+    function relTime(ts) {
+        if (!ts) return 'never';
+        const s = Math.floor((Date.now() - ts) / 1000);
+        if (s < 60) return 'just now';
+        if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+        if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+        return `${Math.floor(s / 86400)} d ago`;
+    }
+
+    const fmtNum = n => (Number(n) || 0).toLocaleString();
+
     async function loadDailySyncHub() {
         try {
-            // 1. Fetch featured channels
-            const chanRes = await fetch('/api/channels/featured');
-            if (chanRes.ok) {
-                const chanData = await chanRes.json();
-                if (chanData && chanData.channels) {
-                    cachedSyncChannels = chanData.channels;
-                }
-            }
-
-            // 2. Fetch daily videos
-            const vidRes = await fetch('/api/channels/daily-videos');
-            if (vidRes.ok) {
-                const vidData = await vidRes.json();
-                if (vidData && vidData.videos) {
-                    cachedDailyVideos = vidData.videos;
-                }
-            }
-
-            // 3. Query Firestore saved catalog counts
-            let firestoreCounts = null;
-            if (typeof getFirestoreCatalogCounts === 'function') {
-                try {
-                    firestoreCounts = await getFirestoreCatalogCounts();
-                } catch (e) {
-                    console.warn("Could not query getFirestoreCatalogCounts in sync hub:", e);
-                }
-            }
-
-            renderDailySyncHubUI(firestoreCounts);
+            const res = await fetch('/api/admin/status');
+            if (!res.ok) return;
+            syncStatusCache = await res.json();
+            cachedSyncChannels = syncStatusCache.channels || [];
+            renderDailySyncHubUI();
+            renderSyncChannelsTable();
         } catch (err) {
-            console.error('Error loading daily sync hub:', err);
+            console.warn('Sync hub load failed:', err);
+        }
+        renderDailyVideosGallery();
+        if (!syncPollTimer) {
+            syncPollTimer = setInterval(() => {
+                const panel = document.getElementById('tab-daily-sync');
+                if (panel && panel.classList.contains('active') && !document.hidden) loadDailySyncHub();
+            }, 15000);
         }
     }
     window.loadDailySyncHub = loadDailySyncHub;
 
-    function renderDailySyncHubUI(firestoreCounts) {
-        // Update KPIs
-        const chanCountEl = document.getElementById('kpi-sync-channel-count');
-        const syncSavedVideosEl = document.getElementById('kpi-sync-saved-videos');
-        const syncSavedReelsEl = document.getElementById('kpi-sync-saved-reels');
-        const syncTotalSavedEl = document.getElementById('kpi-sync-total-saved');
-        const dailyCountEl = document.getElementById('kpi-daily-uploaded-count');
-        const lastTimeEl = document.getElementById('kpi-sync-last-time');
-        const sidebarSyncBadge = document.getElementById('sidebar-sync-badge');
+    function renderDailySyncHubUI() {
+        const s = syncStatusCache;
+        if (!s) return;
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+        set('kpi-sync-saved-videos', fmtNum(s.videos));
+        set('kpi-sync-saved-reels', fmtNum(s.shorts));
+        set('kpi-sync-channel-count', fmtNum(s.channels.length));
+        set('kpi-sync-last-time', relTime(s.lastIncremental));
+        set('kpi-sync-interval', s.websub ? `Instant push + every ${s.syncIntervalMinutes} min` : `Checks every ${s.syncIntervalMinutes} min`);
+        set('sidebar-sync-badge', String(s.channels.length));
 
-        const totalChannels = cachedSyncChannels.length || 36;
-        if (chanCountEl) chanCountEl.textContent = `${totalChannels} Channels`;
-        if (sidebarSyncBadge) sidebarSyncBadge.textContent = `${totalChannels} Feeds`;
+        const totalOnYoutube = s.channels.reduce((n, c) => n + (c.totalVideos || 0), 0);
+        const pct = s.backfill.total ? Math.round((s.backfill.done / s.backfill.total) * 100) : 0;
+        const fill = document.getElementById('daily-sync-progress-fill');
+        if (fill) fill.style.width = (s.backfill.complete ? 100 : Math.max(2, pct)) + '%';
+        set('sync-backfill-text', s.backfill.complete
+            ? `Complete — ${fmtNum(s.total)} items imported from ${s.channels.length} channels. Only new uploads are fetched now.`
+            : `Importing… ${fmtNum(s.total)} of ~${fmtNum(totalOnYoutube)} items so far (${pct}% of playlists done). ${s.busy.backfill ? 'Running now.' : 'Continues automatically.'}`);
+        const q = s.quota || {};
+        set('sync-quota-text', `${fmtNum(q.used)} / ${fmtNum(q.limit)}`);
+        const qf = document.getElementById('sync-quota-fill');
+        if (qf) qf.style.width = Math.min(100, (q.used / Math.max(1, q.limit)) * 100) + '%';
 
-        let savedVideosCount = 0;
-        let savedReelsCount = 0;
-        let totalSavedCount = 0;
-
-        if (firestoreCounts) {
-            savedVideosCount = firestoreCounts.videos;
-            savedReelsCount = firestoreCounts.reels;
-            totalSavedCount = firestoreCounts.total;
-        } else {
-            const source = (adminVideos && adminVideos.length > 0) ? adminVideos : cachedDailyVideos;
-            savedReelsCount = source.filter(v => (typeof isShortVideo === 'function') ? isShortVideo(v) : Boolean(v.isShort || v.isReel)).length;
-            savedVideosCount = Math.max(0, source.length - savedReelsCount);
-            totalSavedCount = source.length;
+        const pill = document.getElementById('sync-live-pill');
+        if (pill) {
+            const busy = s.busy.incremental || s.busy.backfill;
+            pill.className = 'pill ' + (s.apiKeyConfigured ? 'pill-green' : 'pill-amber');
+            pill.innerHTML = `<span class="dot"></span> ${!s.apiKeyConfigured ? 'API key missing' : busy ? 'Syncing…' : 'Auto-sync on'}`;
         }
-
-        if (syncSavedVideosEl) syncSavedVideosEl.textContent = `${savedVideosCount} Videos`;
-        if (syncSavedReelsEl) syncSavedReelsEl.textContent = `${savedReelsCount} Reels`;
-        if (syncTotalSavedEl) syncTotalSavedEl.textContent = `${totalSavedCount} Total`;
-        if (dailyCountEl) dailyCountEl.textContent = `${cachedDailyVideos.length} Videos`;
-
-        if (lastTimeEl) {
-            const now = new Date();
-            lastTimeEl.textContent = `Active • ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        const warn = document.getElementById('sync-config-warning');
+        if (warn) {
+            const msgs = [];
+            if (!s.apiKeyConfigured) msgs.push('YOUTUBE_API_KEY is not set on the server, so the full library cannot be imported. Add it to the server environment (.env) and restart.');
+            if (s.lastError) msgs.push('Last sync message: ' + s.lastError);
+            warn.classList.toggle('hidden', msgs.length === 0);
+            warn.textContent = msgs.join(' ');
         }
-
-        renderDailyVideosGallery();
-        renderSyncChannelsTable();
     }
 
-    function renderDailyVideosGallery() {
+    async function renderDailyVideosGallery() {
         const gallery = document.getElementById('daily-videos-gallery');
         if (!gallery) return;
-
-        const search = (document.getElementById('daily-feed-search')?.value || '').trim().toLowerCase();
-        const cat = document.getElementById('daily-feed-category')?.value || 'all';
-        const typeFilter = document.getElementById('daily-feed-type')?.value || 'all';
-
-        let filtered = cachedDailyVideos.filter(v => {
-            const isReelVid = (typeof isShortVideo === 'function') ? isShortVideo(v) : Boolean(v.isShort || v.isReel);
-            const matchesSearch = !search || 
-                (v.title && v.title.toLowerCase().includes(search)) ||
-                (v.channel && v.channel.toLowerCase().includes(search));
-            const matchesCat = cat === 'all' || (v.category && v.category.toLowerCase() === cat.toLowerCase());
-            const matchesType = typeFilter === 'all' || 
-                (typeFilter === 'videos' && !isReelVid) || 
-                (typeFilter === 'reels' && isReelVid);
-            return matchesSearch && matchesCat && matchesType;
-        });
-
-        if (filtered.length === 0) {
-            gallery.innerHTML = `
-                <div class="col-span-full text-center py-10 text-zinc-500 text-xs">
-                    <i class="fas fa-satellite-dish text-zinc-600 text-2xl mb-2 block"></i>
-                    No uploads found matching the current filters. Click "Sync All 36 Channels Now" to ingest the latest daily YouTube uploads and Reels.
-                </div>
-            `;
-            return;
+        const q = document.getElementById('daily-feed-search')?.value.trim() || '';
+        const type = document.getElementById('daily-feed-type')?.value || 'all';
+        try {
+            const res = await fetch(`/api/videos?limit=24&type=${encodeURIComponent(type)}&q=${encodeURIComponent(q)}`);
+            const data = await res.json();
+            const countEl = document.getElementById('daily-feed-count');
+            if (countEl) countEl.textContent = `${fmtNum(data.total)} matching items in the library`;
+            if (!data.items || !data.items.length) {
+                gallery.innerHTML = `<div class="col-span-full text-center py-10 text-zinc-500 text-xs">No videos found.</div>`;
+                return;
+            }
+            gallery.innerHTML = data.items.map(v => `
+                <a href="${v.isShort ? 'shorts.html' : 'watch.html'}?id=${encodeURIComponent(v.id)}" target="_blank" rel="noopener" class="group block">
+                    <div class="relative aspect-video rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 group-hover:border-red-500/50 transition">
+                        <img src="${escapeHtml(v.thumbnail)}" alt="" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition duration-500">
+                        <span class="absolute bottom-1.5 right-1.5 bg-black/80 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">${v.isShort ? '<i class="fas fa-bolt text-pink-400"></i> Short' : escapeHtml(v.duration)}</span>
+                    </div>
+                    <p class="text-xs font-semibold text-zinc-200 mt-2 line-clamp-2 group-hover:text-white">${escapeHtml(v.title)}</p>
+                    <p class="text-[11px] text-zinc-500 mt-0.5 truncate">${escapeHtml(v.channel)} · ${escapeHtml(v.time)}</p>
+                </a>`).join('');
+        } catch (e) {
+            gallery.innerHTML = `<div class="col-span-full text-center py-10 text-zinc-500 text-xs">Could not load the library.</div>`;
         }
-
-        gallery.innerHTML = filtered.map(v => {
-            const isReelVid = (typeof isShortVideo === 'function') ? isShortVideo(v) : Boolean(v.isShort || v.isReel);
-            const thumb = v.thumbnail || (v.id ? `https://img.youtube.com/vi/${v.id}/hqdefault.jpg` : 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500');
-            const dur = v.duration || (isReelVid ? '0:45' : 'Daily Upload');
-            const channel = escapeHtml(v.channel || 'Featured Channel');
-            const title = escapeHtml(v.title || 'Untitled Video');
-            const catBadge = escapeHtml(v.category || 'General');
-            const playUrl = isReelVid ? `shorts.html?id=${v.id}` : `watch.html?v=${v.id}`;
-            const formatBadge = isReelVid 
-                ? `<span class="bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded flex items-center gap-1 shadow"><i class="fas fa-bolt"></i> Reel</span>`
-                : `<span class="bg-blue-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded flex items-center gap-1 shadow"><i class="fas fa-video"></i> Video</span>`;
-
-            return `
-                <div class="bg-zinc-900/70 border border-zinc-800 rounded-xl overflow-hidden group hover:border-zinc-700 transition flex flex-col justify-between">
-                    <div class="relative aspect-video bg-zinc-950 overflow-hidden">
-                        <img src="${thumb}" alt="${title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" onerror="this.src='https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500'">
-                        <span class="absolute bottom-1.5 right-1.5 bg-black/80 text-white text-[10px] font-bold px-1.5 py-0.5 rounded font-mono">${dur}</span>
-                        <div class="absolute top-1.5 left-1.5 flex items-center gap-1">
-                            ${formatBadge}
-                            <span class="bg-emerald-500/90 text-zinc-950 text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">New</span>
-                        </div>
-                    </div>
-                    <div class="p-3 flex-1 flex flex-col justify-between">
-                        <div>
-                            <div class="flex items-center gap-1.5 text-[10px] text-zinc-400 mb-1">
-                                <span class="text-zinc-300 font-semibold truncate">${channel}</span>
-                                <i class="fas fa-check-circle text-emerald-400 text-[9px]"></i>
-                                <span class="text-zinc-600">•</span>
-                                <span class="text-zinc-400">${catBadge}</span>
-                            </div>
-                            <h4 class="text-xs font-bold text-white line-clamp-2 leading-snug group-hover:text-red-400 transition" title="${title}">${title}</h4>
-                            <div class="mt-2 flex items-center gap-1.5 text-[10px] text-emerald-400 font-medium">
-                                <i class="fas fa-check-circle text-[9px]"></i>
-                                <span>Saved &amp; Live</span>
-                            </div>
-                        </div>
-                        <div class="mt-3 pt-2.5 border-t border-zinc-800/70 flex items-center justify-between text-[11px]">
-                            <a href="${playUrl}" target="_blank" class="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1 transition">
-                                <i class="fas fa-play text-[10px]"></i> Watch on JTube
-                            </a>
-                            <a href="${v.videoUrl || `https://www.youtube.com/watch?v=${v.id}`}" target="_blank" class="text-zinc-500 hover:text-zinc-300 transition" title="Open original link">
-                                <i class="fab fa-youtube"></i>
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join('');
     }
 
     function renderSyncChannelsTable() {
         const tbody = document.getElementById('sync-channels-table-body');
         if (!tbody) return;
-
-        const search = (document.getElementById('sync-channels-search')?.value || '').trim().toLowerCase();
-        let filtered = cachedSyncChannels.filter(c => {
-            return !search || (c.name && c.name.toLowerCase().includes(search)) ||
-                (c.category && c.category.toLowerCase().includes(search)) ||
-                (c.channelId && c.channelId.toLowerCase().includes(search));
-        });
-
-        if (filtered.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="5" class="text-center py-6 text-zinc-500">No channels found matching "${escapeHtml(search)}"</td>
-                </tr>
-            `;
+        const term = (document.getElementById('sync-channels-search')?.value || '').toLowerCase();
+        const cats = ['Programming', 'AI & ML', 'Education', 'Islam', 'Science', 'Motivation', 'Podcasts', 'General'];
+        const rows = cachedSyncChannels.filter(c => !term || c.name.toLowerCase().includes(term) || (c.category || '').toLowerCase().includes(term));
+        if (!rows.length) {
+            tbody.innerHTML = `<tr><td colspan="5" class="px-2 py-8 text-center text-zinc-500">No channels.</td></tr>`;
             return;
         }
-
-        tbody.innerHTML = filtered.map(c => {
-            const name = escapeHtml(c.name || 'Channel');
-            const cat = escapeHtml(c.category || 'General');
-            const id = escapeHtml(c.channelId || 'N/A');
-            const initial = name[0]?.toUpperCase() || 'C';
-
+        tbody.innerHTML = rows.map(c => {
+            const pct = c.totalVideos ? Math.min(100, Math.round((c.videosInCatalog / c.totalVideos) * 100)) : 0;
+            const options = [...new Set([c.category, ...cats])].map(x => `<option ${x === c.category ? 'selected' : ''}>${escapeHtml(x)}</option>`).join('');
             return `
-                <tr class="hover:bg-zinc-900/50 transition">
-                    <td class="p-3.5 flex items-center gap-2.5">
-                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center text-xs font-black text-white flex-shrink-0 shadow">
-                            ${initial}
+            <tr class="hover:bg-zinc-800/30 transition">
+                <td class="px-2 py-3">
+                    <div class="flex items-center gap-3 min-w-[180px]">
+                        ${c.avatarUrl ? `<img src="${escapeHtml(c.avatarUrl)}" alt="" class="w-9 h-9 rounded-full object-cover border border-zinc-700">` : `<div class="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center font-bold text-zinc-400">${escapeHtml(c.name[0] || '?')}</div>`}
+                        <div class="min-w-0">
+                            <a href="channel.html?name=${encodeURIComponent(c.name)}" target="_blank" class="font-semibold text-white hover:text-red-400 truncate block max-w-[200px]">${escapeHtml(c.name)}</a>
+                            <div class="text-[10px] text-zinc-500">${c.subscribers ? fmtNum(c.subscribers) + ' subscribers' : escapeHtml(c.ytChannelId)}</div>
                         </div>
-                        <div>
-                            <div class="font-bold text-white flex items-center gap-1">
-                                <span>${name}</span>
-                                <i class="fas fa-check-circle text-emerald-400 text-[10px]" title="Verified Featured Channel"></i>
-                            </div>
-                            <span class="text-[10px] text-zinc-500">Auto-polled every 10 min</span>
-                        </div>
-                    </td>
-                    <td class="p-3.5">
-                        <span class="bg-zinc-800/80 text-zinc-300 border border-zinc-700/60 text-[10px] font-bold px-2 py-0.5 rounded-full">${cat}</span>
-                    </td>
-                    <td class="p-3.5 hidden md:table-cell font-mono text-[11px] text-zinc-400">
-                        ${id}
-                    </td>
-                    <td class="p-3.5">
-                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-2 py-0.5 rounded-full">
-                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                            Live Ingesting
-                        </span>
-                    </td>
-                    <td class="p-3.5 text-right">
-                        <button type="button" onclick="syncSingleChannel('${escapeHtml(c.name)}', this)" 
-                                class="bg-zinc-800 hover:bg-emerald-900/60 hover:text-emerald-300 text-zinc-300 border border-zinc-700 hover:border-emerald-700/60 text-[11px] font-bold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ml-auto cursor-pointer">
-                            <i class="fas fa-sync-alt text-[10px]"></i>
-                            <span>Sync</span>
-                        </button>
-                    </td>
-                </tr>
-            `;
+                    </div>
+                </td>
+                <td class="px-2 py-3">
+                    <select class="input-field py-1 px-2 text-[11px] min-w-[8.5rem] sync-cat-select" data-id="${escapeHtml(c.ytChannelId)}">${options}</select>
+                </td>
+                <td class="px-2 py-3 min-w-[110px]">
+                    <div class="font-mono text-zinc-200">${fmtNum(c.videosInCatalog)}<span class="text-zinc-600"> / ${fmtNum(c.totalVideos)}</span></div>
+                    <div class="w-full h-1 bg-zinc-800 rounded-full mt-1 overflow-hidden"><div class="h-full bg-emerald-500 rounded-full" style="width:${pct}%"></div></div>
+                </td>
+                <td class="px-2 py-3 hidden md:table-cell">
+                    <span class="pill ${c.backfillDone ? 'pill-green' : 'pill-blue'}"><span class="dot"></span>${c.backfillDone ? 'Up to date' : 'Importing'}</span>
+                    <div class="text-[10px] text-zinc-500 mt-1">Checked ${relTime(c.lastCheck)}</div>
+                </td>
+                <td class="px-2 py-3 text-right whitespace-nowrap">
+                    <button class="btn-icon sync-resync-btn" data-id="${escapeHtml(c.ytChannelId)}" title="Re-import every video"><i class="fas fa-rotate"></i></button>
+                    <a class="btn-icon" href="https://www.youtube.com/channel/${encodeURIComponent(c.ytChannelId)}" target="_blank" rel="noopener" title="Open on YouTube"><i class="fab fa-youtube"></i></a>
+                    <button class="btn-icon btn-icon-danger sync-remove-btn" data-id="${escapeHtml(c.ytChannelId)}" data-name="${escapeHtml(c.name)}" title="Remove channel"><i class="fas fa-trash"></i></button>
+                </td>
+            </tr>`;
         }).join('');
     }
 
-    // Sync a single channel
-    window.syncSingleChannel = async function(channelName, btn) {
-        const origHtml = btn ? btn.innerHTML : '';
-        if (btn) {
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin text-[10px]"></i><span>Syncing...</span>';
-        }
+    async function adminJson(method, url, body) {
+        const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+        return data;
+    }
 
+    document.getElementById('sync-channels-table-body')?.addEventListener('click', async (e) => {
+        const resync = e.target.closest('.sync-resync-btn');
+        const remove = e.target.closest('.sync-remove-btn');
         try {
-            showSyncStatus(`Triggering live RSS ingestion for ${channelName}...`, 'loading');
-            const res = await fetch('/api/channels/sync', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ channelName })
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                if (data.videos && data.videos.length > 0 && typeof saveBatchVideos === 'function') {
-                    // 1. First save discovered video and Reel links to Firestore
-                    await saveBatchVideos(data.videos);
-                }
-                const reelsInChannel = data.reelsCount || (data.videos ? data.videos.filter(v => (typeof isShortVideo === 'function') ? isShortVideo(v) : Boolean(v.isShort || v.isReel)).length : 0);
-                const vidsInChannel = data.videosCount || (data.videos ? Math.max(0, data.videos.length - reelsInChannel) : 0);
-
-                showSyncStatus(`✓ Successfully synced ${channelName}! Saved ${vidsInChannel} videos and ${reelsInChannel} Reels, now live on website.`, 'success');
-                
-                // 2. Display on website
-                if (typeof document !== 'undefined' && data.videos) {
-                    document.dispatchEvent(new CustomEvent('jtube:videosUpdated', { detail: data.videos }));
-                }
-
-                await loadDailySyncHub();
-                await loadAdminDashboard();
-            } else {
-                showSyncStatus(`Sync failed for ${channelName}. Please try again.`, 'error');
+            if (resync) {
+                await adminJson('POST', `/api/admin/channels/${encodeURIComponent(resync.dataset.id)}/resync`);
+                showSyncStatus('Full re-import started for this channel.', 'success');
+                loadDailySyncHub();
+            } else if (remove) {
+                if (!confirm(`Remove "${remove.dataset.name}" and all of its videos from JTube?`)) return;
+                await adminJson('DELETE', `/api/admin/channels/${encodeURIComponent(remove.dataset.id)}`);
+                showSyncStatus(`Removed "${remove.dataset.name}".`, 'success');
+                loadDailySyncHub();
             }
+        } catch (err) { showSyncStatus(err.message, 'error'); }
+    });
+
+    document.getElementById('sync-channels-table-body')?.addEventListener('change', async (e) => {
+        const sel = e.target.closest('.sync-cat-select');
+        if (!sel) return;
+        try {
+            await adminJson('PATCH', `/api/admin/channels/${encodeURIComponent(sel.dataset.id)}`, { category: sel.value });
+            showSyncStatus('Category updated.', 'success');
+        } catch (err) { showSyncStatus(err.message, 'error'); }
+    });
+
+    document.getElementById('sync-channels-search')?.addEventListener('input', renderSyncChannelsTable);
+    let feedSearchTimer = null;
+    document.getElementById('daily-feed-search')?.addEventListener('input', () => {
+        clearTimeout(feedSearchTimer);
+        feedSearchTimer = setTimeout(renderDailyVideosGallery, 300);
+    });
+    document.getElementById('daily-feed-type')?.addEventListener('change', renderDailyVideosGallery);
+    document.getElementById('btn-refresh-sync-catalog')?.addEventListener('click', loadDailySyncHub);
+
+    document.getElementById('btn-sync-all-channels')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        const icon = document.getElementById('sync-all-icon');
+        btn.disabled = true;
+        if (icon) icon.className = 'fas fa-spinner fa-spin';
+        try {
+            const r = await adminJson('POST', '/api/admin/sync');
+            showSyncStatus(r.newVideos ? `Found ${r.newVideos} new upload(s) — they are live on JTube now.` : 'All channels checked — no new uploads right now.', 'success');
+            loadDailySyncHub();
         } catch (err) {
-            console.error('Single channel sync error:', err);
-            showSyncStatus(`Sync error for ${channelName}: ${err.message || err}`, 'error');
+            showSyncStatus(err.message, 'error');
         } finally {
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = origHtml;
-            }
+            btn.disabled = false;
+            if (icon) icon.className = 'fas fa-satellite-dish';
         }
-    };
+    });
 
-    // Event listener for "Sync All 36 Channels Now"
-    const btnSyncAllChannels = document.getElementById('btn-sync-all-channels');
-    if (btnSyncAllChannels) {
-        btnSyncAllChannels.addEventListener('click', async () => {
-            const progBar = document.getElementById('daily-sync-progress-bar');
-            const progFill = document.getElementById('daily-sync-progress-fill');
-            const progPct = document.getElementById('daily-sync-progress-pct');
-            const progText = document.getElementById('daily-sync-progress-text');
-            const syncIcon = document.getElementById('sync-all-icon');
-
-            if (progBar) progBar.classList.remove('hidden');
-            if (syncIcon) syncIcon.classList.add('fa-spin');
-            btnSyncAllChannels.disabled = true;
-
-            let pct = 15;
-            if (progFill) progFill.style.width = `${pct}%`;
-            if (progPct) progPct.textContent = `${pct}%`;
-
-            const interval = setInterval(() => {
-                if (pct < 85) {
-                    pct += Math.floor(Math.random() * 12) + 5;
-                    if (pct > 85) pct = 85;
-                    if (progFill) progFill.style.width = `${pct}%`;
-                    if (progPct) progPct.textContent = `${pct}%`;
-                }
-            }, 600);
-
-            try {
-                showSyncStatus('1. Ingesting YouTube uploads & Reels from 36 channels...', 'loading');
-                const res = await fetch('/api/channels/sync', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ force: true })
-                });
-
-                clearInterval(interval);
-
-                if (progFill) progFill.style.width = '100%';
-                if (progPct) progPct.textContent = '100%';
-                if (progText) progText.innerHTML = '<i class="fas fa-check-circle text-emerald-400 mr-2"></i>Daily Ingestion &amp; Save Complete!';
-
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.videos && data.videos.length > 0 && typeof saveBatchVideos === 'function') {
-                        // 1. First save video & Reel links
-                        await saveBatchVideos(data.videos);
-                    }
-                    const reelsCount = data.reelsCount || (data.videos ? data.videos.filter(v => (typeof isShortVideo === 'function') ? isShortVideo(v) : Boolean(v.isShort || v.isReel)).length : 0);
-                    const videosCount = data.videosCount || (data.videos ? Math.max(0, data.videos.length - reelsCount) : 0);
-
-                    showSyncStatus(`✓ All 36 channels synced! Successfully saved ${videosCount} videos and ${reelsCount} Reels, now live on website.`, 'success');
-                    
-                    // 2. Display on website
-                    if (typeof document !== 'undefined' && data.videos) {
-                        document.dispatchEvent(new CustomEvent('jtube:videosUpdated', { detail: data.videos }));
-                    }
-
-                    setTimeout(() => {
-                        if (progBar) progBar.classList.add('hidden');
-                        if (progFill) progFill.style.width = '0%';
-                        if (progPct) progPct.textContent = '0%';
-                    }, 2500);
-                    await loadDailySyncHub();
-                    await loadAdminDashboard();
-                } else {
-                    showSyncStatus('Failed to sync all channels. Checking server connectivity...', 'error');
-                }
-            } catch (err) {
-                clearInterval(interval);
-                console.error('Sync all error:', err);
-                showSyncStatus(`Sync failed: ${err.message || err}`, 'error');
-            } finally {
-                if (syncIcon) syncIcon.classList.remove('fa-spin');
-                btnSyncAllChannels.disabled = false;
-            }
-        });
-    }
-
-    // Refresh Feed button
-    const btnRefreshSyncCatalog = document.getElementById('btn-refresh-sync-catalog');
-    if (btnRefreshSyncCatalog) {
-        btnRefreshSyncCatalog.addEventListener('click', async () => {
-            btnRefreshSyncCatalog.disabled = true;
-            btnRefreshSyncCatalog.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Refreshing...</span>';
-            await loadDailySyncHub();
-            btnRefreshSyncCatalog.disabled = false;
-            btnRefreshSyncCatalog.innerHTML = '<i class="fas fa-redo"></i><span>Refresh Ingested Feed</span>';
-            showSyncStatus('✓ Daily feed refreshed from in-memory cache and local storage.', 'success');
-        });
-    }
-
-    // Filters for Daily Gallery & Channels
-    const dailyFeedSearch = document.getElementById('daily-feed-search');
-    const dailyFeedCategory = document.getElementById('daily-feed-category');
-    const dailyFeedType = document.getElementById('daily-feed-type');
-    if (dailyFeedSearch) dailyFeedSearch.addEventListener('input', renderDailyVideosGallery);
-    if (dailyFeedCategory) dailyFeedCategory.addEventListener('change', renderDailyVideosGallery);
-    if (dailyFeedType) dailyFeedType.addEventListener('change', renderDailyVideosGallery);
-
-    const syncChannelsSearch = document.getElementById('sync-channels-search');
-    if (syncChannelsSearch) syncChannelsSearch.addEventListener('input', renderSyncChannelsTable);
-
-    // Add New Channel to Daily Sync Engine
     const addSyncChannelForm = document.getElementById('add-sync-channel-form');
     if (addSyncChannelForm) {
         addSyncChannelForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const name = document.getElementById('new-sync-chan-name').value.trim();
-            const channelId = document.getElementById('new-sync-chan-id').value.trim();
-            const category = document.getElementById('new-sync-chan-cat').value;
-
-            if (!name || !channelId) return;
-
             const submitBtn = document.getElementById('btn-add-sync-channel');
-            if (submitBtn) {
-                submitBtn.disabled = true;
-                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Registering &amp; Ingesting...</span>';
-            }
-
+            const input = document.getElementById('new-sync-chan-id').value.trim();
+            const nameOverride = document.getElementById('new-sync-chan-name').value.trim();
+            const category = document.getElementById('new-sync-chan-cat').value;
+            if (!input) return;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Finding channel…</span>';
             try {
-                // Register and trigger sync
-                const res = await fetch('/api/channels/sync', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ channelName: name, channelId, category })
-                });
-
-                if (res.ok) {
-                    showSyncStatus(`✓ Channel "${name}" successfully registered! Ingesting latest daily videos.`, 'success');
-                    addSyncChannelForm.reset();
-                    await loadDailySyncHub();
-                } else {
-                    showSyncStatus(`Failed to register channel "${name}".`, 'error');
-                }
+                const info = await adminJson('POST', '/api/channels/resolve', { query: input });
+                const r = await adminJson('POST', '/api/admin/channels', { name: nameOverride || info.title, ytChannelId: info.channelId, category });
+                showSyncStatus(`Added "${r.channel.name}". Importing all of its videos and Shorts now…`, 'success');
+                addSyncChannelForm.reset();
+                loadDailySyncHub();
             } catch (err) {
-                console.error('Add sync channel error:', err);
-                showSyncStatus(`Error: ${err.message || err}`, 'error');
+                showSyncStatus(err.message, 'error');
             } finally {
-                if (submitBtn) {
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = '<i class="fas fa-check"></i><span>Register Channel &amp; Ingest Uploads</span>';
-                }
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-check"></i><span>Add channel &amp; import videos</span>';
             }
         });
     }
@@ -2542,9 +2363,21 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    // Mobile drawer for the studio sidebar
+    const studioSidebar = document.getElementById('studio-sidebar');
+    const studioBackdrop = document.getElementById('studio-sidebar-backdrop');
+    const setDrawer = open => {
+        studioSidebar?.classList.toggle('open', open);
+        studioBackdrop?.classList.toggle('open', open);
+    };
+    document.getElementById('studio-menu-btn')?.addEventListener('click', () => setDrawer(!studioSidebar?.classList.contains('open')));
+    studioBackdrop?.addEventListener('click', () => setDrawer(false));
+
     // Tab navigation event listener trigger
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
+            setDrawer(false);
+            if (!window.JTUBE_ADMIN_SESSION) return;
             if (btn.dataset.tab === 'daily-sync') {
                 loadDailySyncHub();
             } else if (btn.dataset.tab === 'ai-system') {
@@ -2553,7 +2386,5 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     });
 
-    // Auto load when admin is unlocked or on page load if already active
-    if (typeof loadDailySyncHub === 'function') loadDailySyncHub();
-    if (typeof initAISuite === 'function') initAISuite();
+    // Studio data loads in unlockStudio() once the server confirms the admin session
 });
