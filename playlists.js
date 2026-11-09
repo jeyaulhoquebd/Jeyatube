@@ -33,13 +33,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         const qs = new URLSearchParams({ page: state.page + 1, limit: 24, q: search.value.trim(), channel: channelSel.value });
         try {
             let data = null;
-            if (state.backend !== 'firebase') {
+            if (state.backend !== 'static' && !(typeof ENV !== 'undefined' && ENV.STATIC_HOST === true)) {
                 const res = await fetch("/api/playlists?" + qs).catch(() => null);
                 if (res && res.ok && (res.headers.get('content-type') || '').includes('json')) { data = await res.json(); state.backend = 'server'; }
             }
-            if (!data && window.JFB && window.JFB.available) {
-                state.backend = 'firebase';
-                data = await window.JFB.playlistsPage({ page: state.page + 1, limit: 24, q: search.value.trim(), channel: channelSel.value });
+            if (!data && window.StaticCatalog) {
+                state.backend = 'static';
+                data = await window.StaticCatalog.playlists({ page: state.page + 1, limit: 24, q: search.value.trim(), channel: channelSel.value });
             }
             if (!data) throw new Error();
             state.server = true;
@@ -119,8 +119,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         modalVideos.innerHTML = `<p class="text-zinc-500 text-center py-16"><i class="fas fa-spinner fa-spin mr-2"></i>Loading videos…</p>`;
         try {
             let data;
-            if (state.backend === 'firebase') {
-                data = await window.JFB.playlist(p.id);
+            if (state.backend === 'static') {
+                data = await window.StaticCatalog.playlist(p.id);
                 if (!data) throw new Error();
             } else {
                 const res = await fetch("/api/playlists/" + encodeURIComponent(p.id));
@@ -171,9 +171,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     // ---------- init ----------
     try {
         let chans = null;
-        const res = await fetch("/api/channels/featured").catch(() => null);
+        const res = (typeof ENV !== 'undefined' && ENV.STATIC_HOST === true) ? null : await fetch("/api/channels/featured").catch(() => null);
         if (res && res.ok && (res.headers.get('content-type') || '').includes('json')) chans = (await res.json()).channels;
-        else if (window.JFB && window.JFB.available) chans = await window.JFB.channels();
+        else if (window.StaticCatalog) chans = await window.StaticCatalog.channels();
         if (chans) {
             const d = { channels: chans };
             (d.channels || []).map(c => c.name).sort((a, b) => a.localeCompare(b)).forEach(n => {

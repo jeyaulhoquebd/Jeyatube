@@ -72,3 +72,6 @@ data/
 
 # dataconnect generated files
 .dataconnect
+
+# Static build output
+dist/

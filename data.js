@@ -791,28 +791,30 @@ function sanitizeAndCurateVideos(videosList) {
 // ===== JTUBE SERVER CATALOG =====
 // The server keeps the complete library of every featured YouTube channel
 // (all past uploads + new uploads within minutes). The browser loads it page by page.
-const JTubeServer = { available: null, lastLoaded: 0, newest: 0, loading: null, stats: null, channelsLoaded: false, pollTimer: null };
+const IS_STATIC_HOST = (typeof ENV !== 'undefined' && ENV.STATIC_HOST === true);
+const JTubeServer = { available: IS_STATIC_HOST ? false : null, lastLoaded: 0, newest: 0, loading: null, stats: null, channelsLoaded: false, pollTimer: null };
 
 const hasFirebase = () => typeof window !== 'undefined' && window.JFB && window.JFB.available;
 
-async function firebaseCatalogPage(params) {
-    if (!hasFirebase()) return null;
+const hasStatic = () => typeof window !== 'undefined' && window.StaticCatalog;
+
+// Static host (Cloudflare Pages…): the library is a set of JSON files in /catalog
+async function staticCatalogPage(params) {
+    if (!hasStatic()) return null;
     try {
-        const data = await window.JFB.catalogPage(params);
+        const data = await window.StaticCatalog.page(params);
+        if (!data) return null;
         data.items.forEach(sanitizeVideoFields);
-        data.items.forEach(v => {
-            if ((v.timestamp || 0) > JTubeServer.newest) JTubeServer.newest = v.timestamp;
-            if (typeof timeAgo === 'function' && v.timestamp) v.time = timeAgo(v.timestamp);
-        });
+        data.items.forEach(v => { if ((v.timestamp || 0) > JTubeServer.newest) JTubeServer.newest = v.timestamp; });
         return data;
     } catch (e) {
-        console.warn('Firebase catalog query failed:', e && e.message);
+        console.warn('Catalog query failed:', e && e.message);
         return null;
     }
 }
 
 async function fetchCatalogPage(params = {}) {
-    if (JTubeServer.available === false && !params.__retry) return firebaseCatalogPage(params);
+    if (JTubeServer.available === false && !params.__retry) return staticCatalogPage(params);
     try {
         const qs = new URLSearchParams();
         Object.entries(params).forEach(([k, v]) => {
@@ -828,7 +830,7 @@ async function fetchCatalogPage(params = {}) {
         return data;
     } catch (e) {
         if (JTubeServer.available === null) JTubeServer.available = false;
-        return firebaseCatalogPage(params);
+        return staticCatalogPage(params);
     }
 }
 
@@ -836,15 +838,13 @@ async function fetchCatalogStats() {
     if (JTubeServer.available !== false) {
         try {
             const res = await fetch('/api/catalog/stats');
-            if (res.ok) { JTubeServer.stats = await res.json(); return JTubeServer.stats; }
+            if (res.ok && (res.headers.get('content-type') || '').includes('json')) { JTubeServer.stats = await res.json(); return JTubeServer.stats; }
             JTubeServer.available = false;
         } catch (e) { JTubeServer.available = false; }
     }
-    if (hasFirebase()) {
-        try {
-            const st = await window.JFB.stats();
-            if (st) { JTubeServer.stats = { ...st, views: st.views || 0 }; return JTubeServer.stats; }
-        } catch (e) {}
+    if (hasStatic()) {
+        const st = await window.StaticCatalog.stats().catch(() => null);
+        if (st) { JTubeServer.stats = st; return st; }
     }
     return null;
 }
@@ -856,7 +856,7 @@ function mergeVideoLists(...lists) {
 }
 
 async function loadServerCatalogVideos(force = false) {
-    if (JTubeServer.available === false && !force && !hasFirebase()) return null;
+    if (JTubeServer.available === false && !force && window.StaticCatalog && window.StaticCatalog.available === false) return null;
     if (!force && JTubeServer.lastLoaded && (Date.now() - JTubeServer.lastLoaded) < 5 * 60 * 1000 && _cache.videos && _cache.videos.length) {
         return _cache.videos;
     }
@@ -900,19 +900,16 @@ async function loadServerChannels() {
     if (JTubeServer.available !== false) {
         try {
             const res = await fetch('/api/channels/featured');
-            if (res.ok) {
+            if (res.ok && (res.headers.get('content-type') || '').includes('json')) {
                 const data = await res.json();
                 JTubeServer.channelsLoaded = true;
                 return Array.isArray(data.channels) ? data.channels : null;
             }
         } catch (e) {}
     }
-    if (hasFirebase()) {
-        try {
-            const list = await window.JFB.channels();
-            JTubeServer.channelsLoaded = true;
-            return list.length ? list : null;
-        } catch (e) {}
+    if (hasStatic()) {
+        const list = await window.StaticCatalog.channels().catch(() => null);
+        if (list && list.length) { JTubeServer.channelsLoaded = true; return list; }
     }
     return null;
 }
@@ -1105,6 +1102,7 @@ async function authenticateLocally(email, password) {
 // When the JTube server is available, accounts live on the server (secure, shared across devices)
 // and the session is an HttpOnly cookie. Browser-only accounts are kept as an offline fallback.
 async function serverAuth(path, body) {
+    if (IS_STATIC_HOST) return { unavailable: true };
     try {
         const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
         if (res.status === 404 || res.status === 405 || !(res.headers.get('content-type') || '').includes('json')) {
@@ -1492,21 +1490,21 @@ async function getVideoById(videoId) {
         console.warn("Firestore video lookup failed", err);
     }
 
-    // 3. Firestore catalog (Firebase Hosting)
-    if (JTubeServer.available === false && hasFirebase()) {
+    // 3. Static catalog (Cloudflare Pages…)
+    if (JTubeServer.available !== true && hasStatic()) {
         try {
-            const fv = await window.JFB.getVideo(videoId);
-            if (fv) {
-                sanitizeVideoFields(fv);
+            const sv = await window.StaticCatalog.video(videoId);
+            if (sv) {
+                sanitizeVideoFields(sv);
                 if (!_cache.videos) _cache.videos = [];
-                if (!_cache.videos.some(x => x.id === fv.id)) _cache.videos.push(fv);
-                return fv;
+                if (!_cache.videos.some(x => x.id === sv.id)) _cache.videos.push(sv);
+                return sv;
             }
         } catch (e) {}
     }
 
     // 4. Ask the JTube server (it holds the full catalog and can fetch from YouTube with its own key)
-    try {
+    if (!IS_STATIC_HOST) try {
         const res = await fetch('/api/videos/' + encodeURIComponent(videoId));
         if (res.ok) {
             const v = sanitizeVideoFields(await res.json());
@@ -1892,7 +1890,7 @@ async function fetchCategoriesFromFirestore() {
 }
 
 async function getCategories() {
-    if (!JTubeServer.stats && JTubeServer.available !== false) {
+    if (!JTubeServer.stats) {
         const stats = await fetchCatalogStats();
         if (stats && stats.categories) {
             const base = (_cache.categories && _cache.categories.length) ? _cache.categories : (loadFromStorage('categories', null) || defaultCats);
@@ -2167,8 +2165,8 @@ function computeRelativeTime(timestamp) {
 
 async function syncChannelByName(channelName, force = false) {
     if (!channelName) return false;
-    // The JTube server already syncs every channel continuously
-    if (JTubeServer.available === true) return true;
+    // The JTube server / GitHub Action already syncs every channel continuously
+    if (JTubeServer.available !== null) return JTubeServer.available === true;
 
     try {
         const channels = await getChannels();
@@ -2284,8 +2282,9 @@ async function syncChannelByName(channelName, force = false) {
 }
 
 async function autoSyncYouTubeChannels(force = false) {
-    // When the JTube server is available it syncs YouTube itself (every few minutes);
-    // the page only needs to pull new uploads.
+    // The library is kept up to date on the server side (Node server, or the GitHub Action that
+    // rebuilds the static catalog) — the browser never talks to YouTube itself.
+    if (JTubeServer.available === false) return { synced: false, source: 'static' };
     if (JTubeServer.available !== false) {
         const vids = await loadServerCatalogVideos(force);
         if (vids) return { synced: true, source: 'server' };
@@ -3053,7 +3052,7 @@ if (typeof window !== 'undefined') {
 
 // Keep the page's signed-in state in step with the server session cookie
 if (typeof window !== 'undefined' && typeof fetch === 'function') {
-    fetch('/api/auth/me', { headers: { Accept: 'application/json' } })
+    (IS_STATIC_HOST ? Promise.resolve({ ok: false }) : fetch('/api/auth/me', { headers: { Accept: 'application/json' } }))
         .then(r => (r.ok ? r.json() : null))
         .then(d => {
             if (!d) return;

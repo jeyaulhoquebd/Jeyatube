@@ -185,142 +185,6 @@
         JFB.user = null; JFB.profile = null;
     };
 
-    // ---------------------------------------------------------------- catalog
-    var cursors = {}; // queryKey -> [lastDocOfPage1, lastDocOfPage2, ...]
-    var counts = {};
-
-    function tokens(q) {
-        return String(q || '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(function (w) { return w.length >= 2; }).slice(0, 8);
-    }
-
-    function buildQuery(p, withOrder) {
-        var f = F();
-        var cons = [];
-        if (p.type === 'short') cons.push(f.where('isShort', '==', true));
-        else if (p.type === 'video') cons.push(f.where('isShort', '==', false));
-        if (p.category) cons.push(f.where('category', '==', p.category));
-        if (p.channel) cons.push(f.where('channel', '==', p.channel));
-        var toks = tokens(p.q);
-        if (toks.length) {
-            var main = toks.slice().sort(function (a, b) { return b.length - a.length; })[0];
-            cons.push(f.where('keywords', 'array-contains', main));
-            if (withOrder) cons.push(f.orderBy('views', 'desc'));
-        } else if (p.since) {
-            cons.push(f.where('timestamp', '>', Number(p.since)));
-            if (withOrder) cons.push(f.orderBy('timestamp', 'desc'));
-        } else if (withOrder) {
-            cons.push(f.orderBy(p.sort === 'popular' ? 'views' : 'timestamp', p.sort === 'oldest' ? 'asc' : 'desc'));
-        }
-        return { cons: cons, toks: toks };
-    }
-
-    function mapVideo(d) {
-        var v = d.data();
-        v.id = v.id || d.id;
-        delete v.keywords;
-        return v;
-    }
-
-    JFB.catalogPage = async function (params) {
-        await ready();
-        var f = F();
-        var p = Object.assign({ type: 'all', sort: 'latest', page: 1, limit: 24 }, params || {});
-        var limit = Math.min(60, Math.max(1, parseInt(p.limit, 10) || 24));
-        var page = Math.max(1, parseInt(p.page, 10) || 1);
-        var key = JSON.stringify([p.type, p.category || '', p.channel || '', p.q || '', p.sort, p.since || 0, limit]);
-        var list = cursors[key] || (cursors[key] = []);
-        var built = buildQuery(p, true);
-        var col = f.collection(JFB.db, 'videos');
-
-        // walk forward to the requested page if needed (pages are normally requested in order)
-        for (var i = list.length; i < page - 1; i++) {
-            var qq = f.query.apply(null, [col].concat(built.cons, list[i - 1] ? [f.startAfter(list[i - 1])] : [], [f.limit(limit)]));
-            var s = await f.getDocs(qq);
-            if (s.empty) return { items: [], total: counts[key] || 0, page: page, hasMore: false };
-            list[i] = s.docs[s.docs.length - 1];
-        }
-        var cons = built.cons.concat(page > 1 && list[page - 2] ? [f.startAfter(list[page - 2])] : [], [f.limit(limit)]);
-        var snap = await f.getDocs(f.query.apply(null, [col].concat(cons)));
-        if (snap.docs.length) list[page - 1] = snap.docs[snap.docs.length - 1];
-        var items = snap.docs.map(mapVideo);
-        if (built.toks.length > 1) {
-            items = items.filter(function (v) {
-                var hay = (v.title + ' ' + v.channel + ' ' + v.category).toLowerCase();
-                return built.toks.every(function (t) { return hay.indexOf(t) !== -1; });
-            });
-        }
-        if (counts[key] === undefined && !p.since) {
-            try {
-                var cq = f.query.apply(null, [col].concat(buildQuery(p, false).cons));
-                counts[key] = (await f.getCountFromServer(cq)).data().count;
-            } catch (e) { counts[key] = items.length; }
-        }
-        var total = p.since ? items.length : counts[key];
-        return { items: items, total: total, page: page, limit: limit, hasMore: snap.docs.length === limit };
-    };
-
-    JFB.getVideo = async function (id) {
-        await ready();
-        var s = await F().getDoc(F().doc(JFB.db, 'videos', String(id)));
-        return s.exists() ? mapVideo(s) : null;
-    };
-
-    JFB.stats = async function () {
-        await ready();
-        var s = await F().getDoc(F().doc(JFB.db, 'public', 'stats'));
-        return s.exists() ? s.data() : null;
-    };
-
-    JFB.channels = async function () {
-        await ready();
-        var s = await F().getDoc(F().doc(JFB.db, 'public', 'channels'));
-        return s.exists() ? (s.data().list || []) : [];
-    };
-
-    JFB.playlistsPage = async function (params) {
-        await ready();
-        var f = F();
-        var p = Object.assign({ page: 1, limit: 24 }, params || {});
-        var limit = Math.min(60, parseInt(p.limit, 10) || 24);
-        var cons = [];
-        if (p.channel) cons.push(f.where('channel', '==', p.channel));
-        var toks = tokens(p.q);
-        if (toks.length) cons.push(f.where('keywords', 'array-contains', toks.sort(function (a, b) { return b.length - a.length; })[0]));
-        cons.push(f.orderBy('publishedAt', 'desc'));
-        var key = 'pl' + JSON.stringify([p.channel || '', p.q || '', limit]);
-        var list = cursors[key] || (cursors[key] = []);
-        var page = Math.max(1, parseInt(p.page, 10) || 1);
-        var col = f.collection(JFB.db, 'playlists');
-        var snap = await f.getDocs(f.query.apply(null, [col].concat(cons, page > 1 && list[page - 2] ? [f.startAfter(list[page - 2])] : [], [f.limit(limit)])));
-        if (snap.docs.length) list[page - 1] = snap.docs[snap.docs.length - 1];
-        if (counts[key] === undefined) {
-            try { counts[key] = (await f.getCountFromServer(f.query.apply(null, [col].concat(cons.slice(0, -1))))).data().count; } catch (e) { counts[key] = snap.size; }
-        }
-        return {
-            items: snap.docs.map(function (d) { var x = d.data(); x.id = d.id; delete x.videoIds; delete x.keywords; return x; }),
-            total: counts[key], page: page, hasMore: snap.docs.length === limit
-        };
-    };
-
-    JFB.playlist = async function (id) {
-        await ready();
-        var f = F();
-        var s = await f.getDoc(f.doc(JFB.db, 'playlists', String(id)));
-        if (!s.exists()) return null;
-        var p = s.data(); p.id = s.id;
-        var ids = (p.videoIds || []).slice(0, 200);
-        var items = [];
-        for (var i = 0; i < ids.length; i += 30) {
-            var chunk = ids.slice(i, i + 30);
-            var snap = await f.getDocs(f.query(f.collection(JFB.db, 'videos'), f.where(f.documentId(), 'in', chunk)));
-            var byId = {};
-            snap.docs.forEach(function (d) { byId[d.id] = mapVideo(d); });
-            chunk.forEach(function (vid) { if (byId[vid]) items.push(byId[vid]); });
-        }
-        delete p.videoIds; delete p.keywords;
-        return { playlist: p, items: items };
-    };
-
     // ---------------------------------------------------------------- community chat
     function viewMessage(d) {
         var m = d.data();
@@ -435,32 +299,25 @@
     JFB.admin = {
         isAdmin: function () { return Boolean(JFB.user && JFB.isAdminUid(JFB.user.uid)); },
         status: async function () {
-            await ready();
-            var f = F();
-            var r = await Promise.all([
-                f.getDoc(f.doc(JFB.db, 'sync', 'state')), f.getDoc(f.doc(JFB.db, 'public', 'stats')),
-                f.getDoc(f.doc(JFB.db, 'public', 'channels')), f.getDoc(f.doc(JFB.db, 'config', 'channels'))
-            ]);
-            var st = r[0].exists() ? r[0].data() : {};
-            var stats = r[1].exists() ? r[1].data() : { total: 0, videos: 0, shorts: 0 };
+            // Library status comes from the static catalog (catalog/meta.json); channel edits from Firestore config
+            var meta = (window.StaticCatalog && await window.StaticCatalog.load()) || { total: 0, videos: 0, shorts: 0, channels: [], shards: [] };
+            var cfgList = null;
+            try { cfgList = await JFB.admin.channelsConfig(); } catch (e) {}
             var info = {};
-            (r[2].exists() ? r[2].data().list || [] : []).forEach(function (c) { info[c.ytChannelId] = c; });
-            var cfgList = r[3].exists() ? (r[3].data().list || []) : Object.values(info).map(function (c) { return { name: c.name, ytChannelId: c.ytChannelId, category: c.category }; });
-            var chState = st.channels || {};
+            (meta.channels || []).forEach(function (c) { info[c.ytChannelId] = c; });
+            var list = (cfgList && cfgList.length ? cfgList : (meta.channels || []));
             return {
-                total: stats.total || 0, videos: stats.videos || 0, shorts: stats.shorts || 0,
-                lastIncremental: st.lastIncremental || stats.lastIncremental || 0, lastRun: st.lastRun || 0,
-                syncIntervalMinutes: 30, websub: false, firebaseMode: true,
-                backfill: st.backfill || { done: 0, total: cfgList.length * 3, complete: false },
-                quota: { used: (st.quota && st.quota.used) || 0, limit: st.quotaLimit || 9000, day: st.quota && st.quota.day },
-                writes: st.writes || null,
-                busy: {}, apiKeyConfigured: Boolean(st.lastRun), lastError: st.lastError || '',
-                channels: cfgList.map(function (c) {
-                    var i = info[c.ytChannelId] || {}, s = chState[c.ytChannelId] || {};
+                total: meta.total || 0, videos: meta.videos || 0, shorts: meta.shorts || 0,
+                lastIncremental: meta.updatedAt || 0, lastRun: meta.updatedAt || 0,
+                syncIntervalMinutes: 180, websub: false, firebaseMode: true, staticMode: true,
+                backfill: meta.backfill || { done: 0, total: list.length * 3, complete: false },
+                quota: { used: 0, limit: 0 }, busy: {}, apiKeyConfigured: Boolean(meta.updatedAt), lastError: '',
+                channels: list.map(function (c) {
+                    var i = info[c.ytChannelId] || {};
                     return {
                         name: c.name, ytChannelId: c.ytChannelId, category: c.category || 'General', resync: Boolean(c.resync),
                         avatarUrl: i.avatarUrl || '', subscribers: i.subscribers || 0, totalVideos: i.totalVideos || 0,
-                        videosInCatalog: i.videosInCatalog || 0, backfillDone: Boolean(s.backfillDone), lastCheck: s.lastCheck || 0, fetched: s.fetched || 0
+                        videosInCatalog: i.videosInCatalog || 0, backfillDone: Boolean(meta.backfill && meta.backfill.complete), lastCheck: meta.updatedAt || 0, fetched: i.videosInCatalog || 0
                     };
                 })
             };

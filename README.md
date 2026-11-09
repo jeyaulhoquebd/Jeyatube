@@ -71,43 +71,39 @@ JTube হলো একটা কিউরেটেড ভিডিও প্ল�
 
 ---
 
-## 🔥 Firebase Hosting-এ চালানো (সার্ভার ছাড়া) — প্রস্তাবিত
+## ☁️ Cloudflare Pages-এ চালানো (`grtu.pages.dev`) — প্রস্তাবিত
 
-সাইটটা Firebase Hosting-এ পুরোপুরি চলে, কোনো Node সার্ভার লাগে না।
+সাইটটা পুরোপুরি স্ট্যাটিক ফাইল হিসেবে চলে, কোনো সার্ভার বা ডেটাবেস লাগে না।
 
-- **লগইন:** Firebase Authentication — ইমেইল/পাসওয়ার্ড আর Google লগইন।
-- **ভিডিও, প্লেলিস্ট আর গ্রুপ চ্যাটের ডেটা:** Firestore-এ থাকে।
-- **YouTube থেকে সিঙ্ক:** GitHub Actions প্রতি ৩০ মিনিটে নিজে নিজে চালায়।
-- **এডমিন:** Firebase UID `4biDan5sHsZgfN33920XYQoNkH22`। এটা `firestore.rules`-এ লেখা আছে।
+- **ভিডিও, Shorts আর প্লেলিস্ট:** `catalog/` ফোল্ডারে JSON ফাইল হিসেবে থাকে। পেজ খুললে শুধু যতটুকু দরকার ততটুকু ফাইল নামে।
+- **নতুন ভিডিও:** একটা GitHub Action প্রতি ৩ ঘণ্টায় সব চ্যানেলে নতুন আপলোড খোঁজে। পেলে `catalog/` আপডেট করে commit করে, আর Cloudflare Pages নিজে থেকে সাইট আবার deploy করে।
+- **লগইন আর গ্রুপ চ্যাট:** Firebase Authentication আর Firestore দিয়ে চলে। Cloudflare-এ নিজের ডেটাবেস নেই, তাই এই দুটোর জন্য Firebase লাগে। ভিডিওর জন্য Firebase লাগে না।
+- **এডমিন:** Firebase UID `4biDan5sHsZgfN33920XYQoNkH22`।
+
+### Cloudflare Pages সেটিং
+Cloudflare Dashboard → Workers & Pages → আপনার প্রজেক্ট → Settings → Builds:
+
+| সেটিং | মান |
+|---|---|
+| Production branch | `main` |
+| Framework preset | None |
+| Build command | `npm run build` |
+| Build output directory | `dist` |
+| Environment variable | `NODE_VERSION` = `20` |
+
+প্রতিবার `main`-এ নতুন commit গেলেই Cloudflare নিজে deploy করে।
 
 ### একবারের সেটআপ
-1. **Firebase Console → Authentication → Sign-in method:** **Email/Password** আর **Google** চালু করুন।
-2. **Authentication → Settings → Authorized domains:** আপনার ডোমেইন যোগ করুন। `jeyatube.web.app` আর `jeyatube.firebaseapp.com` এমনিতেই থাকে।
-3. **Firestore Database** তৈরি করুন (Production mode)।
-4. কম্পিউটারে নিচের কমান্ডগুলো চালান:
-   ```bash
-   npm install -g firebase-tools
-   ```
-   ```bash
-   firebase login
-   ```
-   ```bash
-   firebase deploy --only hosting,firestore
-   ```
-   এতে সাইট, সিকিউরিটি রুলস আর ইনডেক্স একসাথে আপলোড হয়।
-5. **ভিডিও সিঙ্কের জন্য GitHub-এ ২টা secret দিন:** Repository → Settings → Secrets and variables → Actions → New repository secret
-   - `FIREBASE_SERVICE_ACCOUNT`: Firebase Console → Project settings → Service accounts → **Generate new private key** থেকে নামানো JSON ফাইলের পুরো লেখা।
-   - `YOUTUBE_API_KEY`: নতুন YouTube Data API v3 key।
-6. **প্রথম সিঙ্ক চালান:** GitHub → **Actions** → "YouTube → Firestore sync" → **Run workflow**। এরপর এটা প্রতি ৩০ মিনিটে নিজে চলবে।
-   - প্রথমবার পুরো লাইব্রেরি (প্রায় ৪৪,০০০ ভিডিও) আসতে ৩ দিনের মতো লাগবে, কারণ Firestore-এর ফ্রি লেখার সীমা দিনে প্রায় ২০,০০০।
-   - নতুন আপলোড প্রতি ৩০ মিনিটে আসে।
+1. **Firebase Console → Authentication → Settings → Authorized domains:** `grtu.pages.dev` যোগ করুন। না করলে ওই সাইটে লগইন কাজ করবে না।
+2. **Firebase Console → Authentication → Sign-in method:** Email/Password আর Google চালু রাখুন।
+3. **চ্যাটের নিয়ম আপলোড:** কম্পিউটার থেকে একবার চালান: `firebase deploy --only firestore`
+4. **GitHub Secret:** Repository → Settings → Secrets and variables → Actions → New repository secret → নাম `YOUTUBE_API_KEY`, মান আপনার নতুন YouTube Data API v3 key।
+5. **প্রথম আপডেট চালান:** GitHub → Actions → **Update video catalog** → Run workflow। এরপর এটা প্রতি ৩ ঘণ্টায় নিজে চলবে।
 
-### ফ্রি প্ল্যানের সীমা (Spark)
-- **লেখা:** সিঙ্ক দিনে সর্বোচ্চ ১৮,০০০ লেখে।
-- **পড়া:** দিনে ৫০,০০০ ফ্রি। প্রতিটা পেজ লোডে প্রায় ৩০টা পড়া হয়, তাই দিনে প্রায় ১,৫০০ পেজ ভিজিট ফ্রি। এর বেশি ভিজিটর হলে Blaze প্ল্যান লাগবে।
-
-### Node সার্ভারে চালাতে চাইলে
-নিচের "চালানোর নিয়ম" দেখুন। একই কোড সার্ভার পেলে সার্ভার ব্যবহার করে, না পেলে নিজে থেকেই Firebase-এ চলে যায়।
+### জেনে রাখুন
+- **Cloudflare Pages ফ্রি প্ল্যানে মাসে ৫০০টা build।** ৩ ঘণ্টার আপডেটে দিনে সর্বোচ্চ ৮টা, মানে মাসে প্রায় ২৪০টা। আপডেটে নতুন ভিডিও না থাকলে কিছুই commit হয় না, তাই build-ও হয় না।
+- **এডমিন প্যানেল থেকে চ্যানেল যোগ/বাদ দিলে** সেটা Firestore-এ সেভ হয়। পরের আপডেটে কাজে লাগাতে GitHub Secret-এ `FIREBASE_SERVICE_ACCOUNT` (Firebase Console → Project settings → Service accounts → Generate new private key থেকে পাওয়া JSON) দিতে হবে। না দিলে `catalog/channels.json` ফাইলে সরাসরি চ্যানেল যোগ করুন।
+- **নিজে থেকে ভিডিও আপলোড** (এডমিন → Upload New Video) স্ট্যাটিক সাইটে দেখা যাবে না। সব ভিডিও YouTube চ্যানেল থেকে আসে।
 
 ## 🚀 চালানোর নিয়ম (Node সার্ভার)
 
@@ -141,8 +137,10 @@ npm start                   # http://localhost:3000
 | `lib/catalog.js` | YouTube সিঙ্ক ইঞ্জিন: ব্যাকফিল, RSS, WebSub, কোটা, ডিস্কে সেভ, কুয়েরি |
 | `lib/security.js` | এডমিন অথ, সেশন, রেট লিমিট, CSRF, সিকিউরিটি হেডার |
 | `lib/community.js` | ভিউয়ার অ্যাকাউন্ট আর গ্রুপ চ্যাট: মডারেশন, রিপোর্ট, সাসপেন্ড |
-| `firebase-init.js` | Firebase Hosting-এ পুরো সাইটের ব্যাকএন্ড: Auth, Firestore ক্যাটালগ, চ্যাট আর এডমিন টুল |
-| `scripts/sync-firestore.js`, `.github/workflows/youtube-sync.yml` | YouTube থেকে Firestore-এ সিঙ্ক (GitHub Actions, প্রতি ৩০ মিনিটে) |
+| `firebase-init.js` | Firebase Auth (লগইন), Firestore (গ্রুপ চ্যাট) আর এডমিন টুল |
+| `scripts/build-catalog.js`, `.github/workflows/catalog-sync.yml` | YouTube থেকে `catalog/` ফাইল বানায় (GitHub Action, প্রতি ৩ ঘণ্টায়) |
+| `static-catalog.js` | ব্রাউজারে `catalog/` ফাইল পড়ে ভিডিও, সার্চ আর প্লেলিস্ট দেখায় |
+| `scripts/build-pages.js`, `_headers` | Cloudflare Pages-এর জন্য `dist/` ফোল্ডার আর সিকিউরিটি হেডার |
 | `firestore.rules`, `firestore.indexes.json` | Firestore সিকিউরিটি রুলস আর ইনডেক্স |
 | `scripts/reset-admin.js` | এডমিন লগইন ভুলে গেলে নতুন পাসওয়ার্ড বানায় |
 | `scripts/hash-password.js` | এডমিন পাসওয়ার্ড হ্যাশ বানায় |

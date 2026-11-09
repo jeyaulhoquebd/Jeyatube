@@ -933,7 +933,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </div>`;
         } else {
             const fragment = document.createDocumentFragment();
-            results.forEach(v => fragment.appendChild(buildVideoCard(v, null)));
+            results.forEach(v => fragment.appendChild(buildVideoCard(v, cachedChannelsMap)));
             searchResultsGrid.appendChild(fragment);
         }
     }

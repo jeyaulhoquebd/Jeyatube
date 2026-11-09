@@ -553,9 +553,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // ---------- start ----------
     setAuthMode('login');
     // Prefer the Node server when present; otherwise use Firestore (Firebase Hosting)
-    fetch('/api/group/messages?after=0', { headers: { Accept: 'application/json' } })
+    (typeof ENV !== 'undefined' && ENV.STATIC_HOST === true ? Promise.resolve(false) : fetch('/api/group/messages?after=0', { headers: { Accept: 'application/json' } })
         .then(r => (r.ok && (r.headers.get('content-type') || '').includes('json')))
-        .catch(() => false)
+        .catch(() => false))
         .then(serverOk => {
             if (serverOk) { poll(true).then(() => { schedule(); loadMembers(); }); }
             else if (window.JFB && window.JFB.available) startFirebase();

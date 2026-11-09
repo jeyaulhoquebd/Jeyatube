@@ -111,6 +111,7 @@ const JAsk = (() => {
         const cv = currentVideo || {};
         conversationHistory.push({ role: "user", content: String(userMessage).slice(0, 1500) });
         if (conversationHistory.length > 8) conversationHistory = conversationHistory.slice(-8);
+        if (typeof ENV !== 'undefined' && ENV.STATIC_HOST === true) return await searchAnswer(userMessage);
         try {
             const response = await fetch("/api/jask/chat", {
                 method: "POST",

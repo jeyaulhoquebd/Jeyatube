@@ -31,6 +31,12 @@ document.addEventListener("DOMContentLoaded", () => {
         submitBtn.disabled = true;
         try {
             // The Telegram bot token is kept on the server; the browser never sees it.
+            if (typeof ENV !== 'undefined' && ENV.STATIC_HOST === true && window.JFB && window.JFB.available) {
+                await window.JFB.developerApply(payload); // static host: store the application in Firestore
+                notify("Application submitted successfully!", "success");
+                devForm.reset();
+                return;
+            }
             const response = await fetch("/api/developer/apply", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },

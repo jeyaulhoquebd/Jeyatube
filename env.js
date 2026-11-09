@@ -7,6 +7,8 @@
 // to your domains in Google Cloud Console → APIs & Services → Credentials.
 const ENV = Object.freeze({
     API_BASE: '',
+    // true on static hosts such as Cloudflare Pages (set automatically by `npm run build`): there is no /api server to ask
+    STATIC_HOST: false,
     FIREBASE_CONFIG: Object.freeze({
         apiKey: "AIzaSyBgLd_OmawpDrDxOkm8msclKUqoI5nPZMw",
         authDomain: "jeyatube.firebaseapp.com",

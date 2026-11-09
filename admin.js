@@ -83,7 +83,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.JTUBE_ADMIN_FIREBASE = false;
     let serverMode = null;
     const isJson = r => (r.headers.get('content-type') || '').includes('application/json');
-    _origFetch('/api/admin/me', { headers: { Accept: 'application/json' } })
+    (typeof ENV !== 'undefined' && ENV.STATIC_HOST === true ? Promise.reject(new Error('static host')) : _origFetch('/api/admin/me', { headers: { Accept: 'application/json' } }))
         .then(r => {
             serverMode = r.ok && isJson(r);
             return serverMode ? r.json() : null;
@@ -1785,7 +1785,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         set('kpi-sync-saved-reels', fmtNum(s.shorts));
         set('kpi-sync-channel-count', fmtNum(s.channels.length));
         set('kpi-sync-last-time', relTime(s.lastIncremental));
-        set('kpi-sync-interval', s.firebaseMode ? `GitHub Actions · every ${s.syncIntervalMinutes} min` : (s.websub ? `Instant push + every ${s.syncIntervalMinutes} min` : `Checks every ${s.syncIntervalMinutes} min`));
+        set('kpi-sync-interval', s.staticMode ? 'GitHub Action · every 3 hours' : (s.websub ? `Instant push + every ${s.syncIntervalMinutes} min` : `Checks every ${s.syncIntervalMinutes} min`));
         set('sidebar-sync-badge', String(s.channels.length));
 
         const totalOnYoutube = s.channels.reduce((n, c) => n + (c.totalVideos || 0), 0);
@@ -1796,9 +1796,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             ? `Complete — ${fmtNum(s.total)} items imported from ${s.channels.length} channels. Only new uploads are fetched now.`
             : `Importing… ${fmtNum(s.total)} of ~${fmtNum(totalOnYoutube)} items so far (${pct}% of playlists done). ${s.busy.backfill ? 'Running now.' : 'Continues automatically.'}`);
         const q = s.quota || {};
-        set('sync-quota-text', `${fmtNum(q.used)} / ${fmtNum(q.limit)}`);
+        set('sync-quota-text', s.staticMode ? 'GitHub Action (every 3 h)' : `${fmtNum(q.used)} / ${fmtNum(q.limit)}`);
         const qf = document.getElementById('sync-quota-fill');
-        if (qf) qf.style.width = Math.min(100, (q.used / Math.max(1, q.limit)) * 100) + '%';
+        if (qf) qf.style.width = s.staticMode ? '0%' : Math.min(100, (q.used / Math.max(1, q.limit)) * 100) + '%';
 
         const pill = document.getElementById('sync-live-pill');
         if (pill) {
@@ -1809,7 +1809,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const warn = document.getElementById('sync-config-warning');
         if (warn) {
             const msgs = [];
-            if (s.firebaseMode && !s.lastRun) msgs.push('The YouTube sync has not run yet. Add the FIREBASE_SERVICE_ACCOUNT and YOUTUBE_API_KEY secrets in GitHub (Settings → Secrets and variables → Actions) and run the "YouTube → Firestore sync" workflow once.');
+            if (s.staticMode && !s.lastRun) msgs.push('The video catalog is empty. Add the YOUTUBE_API_KEY secret in GitHub (Settings → Secrets and variables → Actions) and run the "Update video catalog" workflow once.');
             else if (!s.firebaseMode && !s.apiKeyConfigured) msgs.push('YOUTUBE_API_KEY is not set on the server, so the full library cannot be imported. Add it to the server environment (.env) and restart.');
             if (s.lastError) msgs.push('Last sync message: ' + s.lastError);
             warn.classList.toggle('hidden', msgs.length === 0);
@@ -1909,11 +1909,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (window.JTUBE_ADMIN_FIREBASE && (resync || remove)) {
                 if (resync) {
                     await firebaseChannelUpdate(list => list.map(c => c.ytChannelId === resync.dataset.id ? { ...c, resync: true } : c));
-                    showSyncStatus('Full re-import scheduled — it starts on the next sync run (within 30 minutes).', 'success');
+                    showSyncStatus('Full re-import scheduled — it starts on the next catalog update.', 'success');
                 } else {
                     if (!confirm(`Remove "${remove.dataset.name}" and all of its videos from JTube?`)) return;
                     await firebaseChannelUpdate(list => list.filter(c => c.ytChannelId !== remove.dataset.id));
-                    showSyncStatus(`Removed "${remove.dataset.name}". Its videos are deleted on the next sync run.`, 'success');
+                    showSyncStatus(`Removed "${remove.dataset.name}". Its videos disappear on the next catalog update.`, 'success');
                 }
                 loadDailySyncHub();
                 return;
@@ -1961,8 +1961,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (icon) icon.className = 'fas fa-spinner fa-spin';
         try {
             if (window.JTUBE_ADMIN_FIREBASE) {
-                showSyncStatus('On Firebase Hosting the sync runs automatically every 30 minutes on GitHub Actions. To run it now, open GitHub → your repository → Actions → "YouTube → Firestore sync" → Run workflow.', 'info');
-                window.open('https://github.com/jeyaulhoquebd/Jeyatube/actions/workflows/youtube-sync.yml', '_blank', 'noopener');
+                showSyncStatus('The catalog updates automatically every 3 hours (GitHub Action). To run it now: GitHub → your repository → Actions → "Update video catalog" → Run workflow.', 'info');
+                window.open('https://github.com/jeyaulhoquebd/Jeyatube/actions/workflows/catalog-sync.yml', '_blank', 'noopener');
                 return;
             }
             const r = await adminJson('POST', '/api/admin/sync');
@@ -1997,7 +1997,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         if (list.some(c => c.ytChannelId === m[1])) throw new Error('This channel is already connected.');
                         return list.concat([{ name: name.trim(), ytChannelId: m[1], category }]);
                     });
-                    showSyncStatus(`Added "${name.trim()}". All of its videos are imported by the next sync runs.`, 'success');
+                    showSyncStatus(`Added "${name.trim()}". All of its videos are imported by the next catalog updates (needs the FIREBASE_SERVICE_ACCOUNT secret in GitHub, or add it to catalog/channels.json).`, 'success');
                     addSyncChannelForm.reset();
                     loadDailySyncHub();
                     return;
