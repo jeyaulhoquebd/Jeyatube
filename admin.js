@@ -103,6 +103,16 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
 
             try {
+                // 1) Firebase Authentication account (admin = configured Firebase UID, verified by the server)
+                const fb = await firebaseAdminSignIn(email, password);
+                if (fb.ok) {
+                    if (adminPasswordInput) adminPasswordInput.value = "";
+                    unlockStudio(fb.email);
+                    return;
+                }
+                if (fb.final) { showLoginError(fb.error); return; }
+
+                // 2) Fallback: server admin password (npm run reset-admin / .env)
                 const res = await _origFetch('/api/admin/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -126,6 +136,38 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             }
         });
+    }
+
+    // Sign in with Firebase Auth in the browser, then let the server verify the ID token.
+    // Returns { ok } on success, { final: true, error } when the server rejected a valid
+    // Firebase user, or { ok: false } to fall back to the server password login.
+    async function firebaseAdminSignIn(email, password) {
+        try {
+            const fbReady = window.JTubeFirebase && window.JTubeFirebase.ready;
+            const app = fbReady ? await fbReady : null;
+            if (!app) return { ok: false };
+            const authMod = await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js');
+            const auth = authMod.getAuth(app);
+            let cred;
+            try {
+                cred = await authMod.signInWithEmailAndPassword(auth, email, password);
+            } catch (err) {
+                if (err && err.code === 'auth/too-many-requests') return { final: true, error: 'Too many attempts. Please wait a few minutes and try again.' };
+                return { ok: false }; // not a Firebase account or wrong password → try server login
+            }
+            const idToken = await cred.user.getIdToken(true);
+            const res = await _origFetch('/api/admin/firebase-login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ idToken })
+            });
+            const data = await res.json().catch(() => ({}));
+            authMod.signOut(auth).catch(() => {}); // the server cookie is the admin session
+            if (res.ok && data.success) return { ok: true, email: data.email };
+            return { final: true, error: data.error || 'This account is not an admin.' };
+        } catch (e) {
+            return { ok: false };
+        }
     }
 
     // Handle Admin Logout

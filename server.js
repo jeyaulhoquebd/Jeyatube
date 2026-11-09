@@ -6,6 +6,7 @@ const { GoogleGenAI } = require('@google/genai');
 const { Catalog } = require('./lib/catalog');
 const { AdminAuth, rateLimit, sameOrigin, securityHeaders } = require('./lib/security');
 const { Community } = require('./lib/community');
+const { FirebaseTokenVerifier } = require('./lib/firebase-auth');
 
 // ===== ENVIRONMENT (.env support without extra dependencies) =====
 (function loadDotEnv() {
@@ -41,6 +42,7 @@ const catalog = new Catalog({
 });
 const adminAuth = new AdminAuth({ dataDir: DATA_DIR });
 const requireAdmin = adminAuth.requireAdmin();
+const firebaseVerifier = new FirebaseTokenVerifier({ projectId: process.env.FIREBASE_PROJECT_ID || 'jeyatube' });
 // Community (viewer accounts + group chat). Abuse filter is attached below once defined.
 let community = null;
 
@@ -917,6 +919,24 @@ app.post('/api/admin/login', loginLimiter, (req, res) => {
   if (!token) return res.status(401).json({ error: 'Invalid email or password.' });
   res.setHeader('Set-Cookie', adminAuth.cookie(req, token));
   res.json({ success: true, email: adminAuth.verify(token).email });
+});
+
+// Admin sign-in with a Firebase Authentication account (admin = configured UID)
+app.post('/api/admin/firebase-login', loginLimiter, async (req, res) => {
+  const wait = adminAuth.lockedFor(req);
+  if (wait) return res.status(429).json({ error: `Too many failed attempts. Try again in ${Math.ceil(wait / 60)} minute(s).` });
+  try {
+    const claims = await firebaseVerifier.verify((req.body || {}).idToken);
+    const token = adminAuth.issueFirebase(claims.uid, claims.email);
+    if (!token) {
+      console.warn(`[Security] Firebase user ${claims.uid} tried to open the admin studio (not an admin).`);
+      return res.status(403).json({ error: 'This account is not an admin.' });
+    }
+    res.setHeader('Set-Cookie', adminAuth.cookie(req, token));
+    res.json({ success: true, email: claims.email || claims.uid });
+  } catch (e) {
+    res.status(401).json({ error: 'Could not verify your Firebase sign-in. Please try again.' });
+  }
 });
 
 app.post('/api/admin/logout', (req, res) => {
