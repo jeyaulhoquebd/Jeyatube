@@ -95,6 +95,7 @@ npm start                   # http://localhost:3000
 | `lib/catalog.js` | YouTube সিঙ্ক ইঞ্জিন: ব্যাকফিল, RSS, WebSub, কোটা, ডিস্কে সেভ, কুয়েরি |
 | `lib/security.js` | এডমিন অথ, সেশন, রেট লিমিট, CSRF, সিকিউরিটি হেডার |
 | `lib/community.js` | ভিউয়ার অ্যাকাউন্ট আর গ্রুপ চ্যাট: মডারেশন, রিপোর্ট, সাসপেন্ড |
+| `firebase-init.js` | Firebase (project `jeyatube`) চালু করে আর Google Analytics শুরু করে; config থাকে `env.js`-এ |
 | `scripts/reset-admin.js` | এডমিন লগইন ভুলে গেলে নতুন পাসওয়ার্ড বানায় |
 | `scripts/hash-password.js` | এডমিন পাসওয়ার্ড হ্যাশ বানায় |
 | `scripts/check.js` | সব JS ফাইলের সিনট্যাক্স চেক (`npm run lint`) |

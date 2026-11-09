@@ -1016,7 +1016,7 @@ const PUBLIC_FILES = new Set([
   'index.html', 'watch.html', 'shorts.html', 'admin.html', 'channel.html', 'channels.html', 'playlists.html',
   'profile.html', 'group.html', 'developer.html', 'feedback.html', 'help.html', 'terms.html', 'privacy.html',
   'style.css', 'env.js', 'seed-data.js', 'data.js', 'index.js', 'watch.js', 'shorts.js', 'admin.js', 'channel.js',
-  'channels.js', 'playlists.js', 'profile.js', 'group.js', 'developer.js', 'feedback.js', 'jask.js'
+  'channels.js', 'playlists.js', 'profile.js', 'group.js', 'developer.js', 'feedback.js', 'jask.js', 'firebase-init.js'
 ]);
 app.use('/img', express.static(path.join(__dirname, 'img'), { dotfiles: 'deny', index: false, maxAge: '7d' }));
 app.get(/^\/([\w.-]+)?$/, (req, res, next) => {
