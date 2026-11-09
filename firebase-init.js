@@ -91,18 +91,25 @@
     };
 
     function cleanName(n) {
-        n = String(n || '').replace(/[<>"'`]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+        n = String(n == null ? '' : n).replace(/[<>"'`]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
         return n.length >= 2 ? n : (n + 'User').slice(0, 40);
     }
 
+    function validName(n) { return typeof n === 'string' && n.trim().length >= 2 && n.length <= 40 && !/[<>"'`]/.test(n); }
+
+    // Makes sure users/{uid} exists with a valid public name. Older documents (created by the
+    // previous version of the app) may lack 'name' or contain extra fields — they are repaired here.
     async function ensureProfile(u, wantedName) {
         var ref = F().doc(JFB.db, 'users', u.uid);
         var snap = await F().getDoc(ref);
-        if (snap.exists() && !wantedName) return snap.data();
-        var name = cleanName(wantedName || (snap.exists() && snap.data().name) || u.displayName || (u.email || '').split('@')[0]);
-        var data = { name: name, createdAt: snap.exists() && snap.data().createdAt ? snap.data().createdAt : Date.now(), updatedAt: F().serverTimestamp() };
-        await F().setDoc(ref, data);
-        return { name: name, createdAt: data.createdAt };
+        var old = snap.exists() ? (snap.data() || {}) : {};
+        var allowed = ['name', 'createdAt', 'updatedAt'];
+        var clean = snap.exists() && !wantedName && validName(old.name) && Object.keys(old).every(function (k) { return allowed.indexOf(k) !== -1; });
+        if (clean) return { name: old.name, createdAt: old.createdAt };
+        var name = cleanName(wantedName || (validName(old.name) && old.name) || old.displayName || u.displayName || (u.email || '').split('@')[0] || 'Member');
+        var createdAt = typeof old.createdAt === 'number' ? old.createdAt : Date.now();
+        await F().setDoc(ref, { name: name, createdAt: createdAt, updatedAt: F().serverTimestamp() });
+        return { name: name, createdAt: createdAt };
     }
     JFB.ensureProfile = function (name) { return JFB.user ? ensureProfile(JFB.user, name).then(function (p) { JFB.profile = p; return p; }) : Promise.resolve(null); };
 
@@ -350,7 +357,11 @@
         await ready();
         if (!JFB.user) throw new Error('Please sign in to chat.');
         var f = F();
-        var profile = JFB.profile || await JFB.ensureProfile();
+        var profile = JFB.profile && validName(JFB.profile.name) ? JFB.profile : await JFB.ensureProfile();
+        if (!profile || !validName(profile.name)) {
+            profile = await ensureProfile(JFB.user, cleanName(JFB.user.displayName || (JFB.user.email || '').split('@')[0] || 'Member'));
+            JFB.profile = profile;
+        }
         var batch = f.writeBatch(JFB.db);
         var ref = f.doc(f.collection(JFB.db, 'group_messages'));
         batch.set(f.doc(JFB.db, 'rate_group', JFB.user.uid), { last: f.serverTimestamp() });
@@ -394,7 +405,7 @@
         await ready();
         var f = F();
         var snap = await f.getDocs(f.query(f.collection(JFB.db, 'users'), f.orderBy('createdAt', 'desc'), f.limit(300)));
-        return snap.docs.map(function (d) { var u = d.data(); return { id: d.id, name: u.name, joined: u.createdAt, online: false, messages: 0, admin: JFB.isAdminUid(d.id) }; });
+        return snap.docs.map(function (d) { var u = d.data(); return { id: d.id, name: validName(u.name) ? u.name : (u.displayName || 'Member'), joined: u.createdAt, online: false, messages: 0, admin: JFB.isAdminUid(d.id) }; });
     };
 
     JFB.amIBanned = async function () {
@@ -504,7 +515,7 @@
             var banned = {};
             r[2].docs.forEach(function (d) { banned[d.id] = true; });
             var names = {};
-            var users = r[1].docs.map(function (d) { var u = d.data(); names[d.id] = u.name; return { id: d.id, name: u.name, email: d.id, createdAt: u.createdAt || 0, banned: Boolean(banned[d.id]) }; });
+            var users = r[1].docs.map(function (d) { var u = d.data(); u.name = validName(u.name) ? u.name : (u.displayName || u.email || 'Member'); names[d.id] = u.name; return { id: d.id, name: u.name, email: d.id, createdAt: u.createdAt || 0, banned: Boolean(banned[d.id]) }; });
             var reports = r[0].docs.map(function (d) { var x = d.data(); return { id: d.id, mid: x.mid, author: x.author, authorName: names[x.author] || '?', text: x.text, reason: x.reason, ts: x.ts && x.ts.toMillis ? x.ts.toMillis() : 0 }; })
                 .sort(function (a, b) { return b.ts - a.ts; });
             return { users: users, reports: reports, messages: r[3].data().count };
