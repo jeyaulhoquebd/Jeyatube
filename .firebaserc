@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "jeyatube-bd"
+    "default": "jeyatube",
+    "bd": "jeyatube-bd"
   }
 }

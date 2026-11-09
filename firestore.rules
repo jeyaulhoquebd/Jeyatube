@@ -1,54 +1,153 @@
 rules_version = '2';
+// JTube — Firestore security rules.
+// The site runs on Firebase Hosting (no server), so these rules ARE the security:
+// - everyone can read the public catalog; only admins can change it
+// - only signed-in, non-banned users can chat / comment, as themselves, with size & speed limits
+// - the YouTube sync (GitHub Actions) uses a service account, which bypasses these rules
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Deny everything by default.
+    // ---------- helpers ----------
+    function signedIn() { return request.auth != null; }
+    function isAdmin() {
+      return signedIn() && (
+        request.auth.uid in ['4biDan5sHsZgfN33920XYQoNkH22'] ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+    function isBanned() { return exists(/databases/$(database)/documents/banned/$(request.auth.uid)); }
+    function str(v, min, max) { return v is string && v.size() >= min && v.size() <= max; }
+    function profileName() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name; }
+    // Flood control: the same batch must stamp <collection>/{uid}.last = request.time,
+    // and that document only accepts a new stamp every few seconds.
+    function rateStamped(col) {
+      return getAfter(/databases/$(database)/documents/$(col)/$(request.auth.uid)).data.last == request.time;
+    }
+
+    // Deny everything not listed below.
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Public catalog data is read-only for browsers. The JTube server (Admin SDK /
-    // service account) manages videos, reels, channels and categories; client
-    // writes are never trusted.
-    match /videos/{videoId}            { allow read: if true; }
-    match /reels/{reelId}              { allow read: if true; }
-    match /shorts/{shortId}            { allow read: if true; }
-    match /channels/{channelId}        { allow read: if true; }
-    match /categories/{categoryId}     { allow read: if true; }
-    match /ai_video_insights/{videoId} { allow read: if true; }
+    // ---------- public catalog (written by the sync job / admins) ----------
+    match /videos/{videoId} {
+      allow read: if true;
+      allow write: if isAdmin();
 
-    // User profiles: anyone can read a public profile, only the owner can write it.
+      // Video comments
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if signedIn() && !isBanned()
+          && request.resource.data.keys().hasOnly(['uid', 'name', 'text', 'ts', 'replyTo'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.name == profileName()
+          && str(request.resource.data.text, 1, 1000)
+          && request.resource.data.ts == request.time
+          && (request.resource.data.replyTo == null || str(request.resource.data.replyTo, 1, 64))
+          && rateStamped('rate_comments');
+        allow delete: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      }
+    }
+    match /playlists/{playlistId}  { allow read: if true; allow write: if isAdmin(); }
+    match /public/{docId}          { allow read: if true; allow write: if isAdmin(); }
+    match /categories/{categoryId} { allow read: if true; allow write: if isAdmin(); }
+
+    // ---------- admin-only ----------
+    match /config/{docId}          { allow read, write: if isAdmin(); }
+    match /sync/{docId}            { allow read: if isAdmin(); allow write: if false; }
+    match /hidden_videos/{videoId} { allow read, write: if isAdmin(); }
+    match /banned/{uid}            { allow read: if isAdmin() || (signedIn() && request.auth.uid == uid); allow write: if isAdmin(); }
+    match /admins/{uid}            { allow read: if isAdmin() || (signedIn() && request.auth.uid == uid); allow write: if false; }
+
+    // ---------- user profiles (public name only — e-mail is never stored here) ----------
     match /users/{userId} {
       allow read: if true;
-      allow create, update: if request.auth != null
-        && request.auth.uid == userId
-        && request.resource.data.keys().hasOnly(['name', 'email', 'avatarUrl', 'coverUrl', 'bio', 'createdAt', 'updatedAt'])
-        && (!('name' in request.resource.data) || (request.resource.data.name is string && request.resource.data.name.size() <= 80));
-      allow delete: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if signedIn() && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['name', 'createdAt', 'updatedAt'])
+        && str(request.resource.data.name, 2, 40)
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if signedIn() && request.auth.uid == userId;
 
       match /history/{historyId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if signedIn() && request.auth.uid == userId;
       }
       match /continueWatching/{videoId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if signedIn() && request.auth.uid == userId;
       }
     }
 
-    // Community chat: signed-in users only, can only post as themselves, size-limited.
-    match /jtube_group_chat/{messageId} {
+    // ---------- community group chat ----------
+    match /group_messages/{messageId} {
       allow read: if true;
-      allow create: if request.auth != null
+      allow create: if signedIn() && !isBanned()
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'text', 'ts', 'likes', 'replyTo', 'hidden'])
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.text is string
-        && request.resource.data.text.size() <= 2000;
-      allow update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+        && request.resource.data.name == profileName()
+        && str(request.resource.data.text, 1, 1000)
+        && request.resource.data.ts == request.time
+        && request.resource.data.likes == []
+        && request.resource.data.hidden == false
+        && (request.resource.data.replyTo == null || (
+              request.resource.data.replyTo is map
+              && request.resource.data.replyTo.keys().hasOnly(['id', 'name', 'text'])
+              && str(request.resource.data.replyTo.id, 1, 64)
+              && str(request.resource.data.replyTo.name, 0, 40)
+              && str(request.resource.data.replyTo.text, 0, 160)))
+        && rateStamped('rate_group');
+      // Like / unlike: only the 'likes' list may change, and only by adding/removing yourself.
+      allow update: if isAdmin() || (signedIn() && !isBanned()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])
+        && request.resource.data.likes is list
+        && request.resource.data.likes.size() <= 10000
+        && request.resource.data.likes.toSet().difference(resource.data.likes.toSet()).hasOnly([request.auth.uid])
+        && resource.data.likes.toSet().difference(request.resource.data.likes.toSet()).hasOnly([request.auth.uid]));
+      allow delete: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
     }
 
-    // Feedback: write-only, size-limited.
-    match /feedback/{feedbackId} {
-      allow read: if false;
-      allow create: if request.resource.data.message is string
-        && request.resource.data.message.size() <= 5000;
+    // Flood-control stamps (one message every 2 s, one comment every 5 s)
+    match /rate_group/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['last']) && request.resource.data.last == request.time;
+      allow update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['last']) && request.resource.data.last == request.time
+        && request.time > resource.data.last + duration.value(2, 's');
+    }
+    match /rate_comments/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['last']) && request.resource.data.last == request.time;
+      allow update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['last']) && request.resource.data.last == request.time
+        && request.time > resource.data.last + duration.value(5, 's');
+    }
+
+    // Reports: one per user per message (document id = <messageId>_<uid>), reviewed by admins
+    match /group_reports/{reportId} {
+      allow read, delete: if isAdmin();
+      allow create: if signedIn()
+        && reportId == request.resource.data.mid + '_' + request.auth.uid
+        && request.resource.data.keys().hasOnly(['mid', 'by', 'reason', 'ts', 'text', 'author'])
+        && request.resource.data.by == request.auth.uid
+        && str(request.resource.data.mid, 1, 64)
+        && str(request.resource.data.reason, 0, 200)
+        && str(request.resource.data.text, 0, 1000)
+        && str(request.resource.data.author, 1, 128)
+        && request.resource.data.ts == request.time;
+    }
+
+    // ---------- forms (write-only) ----------
+    match /feedback/{id} {
+      allow read: if isAdmin();
+      allow create: if str(request.resource.data.message, 1, 5000);
+    }
+    match /developer_applications/{id} {
+      allow read, delete: if isAdmin();
+      allow create: if request.resource.data.keys().hasOnly(['name', 'email', 'whatsapp', 'github', 'picture', 'message', 'ts', 'uid'])
+        && str(request.resource.data.name, 1, 100)
+        && str(request.resource.data.email, 3, 150)
+        && str(request.resource.data.message, 0, 1500)
+        && request.resource.data.ts == request.time;
     }
   }
 }

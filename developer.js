@@ -36,8 +36,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload)
             });
-            const data = await response.json().catch(() => ({}));
-            if (response.ok) {
+            const isJson = (response.headers.get('content-type') || '').includes('json');
+            const data = isJson ? await response.json().catch(() => ({})) : {};
+            if (!isJson && window.JFB && window.JFB.available) {
+                await window.JFB.developerApply(payload); // Firebase Hosting: store in Firestore
+                notify("Application submitted successfully!", "success");
+                devForm.reset();
+            } else if (response.ok) {
                 notify("Application submitted successfully!", "success");
                 devForm.reset();
             } else {

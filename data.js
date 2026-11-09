@@ -793,8 +793,26 @@ function sanitizeAndCurateVideos(videosList) {
 // (all past uploads + new uploads within minutes). The browser loads it page by page.
 const JTubeServer = { available: null, lastLoaded: 0, newest: 0, loading: null, stats: null, channelsLoaded: false, pollTimer: null };
 
+const hasFirebase = () => typeof window !== 'undefined' && window.JFB && window.JFB.available;
+
+async function firebaseCatalogPage(params) {
+    if (!hasFirebase()) return null;
+    try {
+        const data = await window.JFB.catalogPage(params);
+        data.items.forEach(sanitizeVideoFields);
+        data.items.forEach(v => {
+            if ((v.timestamp || 0) > JTubeServer.newest) JTubeServer.newest = v.timestamp;
+            if (typeof timeAgo === 'function' && v.timestamp) v.time = timeAgo(v.timestamp);
+        });
+        return data;
+    } catch (e) {
+        console.warn('Firebase catalog query failed:', e && e.message);
+        return null;
+    }
+}
+
 async function fetchCatalogPage(params = {}) {
-    if (JTubeServer.available === false && !params.__retry) return null;
+    if (JTubeServer.available === false && !params.__retry) return firebaseCatalogPage(params);
     try {
         const qs = new URLSearchParams();
         Object.entries(params).forEach(([k, v]) => {
@@ -810,17 +828,25 @@ async function fetchCatalogPage(params = {}) {
         return data;
     } catch (e) {
         if (JTubeServer.available === null) JTubeServer.available = false;
-        return null;
+        return firebaseCatalogPage(params);
     }
 }
 
 async function fetchCatalogStats() {
-    try {
-        const res = await fetch('/api/catalog/stats');
-        if (!res.ok) return null;
-        JTubeServer.stats = await res.json();
-        return JTubeServer.stats;
-    } catch (e) { return null; }
+    if (JTubeServer.available !== false) {
+        try {
+            const res = await fetch('/api/catalog/stats');
+            if (res.ok) { JTubeServer.stats = await res.json(); return JTubeServer.stats; }
+            JTubeServer.available = false;
+        } catch (e) { JTubeServer.available = false; }
+    }
+    if (hasFirebase()) {
+        try {
+            const st = await window.JFB.stats();
+            if (st) { JTubeServer.stats = { ...st, views: st.views || 0 }; return JTubeServer.stats; }
+        } catch (e) {}
+    }
+    return null;
 }
 
 function mergeVideoLists(...lists) {
@@ -830,7 +856,7 @@ function mergeVideoLists(...lists) {
 }
 
 async function loadServerCatalogVideos(force = false) {
-    if (JTubeServer.available === false && !force) return null;
+    if (JTubeServer.available === false && !force && !hasFirebase()) return null;
     if (!force && JTubeServer.lastLoaded && (Date.now() - JTubeServer.lastLoaded) < 5 * 60 * 1000 && _cache.videos && _cache.videos.length) {
         return _cache.videos;
     }
@@ -870,19 +896,44 @@ function startServerLivePolling() {
 }
 
 async function loadServerChannels() {
-    if (JTubeServer.channelsLoaded || JTubeServer.available === false) return null;
-    try {
-        const res = await fetch('/api/channels/featured');
-        if (!res.ok) return null;
-        const data = await res.json();
-        JTubeServer.channelsLoaded = true;
-        return Array.isArray(data.channels) ? data.channels : null;
-    } catch (e) { return null; }
+    if (JTubeServer.channelsLoaded) return null;
+    if (JTubeServer.available !== false) {
+        try {
+            const res = await fetch('/api/channels/featured');
+            if (res.ok) {
+                const data = await res.json();
+                JTubeServer.channelsLoaded = true;
+                return Array.isArray(data.channels) ? data.channels : null;
+            }
+        } catch (e) {}
+    }
+    if (hasFirebase()) {
+        try {
+            const list = await window.JFB.channels();
+            JTubeServer.channelsLoaded = true;
+            return list.length ? list : null;
+        } catch (e) {}
+    }
+    return null;
 }
 
 // Admin writes go to the server (it verifies the HttpOnly admin session cookie)
 async function adminServerRequest(path, body) {
     if (typeof window === 'undefined' || !window.JTUBE_ADMIN_SESSION) return null;
+    // Firebase Hosting: write straight to Firestore (allowed for admins by firestore.rules)
+    if (window.JTUBE_ADMIN_FIREBASE && hasFirebase()) {
+        try {
+            if (path === '/api/admin/videos/delete') return await window.JFB.admin.hideVideos(body.ids || []);
+            if (path === '/api/admin/videos') {
+                const list = Array.isArray(body.videos) ? body.videos : [body];
+                for (const v of list) await window.JFB.admin.saveVideo(v);
+                return { success: true };
+            }
+        } catch (e) {
+            if (typeof showToast === 'function') showToast('Could not save to Firebase: ' + (e.message || e), 'error');
+        }
+        return null;
+    }
     try {
         const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         return res.ok ? await res.json() : null;
@@ -1056,7 +1107,10 @@ async function authenticateLocally(email, password) {
 async function serverAuth(path, body) {
     try {
         const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
-        if (res.status === 404 || res.status === 405) return { unavailable: true };
+        if (res.status === 404 || res.status === 405 || !(res.headers.get('content-type') || '').includes('json')) {
+            JTubeServer.available = false;
+            return { unavailable: true };
+        }
         const data = await res.json().catch(() => ({}));
         return { ok: res.ok, status: res.status, data };
     } catch (e) {
@@ -1065,7 +1119,7 @@ async function serverAuth(path, body) {
 }
 
 function setSignedInUser(u) {
-    currentUser = { uid: u.id || u.uid, email: u.email, displayName: u.name || u.displayName || (u.email || '').split('@')[0], server: Boolean(u.id) };
+    currentUser = { uid: u.id || u.uid, email: u.email, displayName: u.name || u.displayName || (u.email || '').split('@')[0], server: Boolean(u.id) && !u.firebase && !(window.JFB && window.JFB.user), firebase: Boolean(u.firebase || (window.JFB && window.JFB.user)) };
     saveToStorage('current_user', currentUser);
     if (typeof window !== 'undefined') window.currentUser = currentUser;
     document.dispatchEvent(new CustomEvent('authStateChanged', { detail: currentUser }));
@@ -1080,6 +1134,10 @@ function authError(message, code) {
 
 async function loginWithEmail(email, password) {
     const r = await serverAuth('/api/auth/login', { email, password });
+    if (r.unavailable && hasFirebase()) {
+        const u = await window.JFB.signIn(email, password);
+        return { user: setSignedInUser(u) };
+    }
     if (r.unavailable) return authenticateLocally(email, password);
     if (r.ok) return { user: setSignedInUser(r.data.user) };
     if (r.status === 401) {
@@ -1098,6 +1156,7 @@ async function loginWithEmail(email, password) {
 
 async function registerWithEmail(email, password, name) {
     const r = await serverAuth('/api/auth/register', { name, email, password });
+    if (r.unavailable && hasFirebase()) return setSignedInUser(await window.JFB.register(name, email, password));
     if (!r.unavailable) {
         if (r.ok) return setSignedInUser(r.data.user);
         throw authError(r.data && r.data.error, r.data && r.data.code);
@@ -1134,7 +1193,8 @@ async function registerWithEmail(email, password, name) {
 }
 
 async function loginWithGoogle() {
-    // No Google OAuth client is configured: create a local guest viewer session.
+    if (hasFirebase()) return { user: setSignedInUser(await window.JFB.signInGoogle()) };
+    // No Firebase available: create a local guest viewer session.
     currentUser = {
         uid: 'user_session_' + Date.now(),
         email: 'viewer@jtube.local',
@@ -1148,6 +1208,7 @@ async function loginWithGoogle() {
 
 async function logoutUser() {
     serverAuth('/api/auth/logout', {});
+    if (hasFirebase() && window.JFB.user) { try { await window.JFB.signOut(); } catch (e) {} }
     currentUser = null;
     if (typeof window !== 'undefined') window.currentUser = null;
     try {
@@ -1431,12 +1492,26 @@ async function getVideoById(videoId) {
         console.warn("Firestore video lookup failed", err);
     }
 
-    // 3. Ask the JTube server (it holds the full catalog and can fetch from YouTube with its own key)
+    // 3. Firestore catalog (Firebase Hosting)
+    if (JTubeServer.available === false && hasFirebase()) {
+        try {
+            const fv = await window.JFB.getVideo(videoId);
+            if (fv) {
+                sanitizeVideoFields(fv);
+                if (!_cache.videos) _cache.videos = [];
+                if (!_cache.videos.some(x => x.id === fv.id)) _cache.videos.push(fv);
+                return fv;
+            }
+        } catch (e) {}
+    }
+
+    // 4. Ask the JTube server (it holds the full catalog and can fetch from YouTube with its own key)
     try {
         const res = await fetch('/api/videos/' + encodeURIComponent(videoId));
         if (res.ok) {
             const v = sanitizeVideoFields(await res.json());
             if (v && v.id) {
+                JTubeServer.available = true;
                 if (!_cache.videos) _cache.videos = [];
                 if (!_cache.videos.some(x => x.id === v.id)) _cache.videos.push(v);
                 return v;
@@ -2954,6 +3029,26 @@ async function toggleSubscription(channelName, userEmail) {
         console.error("toggleSubscription error:", err);
         return false;
     }
+}
+
+// Firebase Hosting: keep the page's signed-in state in step with Firebase Authentication
+if (typeof window !== 'undefined') {
+    const attachFirebaseAuth = () => {
+        if (!hasFirebase()) return;
+        window.JFB.onAuth(u => {
+            if (JTubeServer.available === true) return; // the Node server session is authoritative
+            if (u) {
+                const pu = window.JFB.publicUser();
+                if (!currentUser || currentUser.uid !== pu.uid || currentUser.displayName !== pu.name) setSignedInUser({ ...pu, firebase: true });
+            } else if (currentUser && (currentUser.firebase || currentUser.server)) {
+                currentUser = null;
+                window.currentUser = null;
+                try { localStorage.removeItem('jtube_current_user'); } catch (e) {}
+                document.dispatchEvent(new CustomEvent('authStateChanged', { detail: null }));
+            }
+        });
+    };
+    if (window.JFB) attachFirebaseAuth(); else document.addEventListener('DOMContentLoaded', attachFirebaseAuth);
 }
 
 // Keep the page's signed-in state in step with the server session cookie

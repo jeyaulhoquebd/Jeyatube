@@ -66,7 +66,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function getVideo(id) {
         if (videoCache.has(id)) return videoCache.get(id);
-        const p = fetch('/api/videos/' + encodeURIComponent(id)).then(r => (r.ok ? r.json() : null)).catch(() => null);
+        const p = (typeof getVideoById === 'function'
+            ? getVideoById(id)
+            : fetch('/api/videos/' + encodeURIComponent(id)).then(r => (r.ok ? r.json() : null))).catch(() => null);
         videoCache.set(id, p);
         return p;
     }
@@ -113,13 +115,14 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="flex items-baseline gap-2 mb-0.5">
                 <span class="msg-name text-sm font-bold ${m.kind === 'ai' ? 'text-indigo-300' : 'text-zinc-100'}">${esc(m.name)}${m.mine ? ' <span class="text-[10px] text-zinc-500 font-semibold">(you)</span>' : ''}</span>
                 ${m.kind === 'ai' ? '<span class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300">AI</span>' : ''}
+                ${m.admin ? '<span class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">Admin</span>' : ''}
                 <span class="text-[11px] text-zinc-500">${timeStr(m.ts)}</span>
             </div>`;
 
         const reply = m.replyTo && !m.deleted ? `<span class="reply-quote" data-jump="${esc(m.replyTo.id)}"><i class="fas fa-reply fa-flip-horizontal mr-1 text-indigo-300"></i><b class="text-zinc-300">${esc(m.replyTo.name)}</b> ${esc(m.replyTo.text)}</span>` : '';
         const likes = !m.deleted && !m.hidden && m.likes > 0 ? `<button class="like-chip ${m.liked ? 'liked' : ''}" data-act="like"><i class="fas fa-heart text-[10px]"></i>${m.likes}</button>` : '';
 
-        const canAct = !m.deleted && !m.hidden && state.me && !state.me.banned;
+        const canAct = !m.deleted && !m.hidden && !m.localOnly && state.me && !state.me.banned;
         const actions = canAct ? `
             <div class="msg-actions">
                 <button class="act" data-act="like" title="Like"><i class="${m.liked ? 'fas text-red-400' : 'far'} fa-heart"></i></button>
@@ -222,12 +225,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (typeof loginWithEmail === 'function') await loginWithEmail(body.email, body.password);
                 else await api('POST', '/api/auth/login', body);
             }
-            const me = await api('GET', '/api/auth/me');
-            if (!me.authenticated) throw new Error('Sign-in did not complete. Please try again.');
-            state.me = { id: me.user.id, name: me.user.name, banned: me.user.banned };
             els.authPassword.value = '';
-            updateAuthUI();
-            await poll(true);
+            if (FB.on) {
+                await setFirebaseMe();
+            } else {
+                const me = await api('GET', '/api/auth/me');
+                if (!me.authenticated) throw new Error('Sign-in did not complete. Please try again.');
+                state.me = { id: me.user.id, name: me.user.name, banned: me.user.banned };
+                updateAuthUI();
+                await poll(true);
+            }
             toast(`Welcome, ${state.me.name}!`, 'success');
             els.input.focus();
         } catch (err) {
@@ -242,8 +249,83 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof logoutUser === 'function') await logoutUser(); else await api('POST', '/api/auth/logout', {}).catch(() => {});
         state.me = null;
         updateAuthUI();
-        poll(true);
+        if (FB.on) rerender(); else poll(true);
     });
+
+    $('btn-google')?.addEventListener('click', async () => {
+        els.authError.classList.add('hidden');
+        try {
+            if (typeof loginWithGoogle === 'function') await loginWithGoogle();
+            if (FB.on) await setFirebaseMe(); else poll(true);
+        } catch (err) {
+            els.authError.textContent = err.message || 'Google sign-in failed.';
+            els.authError.classList.remove('hidden');
+        }
+    });
+
+    $('btn-forgot')?.addEventListener('click', async () => {
+        const email = els.authEmail.value.trim() || prompt('Your account email:') || '';
+        if (!email) return;
+        try {
+            if (!FB.on) throw new Error('Password reset is available on the Firebase version of the site.');
+            await window.JFB.resetPassword(email);
+            toast('Password reset email sent — check your inbox.', 'success');
+        } catch (err) { toast(err.message, 'error'); }
+    });
+
+    // ---------- Firebase (Firestore real-time) mode — used on Firebase Hosting ----------
+    const FB = { on: false, unsub: null };
+    async function setFirebaseMe() {
+        const u = window.JFB.user;
+        if (!u) { state.me = null; state.isAdmin = false; updateAuthUI(); rerender(); return; }
+        const profile = window.JFB.profile || await window.JFB.ensureProfile().catch(() => null);
+        const banned = await window.JFB.amIBanned();
+        state.me = { id: u.uid, name: (profile && profile.name) || u.displayName || 'Member', banned };
+        state.isAdmin = window.JFB.isAdminUid(u.uid);
+        updateAuthUI();
+        rerender();
+    }
+    function rerender() {
+        // Re-evaluate "mine"/"liked" flags for the current user and redraw
+        const uid = state.me && state.me.id;
+        for (const m of state.messages.values()) { m.mine = Boolean(uid && m.uid === uid); }
+        renderAll();
+    }
+    function startFirebase() {
+        FB.on = true;
+        els.loading.classList.add('hidden');
+        window.JFB.onAuth(() => { setFirebaseMe(); });
+        let first = true;
+        FB.unsub = window.JFB.chatSubscribe(list => {
+            const stick = first || nearBottom();
+            const before = new Set(state.order);
+            state.messages = new Map(list.map(m => [m.id, m]));
+            state.order = list.map(m => m.id);
+            renderAll();
+            const newOthers = list.filter(m => !before.has(m.id) && !m.mine).length;
+            if (stick) toBottom(!first); else if (newOthers && !first) els.scrollBtn.classList.remove('hidden');
+            first = false;
+        }, err => {
+            els.loading.classList.remove('hidden');
+            els.loading.innerHTML = '<i class="fas fa-triangle-exclamation mr-2"></i>Could not connect to the chat. Please refresh the page.';
+            console.warn('chat subscribe', err);
+        });
+        loadMembers();
+    }
+    async function askLocally(question) {
+        // No AI server on Firebase Hosting: answer with matching JTube videos (only visible to you)
+        const q = question.replace(/^\s*\/ask\b/i, '').replace(/@jask\s?ai\b|@jaksai\b/ig, '').trim();
+        const res = q && typeof fetchCatalogPage === 'function' ? await fetchCatalogPage({ q, limit: 5, sort: 'popular' }) : null;
+        const items = res ? res.items : [];
+        const text = items.length
+            ? 'Here are JTube videos about that:\n' + items.map(v => `- [${v.title}](${v.isShort ? 'shorts' : 'watch'}.html?id=${v.id})`).join('\n')
+            : 'I could not find a matching video. Try different words.';
+        const m = { id: 'local_' + Date.now(), kind: 'ai', uid: 'ai', name: 'JAsk AI', text, ts: Date.now(), likes: 0, liked: false, mine: false, replyTo: null, localOnly: true };
+        state.messages.set(m.id, m);
+        state.order.push(m.id);
+        renderAll();
+        toBottom();
+    }
 
     // ---------- polling ----------
     let pollBusy = false;
@@ -307,6 +389,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!text) return;
         els.send.disabled = true;
         try {
+            if (FB.on) {
+                const reply = state.replyTo ? state.messages.get(state.replyTo) : null;
+                if (typeof AIModeration !== 'undefined' && AIModeration.isAbusive(text)) throw new Error('Message blocked: please keep the chat respectful.');
+                await window.JFB.chatSend(text, reply ? { id: reply.id, name: reply.name, text: reply.text } : null);
+                els.input.value = '';
+                autosize();
+                setReply(null);
+                if (/^\s*\/ask\b/i.test(text) || /@jask\s?ai\b|@jaksai\b/i.test(text)) askLocally(text);
+                return;
+            }
             const r = await api('POST', '/api/group/messages', { text, replyTo: state.replyTo });
             els.input.value = '';
             autosize();
@@ -346,6 +438,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             switch (btn.dataset.act) {
                 case 'like': {
+                    if (FB.on) { await window.JFB.chatLike(id, !m.liked); break; }
                     const r = await api('POST', `/api/group/messages/${encodeURIComponent(id)}/like`);
                     applyMessages([r.message], false);
                     break;
@@ -358,13 +451,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 case 'report': {
                     const reason = prompt('Why are you reporting this message? (spam, abuse, …)');
                     if (reason === null) return;
-                    const r = await api('POST', `/api/group/messages/${encodeURIComponent(id)}/report`, { reason });
+                    const r = FB.on ? await window.JFB.chatReport(m, reason) : await api('POST', `/api/group/messages/${encodeURIComponent(id)}/report`, { reason });
                     toast(r.already ? 'You already reported this message.' : 'Thanks — the message was reported.', 'success');
-                    poll();
+                    if (!FB.on) poll();
                     break;
                 }
                 case 'delete':
                     if (!confirm('Delete this message?')) return;
+                    if (FB.on) { await window.JFB.chatDelete(id); break; }
                     await api('DELETE', `/api/group/messages/${encodeURIComponent(id)}`);
                     poll();
                     break;
@@ -378,7 +472,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // ---------- members ----------
     async function loadMembers() {
         try {
-            const d = await api('GET', '/api/group/members');
+            const d = FB.on ? await window.JFB.members().then(list => ({ members: list, total: list.length })) : await api('GET', '/api/group/members');
+            if (FB.on) els.online.textContent = `${d.total} member${d.total === 1 ? '' : 's'}`;
             state.members = d.members;
             els.memberTotal.textContent = `· ${d.total}`;
             els.memberBtnCount.textContent = d.total;
@@ -397,7 +492,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </span>
                 <span class="min-w-0 flex-1">
                     <span class="block text-sm font-semibold text-zinc-200 truncate">${esc(m.name)}</span>
-                    <span class="block text-[11px] text-zinc-500">${m.online ? 'Online' : m.messages + ' message' + (m.messages === 1 ? '' : 's')}</span>
+                    <span class="block text-[11px] text-zinc-500">${m.admin ? 'Admin' : m.online ? 'Online' : (FB.on ? 'Member' : m.messages + ' message' + (m.messages === 1 ? '' : 's'))}</span>
                 </span>
             </button>`).join('');
     }
@@ -457,6 +552,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ---------- start ----------
     setAuthMode('login');
-    poll(true).then(() => { schedule(); loadMembers(); });
+    // Prefer the Node server when present; otherwise use Firestore (Firebase Hosting)
+    fetch('/api/group/messages?after=0', { headers: { Accept: 'application/json' } })
+        .then(r => (r.ok && (r.headers.get('content-type') || '').includes('json')))
+        .catch(() => false)
+        .then(serverOk => {
+            if (serverOk) { poll(true).then(() => { schedule(); loadMembers(); }); }
+            else if (window.JFB && window.JFB.available) startFirebase();
+            else { els.loading.innerHTML = '<i class="fas fa-plug-circle-exclamation mr-2"></i>The community chat is not available right now.'; }
+        });
     setInterval(loadMembers, 60000);
 });

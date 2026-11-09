@@ -93,6 +93,18 @@ const JAsk = (() => {
         return questions;
     }
 
+    // Without the AI server (Firebase Hosting): answer with matching videos from the library
+    async function searchAnswer(question) {
+        const q = String(question || '').replace(/[?!.,]/g, ' ').trim();
+        const res = typeof fetchCatalogPage === 'function' ? await fetchCatalogPage({ q, limit: 5, sort: 'popular' }) : null;
+        const items = res ? res.items : [];
+        if (!items.length) return { text: "I couldn't find a JTube video about that. Try other keywords 🙂", links: [] };
+        return {
+            text: "Here are JTube videos that match your question 🎬\n" + items.map(v => `- [${v.title}](watch.html?id=${v.id})`).join('\n'),
+            links: items.map(v => ({ title: v.title, id: v.id, thumbnail: v.thumbnail, channel: v.channel, views: v.views }))
+        };
+    }
+
     // Ask JAsk through the JTube server. The Groq API key lives only on the server,
     // and the server searches the full video catalog for relevant recommendations.
     async function askGroq(userMessage, currentVideo) {
@@ -112,7 +124,9 @@ const JAsk = (() => {
                     }
                 })
             });
-            const data = await response.json().catch(() => ({}));
+            const isJson = (response.headers.get('content-type') || '').includes('json');
+            const data = isJson ? await response.json().catch(() => ({})) : {};
+            if (!isJson || response.status === 404) return await searchAnswer(userMessage);
             if (!response.ok) {
                 return { text: data.error || "⚠️ JAsk is busy right now. Please try again in a moment.", links: [] };
             }
@@ -120,7 +134,7 @@ const JAsk = (() => {
             conversationHistory.push({ role: "assistant", content: aiText });
             return { text: aiText, links: Array.isArray(data.links) ? data.links : [] };
         } catch (error) {
-            return { text: "⚠️ Network error. Please check your connection and try again.", links: [] };
+            return await searchAnswer(userMessage);
         }
     }
 

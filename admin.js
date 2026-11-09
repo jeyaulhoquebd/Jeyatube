@@ -47,6 +47,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (typeof loadDailySyncHub === 'function') loadDailySyncHub();
         if (typeof initAISuite === 'function') initAISuite();
         setTimeout(() => { if (typeof loadCommunityAdmin === 'function') loadCommunityAdmin(); }, 500);
+        if (window.JTUBE_ADMIN_FIREBASE) {
+            const inp = document.getElementById('new-sync-chan-id');
+            if (inp) inp.placeholder = 'Channel ID (UC…) or youtube.com/channel/UC… link';
+            const nm = document.getElementById('new-sync-chan-name');
+            if (nm) { nm.placeholder = 'Channel name (required)'; nm.required = true; }
+        }
     }
 
     function lockStudio(message) {
@@ -60,6 +66,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Any admin API call that returns 401 means the session expired
     const _origFetch = window.fetch.bind(window);
     window.fetch = async (...args) => {
+        const reqUrl = String(args[0] && args[0].url ? args[0].url : args[0]);
+        if (window.JTUBE_ADMIN_FIREBASE && reqUrl.startsWith('/api/')) {
+            // Firebase Hosting has no Node server: answer server-only tools with a clear message
+            return new Response(JSON.stringify({ error: 'This tool needs the JTube Node server (npm start). It is not available on Firebase Hosting.', text: 'This AI tool needs the JTube Node server and is not available on Firebase Hosting.' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+        }
         const res = await _origFetch(...args);
         const url = String(args[0] && args[0].url ? args[0].url : args[0]);
         if (res.status === 401 && url.includes('/api/') && !url.includes('/api/admin/login') && !url.includes('/api/admin/me') && window.JTUBE_ADMIN_SESSION) {
@@ -68,11 +79,30 @@ document.addEventListener("DOMContentLoaded", async () => {
         return res;
     };
 
-    // Restore an existing session
+    // Restore an existing session: Node server cookie, or Firebase Authentication (Firebase Hosting)
+    window.JTUBE_ADMIN_FIREBASE = false;
+    let serverMode = null;
+    const isJson = r => (r.headers.get('content-type') || '').includes('application/json');
     _origFetch('/api/admin/me', { headers: { Accept: 'application/json' } })
-        .then(r => r.ok ? r.json() : null)
-        .then(d => { if (d && d.authenticated) unlockStudio(d.email); })
-        .catch(() => {});
+        .then(r => {
+            serverMode = r.ok && isJson(r);
+            return serverMode ? r.json() : null;
+        })
+        .catch(() => { serverMode = false; return null; })
+        .then(d => {
+            if (d && d.authenticated) { unlockStudio(d.email); return; }
+            if (!serverMode && window.JFB && window.JFB.available) {
+                window.JFB.onAuth(u => {
+                    if (u && window.JFB.isAdminUid(u.uid)) {
+                        window.JTUBE_ADMIN_FIREBASE = true;
+                        unlockStudio(u.email || 'Admin');
+                    } else if (!u && window.JTUBE_ADMIN_FIREBASE) {
+                        window.JTUBE_ADMIN_FIREBASE = false;
+                        lockStudio();
+                    }
+                });
+            }
+        });
 
     // Toggle password visibility
     if (toggleAdminPasswordBtn && adminPasswordInput) {
@@ -111,6 +141,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                     return;
                 }
                 if (fb.final) { showLoginError(fb.error); return; }
+                if (serverMode === false) { showLoginError(fb.error || 'Wrong email or password.'); return; }
 
                 // 2) Fallback: server admin password (npm run reset-admin / .env)
                 const res = await _origFetch('/api/admin/login', {
@@ -142,32 +173,40 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Returns { ok } on success, { final: true, error } when the server rejected a valid
     // Firebase user, or { ok: false } to fall back to the server password login.
     async function firebaseAdminSignIn(email, password) {
+        if (!window.JFB || !window.JFB.available) return { ok: false };
+        let user;
         try {
-            const fbReady = window.JTubeFirebase && window.JTubeFirebase.ready;
-            const app = fbReady ? await fbReady : null;
-            if (!app) return { ok: false };
-            const authMod = await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js');
-            const auth = authMod.getAuth(app);
-            let cred;
-            try {
-                cred = await authMod.signInWithEmailAndPassword(auth, email, password);
-            } catch (err) {
-                if (err && err.code === 'auth/too-many-requests') return { final: true, error: 'Too many attempts. Please wait a few minutes and try again.' };
-                return { ok: false }; // not a Firebase account or wrong password → try server login
+            user = await window.JFB.signIn(email, password);
+        } catch (err) {
+            if (err && (err.code === 'auth/too-many-requests' || err.code === 'auth/network-request-failed' || err.code === 'auth/operation-not-allowed')) {
+                return { final: true, error: err.message };
             }
-            const idToken = await cred.user.getIdToken(true);
+            return { ok: false, error: err && err.message }; // not a Firebase account / wrong password
+        }
+        // Node server available? Let it verify the ID token and issue its own session cookie.
+        try {
+            const idToken = await window.JFB.auth.currentUser.getIdToken(true);
             const res = await _origFetch('/api/admin/firebase-login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ idToken })
             });
-            const data = await res.json().catch(() => ({}));
-            authMod.signOut(auth).catch(() => {}); // the server cookie is the admin session
-            if (res.ok && data.success) return { ok: true, email: data.email };
-            return { final: true, error: data.error || 'This account is not an admin.' };
-        } catch (e) {
-            return { ok: false };
+            if (res.ok && isJson(res)) {
+                const data = await res.json();
+                if (data.success) return { ok: true, email: data.email };
+            } else if (isJson(res)) {
+                const data = await res.json().catch(() => ({}));
+                await window.JFB.signOut().catch(() => {});
+                return { final: true, error: data.error || 'This account is not an admin.' };
+            }
+        } catch (e) { /* no server: Firebase Hosting */ }
+        // Firebase Hosting: the admin UID decides; firestore.rules enforce it for every write.
+        if (window.JFB.isAdminUid(user.uid)) {
+            window.JTUBE_ADMIN_FIREBASE = true;
+            return { ok: true, email: user.email };
         }
+        await window.JFB.signOut().catch(() => {});
+        return { final: true, error: 'This account is not an admin. Sign in with the admin account.' };
     }
 
     // Handle Admin Logout
@@ -175,6 +214,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         adminLogoutBtn.addEventListener("click", async () => {
             if (!confirm("Are you sure you want to log out of JTube Studio?")) return;
             try { await _origFetch('/api/admin/logout', { method: 'POST' }); } catch (err) {}
+            if (window.JTUBE_ADMIN_FIREBASE && window.JFB) { window.JTUBE_ADMIN_FIREBASE = false; try { await window.JFB.signOut(); } catch (err) {} }
             lockStudio();
         });
     }
@@ -1117,14 +1157,27 @@ document.addEventListener("DOMContentLoaded", async () => {
             </tr>
         `;
 
+        if (window.JTUBE_ADMIN_FIREBASE) {
+            try {
+                const d = await window.JFB.admin.community();
+                const fmt = ts => ts ? new Date(ts).toLocaleDateString("en-US", { month: 'short', day: 'numeric', year: 'numeric' }) : "—";
+                cachedUsersList = d.users.map(u => ({
+                    identifier: u.name, providers: ["firebase"], created: fmt(u.createdAt), signedIn: u.banned ? "Suspended" : "—",
+                    uid: u.id, role: window.JFB.isAdminUid(u.id) ? "Admin" : "Member", isAdmin: window.JFB.isAdminUid(u.id)
+                }));
+                renderUsersList(cachedUsersList);
+                return;
+            } catch (e) { /* fall back to local list */ }
+        }
+
         const list = [];
-        // Primary Admin specified by user
+        // Admin account (Firebase UID)
         list.push({
-            identifier: "admin@jtube.com",
+            identifier: "Admin (Firebase)",
             providers: ["password"],
-            created: "Sep 3, 2026",
-            signedIn: "Sep 3, 2026",
-            uid: "n0ylKjBvgSOZ7x1LO4Fe5Nh75WC2",
+            created: "—",
+            signedIn: "—",
+            uid: (window.JFB && window.JFB.adminUids && window.JFB.adminUids[0]) || "",
             role: "Super Admin",
             isAdmin: true
         });
@@ -1701,9 +1754,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     async function loadDailySyncHub() {
         try {
-            const res = await fetch('/api/admin/status');
-            if (!res.ok) return;
-            syncStatusCache = await res.json();
+            if (window.JTUBE_ADMIN_FIREBASE) {
+                syncStatusCache = await window.JFB.admin.status();
+            } else {
+                const res = await fetch('/api/admin/status');
+                if (!res.ok) return;
+                syncStatusCache = await res.json();
+            }
             cachedSyncChannels = syncStatusCache.channels || [];
             renderDailySyncHubUI();
             renderSyncChannelsTable();
@@ -1728,7 +1785,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         set('kpi-sync-saved-reels', fmtNum(s.shorts));
         set('kpi-sync-channel-count', fmtNum(s.channels.length));
         set('kpi-sync-last-time', relTime(s.lastIncremental));
-        set('kpi-sync-interval', s.websub ? `Instant push + every ${s.syncIntervalMinutes} min` : `Checks every ${s.syncIntervalMinutes} min`);
+        set('kpi-sync-interval', s.firebaseMode ? `GitHub Actions · every ${s.syncIntervalMinutes} min` : (s.websub ? `Instant push + every ${s.syncIntervalMinutes} min` : `Checks every ${s.syncIntervalMinutes} min`));
         set('sidebar-sync-badge', String(s.channels.length));
 
         const totalOnYoutube = s.channels.reduce((n, c) => n + (c.totalVideos || 0), 0);
@@ -1752,7 +1809,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         const warn = document.getElementById('sync-config-warning');
         if (warn) {
             const msgs = [];
-            if (!s.apiKeyConfigured) msgs.push('YOUTUBE_API_KEY is not set on the server, so the full library cannot be imported. Add it to the server environment (.env) and restart.');
+            if (s.firebaseMode && !s.lastRun) msgs.push('The YouTube sync has not run yet. Add the FIREBASE_SERVICE_ACCOUNT and YOUTUBE_API_KEY secrets in GitHub (Settings → Secrets and variables → Actions) and run the "YouTube → Firestore sync" workflow once.');
+            else if (!s.firebaseMode && !s.apiKeyConfigured) msgs.push('YOUTUBE_API_KEY is not set on the server, so the full library cannot be imported. Add it to the server environment (.env) and restart.');
             if (s.lastError) msgs.push('Last sync message: ' + s.lastError);
             warn.classList.toggle('hidden', msgs.length === 0);
             warn.textContent = msgs.join(' ');
@@ -1765,8 +1823,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         const q = document.getElementById('daily-feed-search')?.value.trim() || '';
         const type = document.getElementById('daily-feed-type')?.value || 'all';
         try {
-            const res = await fetch(`/api/videos?limit=24&type=${encodeURIComponent(type)}&q=${encodeURIComponent(q)}`);
-            const data = await res.json();
+            const data = await fetchCatalogPage({ limit: 24, type, q });
+            if (!data) throw new Error('no data');
             const countEl = document.getElementById('daily-feed-count');
             if (countEl) countEl.textContent = `${fmtNum(data.total)} matching items in the library`;
             if (!data.items || !data.items.length) {
@@ -1838,10 +1896,28 @@ document.addEventListener("DOMContentLoaded", async () => {
         return data;
     }
 
+    async function firebaseChannelUpdate(fn) {
+        const list = await window.JFB.admin.channelsConfig();
+        const next = fn(list.map(c => ({ ...c })));
+        await window.JFB.admin.saveChannelsConfig(next);
+    }
+
     document.getElementById('sync-channels-table-body')?.addEventListener('click', async (e) => {
         const resync = e.target.closest('.sync-resync-btn');
         const remove = e.target.closest('.sync-remove-btn');
         try {
+            if (window.JTUBE_ADMIN_FIREBASE && (resync || remove)) {
+                if (resync) {
+                    await firebaseChannelUpdate(list => list.map(c => c.ytChannelId === resync.dataset.id ? { ...c, resync: true } : c));
+                    showSyncStatus('Full re-import scheduled — it starts on the next sync run (within 30 minutes).', 'success');
+                } else {
+                    if (!confirm(`Remove "${remove.dataset.name}" and all of its videos from JTube?`)) return;
+                    await firebaseChannelUpdate(list => list.filter(c => c.ytChannelId !== remove.dataset.id));
+                    showSyncStatus(`Removed "${remove.dataset.name}". Its videos are deleted on the next sync run.`, 'success');
+                }
+                loadDailySyncHub();
+                return;
+            }
             if (resync) {
                 await adminJson('POST', `/api/admin/channels/${encodeURIComponent(resync.dataset.id)}/resync`);
                 showSyncStatus('Full re-import started for this channel.', 'success');
@@ -1859,6 +1935,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         const sel = e.target.closest('.sync-cat-select');
         if (!sel) return;
         try {
+            if (window.JTUBE_ADMIN_FIREBASE) {
+                await firebaseChannelUpdate(list => list.map(c => c.ytChannelId === sel.dataset.id ? { ...c, category: sel.value } : c));
+                showSyncStatus('Category updated. Videos get the new category on their next refresh.', 'success');
+                return;
+            }
             await adminJson('PATCH', `/api/admin/channels/${encodeURIComponent(sel.dataset.id)}`, { category: sel.value });
             showSyncStatus('Category updated.', 'success');
         } catch (err) { showSyncStatus(err.message, 'error'); }
@@ -1879,6 +1960,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         btn.disabled = true;
         if (icon) icon.className = 'fas fa-spinner fa-spin';
         try {
+            if (window.JTUBE_ADMIN_FIREBASE) {
+                showSyncStatus('On Firebase Hosting the sync runs automatically every 30 minutes on GitHub Actions. To run it now, open GitHub → your repository → Actions → "YouTube → Firestore sync" → Run workflow.', 'info');
+                window.open('https://github.com/jeyaulhoquebd/Jeyatube/actions/workflows/youtube-sync.yml', '_blank', 'noopener');
+                return;
+            }
             const r = await adminJson('POST', '/api/admin/sync');
             showSyncStatus(r.newVideos ? `Found ${r.newVideos} new upload(s) — they are live on JTube now.` : 'All channels checked — no new uploads right now.', 'success');
             loadDailySyncHub();
@@ -1902,6 +1988,20 @@ document.addEventListener("DOMContentLoaded", async () => {
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Finding channel…</span>';
             try {
+                if (window.JTUBE_ADMIN_FIREBASE) {
+                    const m = input.match(/(UC[\w-]{22})/);
+                    if (!m) throw new Error('Please paste the channel ID (starts with UC…, 24 characters) or a youtube.com/channel/UC… link. On YouTube: channel page → About → Share → Copy channel ID.');
+                    const name = nameOverride || prompt('Display name for this channel:', '') || '';
+                    if (name.trim().length < 2) throw new Error('Please enter a display name.');
+                    await firebaseChannelUpdate(list => {
+                        if (list.some(c => c.ytChannelId === m[1])) throw new Error('This channel is already connected.');
+                        return list.concat([{ name: name.trim(), ytChannelId: m[1], category }]);
+                    });
+                    showSyncStatus(`Added "${name.trim()}". All of its videos are imported by the next sync runs.`, 'success');
+                    addSyncChannelForm.reset();
+                    loadDailySyncHub();
+                    return;
+                }
                 const info = await adminJson('POST', '/api/channels/resolve', { query: input });
                 const r = await adminJson('POST', '/api/admin/channels', { name: nameOverride || info.title, ytChannelId: info.channelId, category });
                 showSyncStatus(`Added "${r.channel.name}". Importing all of its videos and Shorts now…`, 'success');
@@ -2410,9 +2510,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     let communityData = null;
     async function loadCommunityAdmin() {
         try {
-            const res = await fetch('/api/admin/community');
-            if (!res.ok) return;
-            communityData = await res.json();
+            if (window.JTUBE_ADMIN_FIREBASE) {
+                communityData = await window.JFB.admin.community();
+            } else {
+                const res = await fetch('/api/admin/community');
+                if (!res.ok) return;
+                communityData = await res.json();
+            }
         } catch (e) { return; }
         const d = communityData;
         const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
@@ -2426,7 +2530,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             <div class="p-3 rounded-xl bg-zinc-900/70 border border-zinc-800">
                 <div class="flex items-center justify-between gap-2 text-[11px] text-zinc-500">
                     <span><b class="text-zinc-300">${escapeHtml(r.authorName)}</b> · ${new Date(r.ts).toLocaleString()}</span>
-                    <button class="btn-icon btn-icon-danger cm-ban" data-uid="${escapeHtml(r.author)}" data-ban="1" title="Suspend author"><i class="fas fa-ban"></i></button>
+                    <span class="whitespace-nowrap">
+                        ${window.JTUBE_ADMIN_FIREBASE ? `<button class="btn-icon cm-hide" data-mid="${escapeHtml(r.mid)}" title="Hide message"><i class="fas fa-eye-slash"></i></button><button class="btn-icon cm-dismiss" data-rid="${escapeHtml(r.id)}" title="Dismiss report"><i class="fas fa-check"></i></button>` : ''}
+                        <button class="btn-icon btn-icon-danger cm-ban" data-uid="${escapeHtml(r.author)}" data-ban="1" title="Suspend author"><i class="fas fa-ban"></i></button>
+                    </span>
                 </div>
                 <p class="text-sm text-zinc-200 mt-1.5 break-words">${escapeHtml(r.text)}</p>
                 ${r.reason ? `<p class="text-[11px] text-amber-300/80 mt-1"><i class="far fa-flag mr-1"></i>${escapeHtml(r.reason)}</p>` : ''}
@@ -2452,11 +2559,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById('cm-user-search')?.addEventListener('input', renderCommunityUsers);
     document.getElementById('btn-refresh-community')?.addEventListener('click', loadCommunityAdmin);
     document.getElementById('tab-community')?.addEventListener('click', async e => {
+        const hideBtn = e.target.closest('.cm-hide');
+        const dismissBtn = e.target.closest('.cm-dismiss');
+        try {
+            if (hideBtn) { await window.JFB.admin.hideMessage(hideBtn.dataset.mid, true); showToast('Message hidden', 'success'); return loadCommunityAdmin(); }
+            if (dismissBtn) { await window.JFB.admin.dismissReport(dismissBtn.dataset.rid); return loadCommunityAdmin(); }
+        } catch (err) { alert(err.message); return; }
         const b = e.target.closest('.cm-ban');
         if (!b) return;
         const ban = b.dataset.ban === '1';
         if (ban && !confirm('Suspend this member? Their messages will be hidden and they can no longer post.')) return;
         try {
+            if (window.JTUBE_ADMIN_FIREBASE) {
+                await window.JFB.admin.setBanned(b.dataset.uid, ban);
+                return loadCommunityAdmin();
+            }
             const res = await fetch('/api/admin/community/ban', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid: b.dataset.uid, banned: ban }) });
             if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed');
             loadCommunityAdmin();

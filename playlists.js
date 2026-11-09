@@ -32,9 +32,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (reset) { state.page = 0; state.items = []; grid.innerHTML = ""; }
         const qs = new URLSearchParams({ page: state.page + 1, limit: 24, q: search.value.trim(), channel: channelSel.value });
         try {
-            const res = await fetch("/api/playlists?" + qs);
-            if (!res.ok) throw new Error();
-            const data = await res.json();
+            let data = null;
+            if (state.backend !== 'firebase') {
+                const res = await fetch("/api/playlists?" + qs).catch(() => null);
+                if (res && res.ok && (res.headers.get('content-type') || '').includes('json')) { data = await res.json(); state.backend = 'server'; }
+            }
+            if (!data && window.JFB && window.JFB.available) {
+                state.backend = 'firebase';
+                data = await window.JFB.playlistsPage({ page: state.page + 1, limit: 24, q: search.value.trim(), channel: channelSel.value });
+            }
+            if (!data) throw new Error();
             state.server = true;
             state.page = data.page;
             state.hasMore = data.hasMore;
@@ -111,9 +118,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         $("pl-youtube").classList.remove("hidden");
         modalVideos.innerHTML = `<p class="text-zinc-500 text-center py-16"><i class="fas fa-spinner fa-spin mr-2"></i>Loading videos…</p>`;
         try {
-            const res = await fetch("/api/playlists/" + encodeURIComponent(p.id));
-            if (!res.ok) throw new Error();
-            const data = await res.json();
+            let data;
+            if (state.backend === 'firebase') {
+                data = await window.JFB.playlist(p.id);
+                if (!data) throw new Error();
+            } else {
+                const res = await fetch("/api/playlists/" + encodeURIComponent(p.id));
+                if (!res.ok) throw new Error();
+                data = await res.json();
+            }
             const items = sanitizeAndCurateVideos(data.items || []);
             modalStats.textContent = `${Number(p.itemCount).toLocaleString()} videos${items.length < p.itemCount ? ` • ${items.length} public` : ""}`;
             renderVideoList(items);
@@ -157,9 +170,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // ---------- init ----------
     try {
-        const res = await fetch("/api/channels/featured");
-        if (res.ok) {
-            const d = await res.json();
+        let chans = null;
+        const res = await fetch("/api/channels/featured").catch(() => null);
+        if (res && res.ok && (res.headers.get('content-type') || '').includes('json')) chans = (await res.json()).channels;
+        else if (window.JFB && window.JFB.available) chans = await window.JFB.channels();
+        if (chans) {
+            const d = { channels: chans };
             (d.channels || []).map(c => c.name).sort((a, b) => a.localeCompare(b)).forEach(n => {
                 const o = document.createElement("option");
                 o.value = n; o.textContent = n;
